@@ -84,6 +84,7 @@ def create_moderator_router(*, jinja_env: Environment, mediator: RequestMediator
                     ],
                 )
             rows.append([InlineKeyboardButton(text="Модераторы", callback_data="mod_list")])
+            rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="home")])
             kb = _kb(rows)
         if isinstance(target, CallbackQuery) and target.message:
             await target.message.answer(text, reply_markup=kb)
