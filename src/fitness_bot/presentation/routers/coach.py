@@ -74,10 +74,10 @@ def _invite_code_message(raw_code: str, *, regenerated: bool = False) -> str:
     title = "Новый код приглашения:" if regenerated else "Код приглашения:"
     return (
         f"{title}\n\n"
-        f"{share}\n\n"
+        f"<code>{share}</code>\n\n"
         "Отправь этот код клиенту — он введёт его в боте "
         "(«Ввести код или ссылку»).\n"
-        "Долгое нажатие по коду → копировать."
+        "Нажми на код, чтобы скопировать."
     )
 
 
@@ -252,8 +252,9 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             f"Кабинет тренера\n"
             f"Подопечных: {result.active_clients}\n"
             f"Принимаю клиентов: {'да' if result.accepting_clients else 'нет'}\n\n"
-            f"Код для клиента:\n{share}\n\n"
-            "Отправь этот код клиенту — он вставит его через «Ввести код или ссылку»."
+            f"Код для клиента:\n<code>{share}</code>\n\n"
+            "Отправь этот код клиенту — он вставит его через «Ввести код или ссылку».\n"
+            "Нажми на код, чтобы скопировать."
         )
         kb = _kb(
             [

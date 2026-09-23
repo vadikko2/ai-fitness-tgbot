@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from fitness_bot.presentation.routers.coach import (
     _INVITE_REGEN_STEPS,
     _coach_share_code,
+    _invite_code_message,
     _invite_form_keyboard,
     _invite_regen_confirm_keyboard,
     _invite_regen_confirm_text,
@@ -17,6 +18,16 @@ from fitness_bot.presentation.routers.coach import (
 def test_coach_share_code_prefixes() -> None:
     assert _coach_share_code("abcd") == "c_ABCD"
     assert _coach_share_code("c_abcd") == "c_ABCD"
+
+
+def test_invite_code_message_uses_html_code_for_tap_copy() -> None:
+    text = _invite_code_message("ABCD1234")
+    assert "<code>c_ABCD1234</code>" in text
+    assert "Нажми на код, чтобы скопировать." in text
+    assert "Долгое нажатие" not in text
+    regenerated = _invite_code_message("ABCD1234", regenerated=True)
+    assert regenerated.startswith("Новый код приглашения:")
+    assert "<code>c_ABCD1234</code>" in regenerated
 
 
 def test_invite_share_url_with_bot_username() -> None:
