@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from aiogram import F, Router
+from urllib.parse import quote
+
+from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from cqrs import RequestMediator
 from jinja2 import Environment
@@ -43,6 +45,8 @@ _APPLICATION_STATUS_LABELS = {
     CoachApplicationStatus.REJECTED: "Отклонена",
 }
 
+_bot_username_cache: str | None = None
+
 
 def _application_status_label(status: CoachApplicationStatus | str) -> str:
     if isinstance(status, str):
@@ -74,6 +78,46 @@ def _invite_code_message(raw_code: str, *, regenerated: bool = False) -> str:
         "Отправь этот код клиенту — он введёт его в боте "
         "(«Ввести код или ссылку»).\n"
         "Долгое нажатие по коду → копировать."
+    )
+
+
+async def _resolve_bot_username(bot: Bot) -> str | None:
+    """Cache bot username from getMe for deep-link share URLs."""
+    global _bot_username_cache
+    if _bot_username_cache:
+        return _bot_username_cache
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if me.username:
+        _bot_username_cache = me.username
+        return _bot_username_cache
+    return None
+
+
+def _invite_share_url(share_code: str, bot_username: str | None) -> str:
+    """Native Telegram share sheet: recipient picker with pasteable code in text=."""
+    share_text = (
+        f"{share_code}\n\n"
+        "Вставь этот код в боте («Ввести код или ссылку»)."
+    )
+    if bot_username:
+        deep_link = f"https://t.me/{bot_username.lstrip('@')}?start={share_code}"
+    else:
+        # Harmless HTTPS placeholder so the picker still opens when username is unknown.
+        deep_link = "https://t.me"
+    return (
+        "https://t.me/share/url"
+        f"?url={quote(deep_link, safe='')}"
+        f"&text={quote(share_text, safe='')}"
+    )
+
+
+def _invite_share_button(share_code: str, bot_username: str | None) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text="📤 Отправить код",
+        url=_invite_share_url(share_code, bot_username),
     )
 
 
@@ -150,6 +194,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 await callback.answer()
                 return
         share = _coach_share_code(invite_code)
+        bot_username = await _resolve_bot_username(callback.bot)
         text = (
             f"Кабинет тренера\n"
             f"Подопечных: {result.active_clients}\n"
@@ -160,6 +205,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         kb = _kb(
             [
                 [InlineKeyboardButton(text="Мои клиенты", callback_data="coach_roster")],
+                [_invite_share_button(share, bot_username)],
                 [InlineKeyboardButton(text="📤 Код приглашения", callback_data="coach_invite_show")],
                 [InlineKeyboardButton(text="Обновить код", callback_data="coach_invite_new")],
                 [
@@ -191,19 +237,28 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                     await callback.message.answer(str(exc))
                 await callback.answer()
                 return
+        share = _coach_share_code(invite_code)
+        bot_username = await _resolve_bot_username(callback.bot)
         if callback.message:
-            await callback.message.answer(_invite_code_message(invite_code))
+            await callback.message.answer(
+                _invite_code_message(invite_code),
+                reply_markup=_kb([[_invite_share_button(share, bot_username)]]),
+            )
         await callback.answer()
 
     @router.callback_query(F.data == "coach_invite_new")
     async def invite_new(callback: CallbackQuery) -> None:
+        markup = None
         try:
             result = await mediator.send(CreateCoachInviteCommand(telegram_user_id=callback.from_user.id))
             text = _invite_code_message(result.code, regenerated=True)
+            share = _coach_share_code(result.code)
+            bot_username = await _resolve_bot_username(callback.bot)
+            markup = _kb([[_invite_share_button(share, bot_username)]])
         except DomainError as exc:
             text = str(exc)
         if callback.message:
-            await callback.message.answer(text)
+            await callback.message.answer(text, reply_markup=markup)
         await callback.answer()
 
     @router.callback_query(F.data == "coach_accept_toggle")
