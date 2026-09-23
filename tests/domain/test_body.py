@@ -104,9 +104,10 @@ def test_progress_photo_object_key_path() -> None:
 
 
 def test_progress_photo_set_completes_only_with_three_angles() -> None:
+    from datetime import date
+
     from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
     from fitness_bot.domain.enums import ProgressPhotoAngle
-    from datetime import date
 
     photo_set = ProgressPhotoSet.create(user_id=uuid4(), local_date=date(2026, 9, 23))
     assert photo_set.next_angle() == ProgressPhotoAngle.FRONT
@@ -121,9 +122,10 @@ def test_progress_photo_set_completes_only_with_three_angles() -> None:
 
 
 def test_progress_photo_same_angle_replace_clears_file_id() -> None:
+    from datetime import date
+
     from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
     from fitness_bot.domain.enums import ProgressPhotoAngle
-    from datetime import date
 
     photo_set = ProgressPhotoSet.create(user_id=uuid4(), local_date=date(2026, 9, 23))
     photo, _ = photo_set.upsert_photo(angle=ProgressPhotoAngle.FRONT, content_type="image/jpeg", byte_size=100)
