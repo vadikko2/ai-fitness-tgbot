@@ -98,20 +98,13 @@ async def _resolve_bot_username(bot: Bot) -> str | None:
 
 def _invite_share_url(share_code: str, bot_username: str | None) -> str:
     """Native Telegram share sheet: recipient picker with pasteable code in text=."""
-    share_text = (
-        f"{share_code}\n\n"
-        "Вставь этот код в боте («Ввести код или ссылку»)."
-    )
+    share_text = f"{share_code}\n\nВставь этот код в боте («Ввести код или ссылку»)."
     if bot_username:
         deep_link = f"https://t.me/{bot_username.lstrip('@')}?start={share_code}"
     else:
         # Harmless HTTPS placeholder so the picker still opens when username is unknown.
         deep_link = "https://t.me"
-    return (
-        "https://t.me/share/url"
-        f"?url={quote(deep_link, safe='')}"
-        f"&text={quote(share_text, safe='')}"
-    )
+    return f"https://t.me/share/url?url={quote(deep_link, safe='')}&text={quote(share_text, safe='')}"
 
 
 def _invite_share_button(share_code: str, bot_username: str | None) -> InlineKeyboardButton:
