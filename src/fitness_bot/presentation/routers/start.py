@@ -9,9 +9,10 @@ from jinja2 import Environment
 from fitness_bot.domain.enums import ExpectedInput, ProfileField
 from fitness_bot.presentation.flow_helpers import clear_profile_edit, goal_label, show_next_onboarding_step
 from fitness_bot.presentation.keyboards import home_keyboard
-from fitness_bot.presentation.routers.coach import render_home
+from fitness_bot.presentation.routers.coach import _is_own_invite_code, render_home
 from fitness_bot.service.models.commands.coach import SyncUserIdentityCommand
 from fitness_bot.service.models.commands.users import EnsureUserCommand, ExpectInputCommand
+from fitness_bot.service.models.queries.coach import GetCoachCabinetQuery
 from fitness_bot.service.models.queries.users import GetHomeQuery, GetProfileQuery
 from fitness_bot.shared.settings import load_settings
 
@@ -48,15 +49,35 @@ def create_start_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         profile = await mediator.send(GetProfileQuery(telegram_user_id=message.from_user.id))
         if profile.profile_complete:
             if deep_link:
-                # Pending deep-link resume after onboarding is handled elsewhere; store as CODE_OR_LINK.
-                await mediator.send(
-                    ExpectInputCommand(
-                        telegram_user_id=message.from_user.id,
-                        expected_input=ExpectedInput.CODE_OR_LINK,
-                        expected_field=deep_link,
-                    ),
-                )
-                await message.answer(f"Получена ссылка/код: {deep_link}\nОтправьте его ещё раз или вставьте вручную.")
+                own_invite = False
+                if deep_link.casefold().startswith("c_"):
+                    cab = await mediator.send(
+                        GetCoachCabinetQuery(telegram_user_id=message.from_user.id),
+                    )
+                    own_invite = _is_own_invite_code(
+                        raw_or_share=deep_link,
+                        cabinet_invite_code=cab.invite_code,
+                    )
+                if own_invite:
+                    await mediator.send(
+                        ExpectInputCommand(
+                            telegram_user_id=message.from_user.id,
+                            expected_input=ExpectedInput.NONE,
+                        ),
+                    )
+                    await message.answer("Это ваш код приглашения, отправьте его клиенту.")
+                else:
+                    # Pending deep-link resume after onboarding is handled elsewhere; store as CODE_OR_LINK.
+                    await mediator.send(
+                        ExpectInputCommand(
+                            telegram_user_id=message.from_user.id,
+                            expected_input=ExpectedInput.CODE_OR_LINK,
+                            expected_field=deep_link,
+                        ),
+                    )
+                    await message.answer(
+                        f"Получена ссылка/код: {deep_link}\nОтправьте его ещё раз или вставьте вручную.",
+                    )
             home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
             greeting = jinja_env.get_template("start.j2").render(profile_complete=True)
             status_line = ""

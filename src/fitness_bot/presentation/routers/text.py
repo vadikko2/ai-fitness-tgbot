@@ -369,8 +369,10 @@ async def handle_user_utterance(
             return
 
         if workflow.expected_input == ExpectedInput.CODE_OR_LINK:
+            from fitness_bot.presentation.routers.coach import _is_own_invite_code
             from fitness_bot.service.models.commands.catalog import ClaimProgramByCodeCommand
             from fitness_bot.service.models.commands.coach import AcceptCoachInviteCommand
+            from fitness_bot.service.models.queries.coach import GetCoachCabinetQuery
 
             raw = text.strip()
             lowered = raw.casefold()
@@ -379,6 +381,16 @@ async def handle_user_utterance(
             code = raw
             if code.startswith("c_") or code.startswith("C_"):
                 invite_code = code[2:]
+                cab = await mediator.send(GetCoachCabinetQuery(telegram_user_id=message.from_user.id))
+                if _is_own_invite_code(raw_or_share=code, cabinet_invite_code=cab.invite_code):
+                    await mediator.send(
+                        ExpectInputCommand(
+                            telegram_user_id=message.from_user.id,
+                            expected_input=ExpectedInput.NONE,
+                        ),
+                    )
+                    await message.answer("Это ваш код приглашения, отправьте его клиенту.")
+                    return
                 kb = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -416,6 +428,15 @@ async def handle_user_utterance(
                     )
                     return
                 except DomainError as exc:
+                    if "yourself" in str(exc):
+                        await mediator.send(
+                            ExpectInputCommand(
+                                telegram_user_id=message.from_user.id,
+                                expected_input=ExpectedInput.NONE,
+                            ),
+                        )
+                        await message.answer("Это ваш код приглашения, отправьте его клиенту.")
+                        return
                     await message.answer(f"Не распознали код: {exc}")
                     return
             await mediator.send(

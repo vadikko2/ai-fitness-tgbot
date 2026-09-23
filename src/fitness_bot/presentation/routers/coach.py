@@ -114,6 +114,23 @@ def _invite_share_button(share_code: str, bot_username: str | None) -> InlineKey
     )
 
 
+def _invite_form_keyboard(share_code: str, bot_username: str | None) -> InlineKeyboardMarkup:
+    return _kb(
+        [
+            [_invite_share_button(share_code, bot_username)],
+            [InlineKeyboardButton(text="⬅️ Назад в кабинет", callback_data="coach_cab")],
+            [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
+        ],
+    )
+
+
+def _is_own_invite_code(*, raw_or_share: str, cabinet_invite_code: str | None) -> bool:
+    """True when the athlete-facing token matches this coach's active invite."""
+    if not cabinet_invite_code:
+        return False
+    return _coach_share_code(raw_or_share).casefold() == _coach_share_code(cabinet_invite_code).casefold()
+
+
 async def render_home(
     *,
     message_or_callback,
@@ -166,6 +183,12 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data == "coach_cab")
     async def cabinet(callback: CallbackQuery) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
         result = await mediator.send(GetCoachCabinetQuery(telegram_user_id=callback.from_user.id))
         if not result.verified:
             text = "Кабинет доступен после верификации."
@@ -187,7 +210,6 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 await callback.answer()
                 return
         share = _coach_share_code(invite_code)
-        bot_username = await _resolve_bot_username(callback.bot)
         text = (
             f"Кабинет тренера\n"
             f"Подопечных: {result.active_clients}\n"
@@ -198,8 +220,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         kb = _kb(
             [
                 [InlineKeyboardButton(text="Мои клиенты", callback_data="coach_roster")],
-                [_invite_share_button(share, bot_username)],
-                [InlineKeyboardButton(text="📤 Код приглашения", callback_data="coach_invite_show")],
+                [InlineKeyboardButton(text="📩 Код приглашения", callback_data="coach_invite_show")],
                 [InlineKeyboardButton(text="Обновить код", callback_data="coach_invite_new")],
                 [
                     InlineKeyboardButton(
@@ -217,6 +238,12 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data == "coach_invite_show")
     async def invite_show(callback: CallbackQuery) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
         cab = await mediator.send(GetCoachCabinetQuery(telegram_user_id=callback.from_user.id))
         invite_code = cab.invite_code
         if not invite_code:
@@ -235,19 +262,25 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         if callback.message:
             await callback.message.answer(
                 _invite_code_message(invite_code),
-                reply_markup=_kb([[_invite_share_button(share, bot_username)]]),
+                reply_markup=_invite_form_keyboard(share, bot_username),
             )
         await callback.answer()
 
     @router.callback_query(F.data == "coach_invite_new")
     async def invite_new(callback: CallbackQuery) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
         markup = None
         try:
             result = await mediator.send(CreateCoachInviteCommand(telegram_user_id=callback.from_user.id))
             text = _invite_code_message(result.code, regenerated=True)
             share = _coach_share_code(result.code)
             bot_username = await _resolve_bot_username(callback.bot)
-            markup = _kb([[_invite_share_button(share, bot_username)]])
+            markup = _invite_form_keyboard(share, bot_username)
         except DomainError as exc:
             text = str(exc)
         if callback.message:
@@ -835,7 +868,10 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             if result.previous_coach_user_id:
                 text += "\nПрежняя связь отвязана. Оценить прежнего тренера?"
         except DomainError as exc:
-            text = str(exc)
+            if "yourself" in str(exc):
+                text = "Это ваш код приглашения, отправьте его клиенту."
+            else:
+                text = str(exc)
         if callback.message:
             await callback.message.answer(text)
         await callback.answer()

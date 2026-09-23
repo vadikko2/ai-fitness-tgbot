@@ -293,6 +293,8 @@ class AcceptCoachInviteCommandHandler(
             invite = await repos.coaches.get_invite_by_code(request.code)
             if invite is None or not invite.is_active:
                 raise DomainError("invite not found or inactive")
+            if client.id == invite.coach_user_id:
+                raise DomainError("cannot link to yourself")
             profile = await repos.coaches.get_profile(invite.coach_user_id)
             if profile is None or not profile.is_verified:
                 raise DomainError("coach is not verified")
