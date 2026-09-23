@@ -7,8 +7,12 @@ from cqrs import RequestMediator
 from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput, ProfileField
-from fitness_bot.presentation.flow_helpers import clear_profile_edit, goal_label, show_next_onboarding_step
-from fitness_bot.presentation.keyboards import home_keyboard
+from fitness_bot.presentation.flow_helpers import (
+    clear_profile_edit,
+    home_keyboard_from,
+    render_home_text,
+    show_next_onboarding_step,
+)
 from fitness_bot.presentation.routers.coach import (
     _invite_token_from_start_payload,
     _is_own_invite_code,
@@ -101,25 +105,10 @@ def create_start_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 )
             home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
             greeting = jinja_env.get_template("start.j2").render(profile_complete=True)
-            status_line = ""
-            if home.show_coach_badge:
-                status_line = f"\nСтатус: тренер · подопечных: {home.active_clients_count}"
-            elif home.coach_status == "pending":
-                status_line = "\nЗаявка на проверке. Обычно 1–2 дня."
-            home_text = jinja_env.get_template("home.j2").render(
-                age=home.age,
-                weight_kg=home.weight_kg,
-                goal=home.goal,
-                goal_label=goal_label(home.goal),
-                coach_status_line=status_line,
-            )
+            home_text = render_home_text(jinja_env=jinja_env, home=home)
             await message.answer(
                 f"{greeting}\n\n{home_text}",
-                reply_markup=home_keyboard(
-                    show_coach_badge=home.show_coach_badge,
-                    active_clients_count=home.active_clients_count,
-                    is_moderator=home.is_moderator,
-                ),
+                reply_markup=home_keyboard_from(home),
             )
             return
         if invite_share:

@@ -32,7 +32,8 @@ Rules:
 - Do not put warm-up/cool-down into `slots`.
 - Every `exercise_id` must come from the catalog. Prefer catalog ids. If you cannot match an exercise, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
 - Each day needs ISO `weekday` (1=Mon … 7=Sun), `title`, `position`, `intensity` (`recovery` | `light` | `medium` | `heavy`), `warmup`, `cooldown`, and `slots`.
-- Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, and either `reps` or `duration_seconds`.
+- Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
+- Keep or update `weight_kg` for every loaded exercise (machines, free weights, cables). Progress or deload from history when justified; if a loaded slot still has `null`, fill a conservative starting weight. Leave `null` only for bodyweight or duration-based slots.
 - Strictly respect profile limitations and equipment when changing the week.
 - Profile fields Rules (null / unknown = do **not** invent):
   - `session_minutes`: keep each day within the time budget (slot count, rest, density).

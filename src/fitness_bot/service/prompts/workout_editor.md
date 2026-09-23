@@ -35,7 +35,8 @@ Rules:
 - Keep or improve existing warmup/cooldown text when editing unless the user asked to change them; if missing, invent sensible ones for that day's work.
 - `exercise_id` must be an id from the catalog. If the user names an exercise that is not in the catalog, set `exercise_id` to null, `custom_request` to their words, and `muscle_group` to the muscle they named. Do not invent exercise ids.
 - If the message is off topic, return the document unchanged.
-- Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, and either `reps` or `duration_seconds`.
+- Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
+- Preserve existing `weight_kg` unless the user asks to change load. When adding a new loaded exercise, set a concrete starting `weight_kg`; use `null` only for bodyweight or duration-based slots.
 - Strictly respect user limitations: never add contraindicated movements, loads, or styles (e.g. no deadlift loading / free weights / Valsalva when limited).
 - If profile context is present in the utterance or known limitations text: honor `session_minutes` as a soft time budget for density; honor experience level (beginner = simpler / lower RPE). Do not invent missing profile fields. Never recommend pharma / drugs.
 

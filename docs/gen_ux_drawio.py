@@ -65,9 +65,11 @@ PAGE_1 = page_nodes(
         ("sess", "Тренировка сегодня\nhandle_sess", "user", 420, 280),
         ("wt_menu", "Вес\nhandle_wt_menu", "user", 680, 280),
         ("meas_menu", "Обхваты\nhandle_meas_menu", "user", 940, 280),
+        ("pp_menu", "Результаты\nhandle_pp_menu", "user", 1200, 280),
         ("nutr", "Питание\nhandle_nutr", "user", 420, 380),
         ("profile", "Профиль\nhandle_profile\nGetProfileQuery", "user", 680, 380),
         ("hist", "История\nhandle_hist", "user", 940, 380),
+        ("coach_mine", "Мой тренер\nhandle_coach_mine\nGetMyCoachQuery", "user", 1200, 380),
         ("prof_edit", "Поле или цель?\nhandle_prof_edit", "decision", 620, 500),
         ("prof_value", "Новое значение поля\nUpdateProfileCommand", "bot", 420, 660),
         ("prof_goal", "Новая цель\nhandle_prof_goal\nSetGoalCommand", "user", 760, 660),
@@ -93,9 +95,11 @@ PAGE_1_EDGES = [
     ("home", "prog", ""),
     ("home", "wt_menu", ""),
     ("home", "meas_menu", ""),
+    ("home", "pp_menu", ""),
     ("home", "nutr", ""),
     ("home", "profile", ""),
     ("home", "hist", ""),
+    ("home", "coach_mine", ""),
     ("profile", "prof_edit", ""),
     ("prof_edit", "prof_value", "поле"),
     ("prof_edit", "prof_goal", "цель"),
@@ -272,6 +276,17 @@ PAGE_4 = page_nodes(
         ("hist_vid_ok", "Не удалось отправить\ntechnique_video_failed.j2", "bot", 1440, 850),
         ("hist_wt", "Вес\nhandle_hist_wt\nGetWeightHistoryQuery", "bot", 920, 740),
         ("hist_meas", "Обхваты\nhandle_hist_meas\nGetMeasurementHistoryQuery", "bot", 920, 850),
+        ("hist_pp", "Фото прогресса\nhandle_hist_pp", "bot", 920, 960),
+        ("pp_menu", "Меню результатов\nhandle_pp_menu", "user", 40, 820),
+        ("pp_log", "Сфотографировать\nhandle_pp_log\nStartProgressPhotoCaptureCommand", "user", 40, 930),
+        ("pp_save", "Фото ракурса\nhandle_tg_photo\nRecordProgressPhotoCommand", "store", 40, 1040),
+        ("pp_hist", "История фото\nhandle_pp_hist\nGetProgressPhotoHistoryQuery", "bot", 300, 820),
+        ("pp_hist_one", "Сет даты\nhandle_pp_hist_one\nGetProgressPhotoSetQuery", "user", 300, 930),
+        ("pp_remind", "Расписание фото\nhandle_pp_remind\nSetProgressPhotoReminderCommand", "user", 300, 1040),
+        ("pp_tick", "Тик фото\nhandle_pp_tick\nListDueProgressPhotoRemindersQuery", "bot", 40, 1150),
+        ("pp_ask", "Снять фото?\nhandle_pp_ask\nMarkProgressPhotoReminderSentCommand", "bot", 300, 1150),
+        ("coach_pp_hist", "Фото клиента\nhandle_coach_pp_hist\nGetProgressPhotoHistoryQuery", "bot", 1180, 960),
+        ("coach_pp_one", "Сет клиента\nhandle_coach_pp_one\nGetProgressPhotoSetQuery", "user", 1440, 960),
         ("C1", "CLI\nSeedMeasurementGuidesCommand", "store", 640, 520),
         ("C2", "CLI\nSeedExerciseCatalogCommand", "store", 640, 660),
     ]
@@ -299,10 +314,20 @@ PAGE_4_EDGES = [
     ("hist", "hist_sess", ""),
     ("hist", "hist_wt", ""),
     ("hist", "hist_meas", ""),
+    ("hist", "hist_pp", ""),
     ("hist_sess", "hist_one", ""),
     ("hist_one", "hist_card", ""),
     ("hist_card", "hist_vid", "смотреть"),
     ("hist_vid", "hist_vid_ok", "ошибка"),
+    ("hist_pp", "pp_hist", ""),
+    ("pp_menu", "pp_log", "снять"),
+    ("pp_menu", "pp_hist", "история"),
+    ("pp_menu", "pp_remind", "расписание"),
+    ("pp_log", "pp_save", "фото"),
+    ("pp_hist", "pp_hist_one", ""),
+    ("pp_tick", "pp_ask", "срок наступил"),
+    ("pp_ask", "pp_log", ""),
+    ("coach_pp_hist", "coach_pp_one", ""),
 ]
 
 
@@ -434,10 +459,10 @@ def render_page(name: str, nodes: list[dict], edges: list[tuple], width: int, he
 def main() -> None:
     # Self-loop on hist was a placeholder and is removed: history tabs live on page 4.
     pages = [
-        render_page("Онбординг и меню", PAGE_1, PAGE_1_EDGES, 1400, 1560),
+        render_page("Онбординг и меню", PAGE_1, PAGE_1_EDGES, 1500, 1560),
         render_page("Программа", PAGE_2, PAGE_2_EDGES, 1720, 1320),
         render_page("Тренировка", PAGE_3, PAGE_3_EDGES, 1650, 1960),
-        render_page("Тело питание история", PAGE_4, PAGE_4_EDGES, 1820, 1100),
+        render_page("Тело питание история", PAGE_4, PAGE_4_EDGES, 1820, 1300),
     ]
     OUT.write_text(
         '<mxfile host="app.diagrams.net" agent="cursor" version="22.1.0" type="device">'

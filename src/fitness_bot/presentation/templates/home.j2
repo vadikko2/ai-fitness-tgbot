@@ -1,5 +1,7 @@
 <b>🏠 Главное меню</b>
-{% if coach_status_line %}{{ coach_status_line }}
+{% if linked_coach_display_name %}
+Тренер: <b>{{ linked_coach_display_name }}</b>
+{% endif %}{% if coach_status_line %}{{ coach_status_line }}
 {% endif %}{% if age is not none or weight_kg is not none or goal %}
 {% if age is not none %}• Возраст: <b>{{ age }}</b>
 {% endif %}{% if weight_kg is not none %}• Вес: <b>{{ weight_kg }} кг</b>

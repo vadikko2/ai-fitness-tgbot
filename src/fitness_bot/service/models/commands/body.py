@@ -94,3 +94,87 @@ class SeedMeasurementGuidesCommand(Command):
 class SeedMeasurementGuidesCommandResult(CommandResult):
     seeded: int
     skipped: int
+
+
+class StartProgressPhotoCaptureCommand(Command):
+    telegram_user_id: int
+    now: datetime | None = None
+
+
+class StartProgressPhotoCaptureCommandResult(CommandResult):
+    set_id: UUID
+    local_date: date
+    next_angle: str
+    resumed: bool
+
+
+class RecordProgressPhotoCommand(Command):
+    telegram_user_id: int
+    body: bytes
+    content_type: str
+    angle: str | None = None
+    now: datetime | None = None
+
+
+class RecordProgressPhotoCommandResult(CommandResult):
+    set_id: UUID
+    photo_id: UUID
+    angle: str
+    next_angle: str | None
+    complete: bool
+    replaced: bool
+
+
+class CancelProgressPhotoCaptureCommand(Command):
+    telegram_user_id: int
+
+
+class CancelProgressPhotoCaptureCommandResult(CommandResult):
+    cleared: bool
+
+
+class RememberProgressPhotoFileIdCommand(Command):
+    telegram_user_id: int
+    set_id: UUID
+    photo_id: UUID
+    telegram_file_id: str
+
+
+class RememberProgressPhotoFileIdCommandResult(CommandResult):
+    photo_id: UUID
+    telegram_file_id: str
+
+
+class SetProgressPhotoReminderCommand(Command):
+    telegram_user_id: int
+    local_time: time
+    weekdays: list[int]
+
+
+class SetProgressPhotoReminderCommandResult(CommandResult):
+    user_id: UUID
+    local_time: time
+    weekdays: list[int]
+
+
+class EnsureDefaultProgressPhotoReminderCommand(Command):
+    """Create Sunday 09:00 reminder if the user has none yet."""
+
+    telegram_user_id: int
+
+
+class EnsureDefaultProgressPhotoReminderCommandResult(CommandResult):
+    user_id: UUID
+    local_time: time
+    weekdays: list[int]
+    created: bool
+
+
+class MarkProgressPhotoReminderSentCommand(Command):
+    user_id: UUID
+    sent_on: date
+
+
+class MarkProgressPhotoReminderSentCommandResult(CommandResult):
+    user_id: UUID
+    last_sent_on: date

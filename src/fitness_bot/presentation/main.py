@@ -18,6 +18,7 @@ from fitness_bot.presentation.routers.nutrition import create_nutrition_router
 from fitness_bot.presentation.routers.photo import create_photo_router
 from fitness_bot.presentation.routers.profile import create_profile_router
 from fitness_bot.presentation.routers.program import create_program_router
+from fitness_bot.presentation.routers.progress_photo import create_progress_photo_router
 from fitness_bot.presentation.routers.session import create_session_router
 from fitness_bot.presentation.routers.start import create_start_router
 from fitness_bot.presentation.routers.text import create_text_router
@@ -40,6 +41,7 @@ async def run() -> None:
     dispatcher.include_router(create_start_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_profile_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_body_router(jinja_env=jinja_env, mediator=mediator))
+    dispatcher.include_router(create_progress_photo_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_history_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_program_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_library_router(jinja_env=jinja_env, mediator=mediator))

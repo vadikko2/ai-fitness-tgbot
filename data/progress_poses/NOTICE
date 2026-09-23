@@ -1,0 +1,27 @@
+Progress pose guide diagrams
+============================
+
+Layout (gender-specific; resolved from profile ``User.sex``):
+
+  male/{front,side,back,overview}.png
+  female/{…same…}.png
+
+Fallback: if profile sex is unset, guides use the ``male`` folder
+(onboarding normally sets sex first).
+
+Per-angle cards: instructional silhouettes with unified chrome
+(dark-navy footer, yellow circle + ruler icon, yellow CTA):
+  front → «фронт», side → «бок», back → «спина».
+Overview uses the same chrome family with footer «3 ракурса».
+
+Gender pipeline rule: regenerator never copies male↔female. Staging filenames
+should be ``{male,female}_progress_{front,side,back,overview}[.png]``
+(optional ``_v2``). Bare ``male_overview_v2.png`` belongs to measurement guides
+and is intentionally ignored for progress overviews.
+
+License: project-authored instructional illustrations / restyled cards (CC0 1.0
+for chrome and project originals).
+
+Regenerate / restamp (dev machine, Pillow not a runtime dependency):
+
+  uv run --with pillow python scripts/generate_progress_pose_images.py

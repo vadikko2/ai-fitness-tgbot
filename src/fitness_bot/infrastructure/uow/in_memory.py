@@ -3,12 +3,13 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fitness_bot.domain.body.measurement import MeasurementEntry, MeasurementGuide, MeasurementSite
 from fitness_bot.domain.body.nutrition import NutritionRecommendation
-from fitness_bot.domain.body.reminder import WeightReminder
+from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
+from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
 from fitness_bot.domain.enums import Goal
 from fitness_bot.domain.users.user import User
@@ -24,6 +25,8 @@ from fitness_bot.service.interfaces.uow import (
     IMeasurementRepository,
     INutritionRepository,
     IProgramsRepository,
+    IProgressPhotoReminderRepository,
+    IProgressPhotoRepository,
     IProposalsRepository,
     ISessionsRepository,
     ITechniqueVideosRepository,
@@ -146,6 +149,64 @@ class InMemoryWeightReminderRepository(IWeightReminderRepository):
         return deepcopy(stored)
 
     async def list_all(self) -> list[WeightReminder]:
+        return [deepcopy(item) for item in self._by_user.values()]
+
+
+class InMemoryProgressPhotoRepository(IProgressPhotoRepository):
+    def __init__(self) -> None:
+        self._by_id: dict[UUID, ProgressPhotoSet] = {}
+
+    async def get_set(self, set_id: UUID) -> ProgressPhotoSet | None:
+        photo_set = self._by_id.get(set_id)
+        return deepcopy(photo_set) if photo_set else None
+
+    async def get_incomplete_for_user(self, user_id: UUID) -> ProgressPhotoSet | None:
+        incomplete = [item for item in self._by_id.values() if item.user_id == user_id and not item.complete]
+        if not incomplete:
+            return None
+        incomplete.sort(key=lambda item: item.local_date, reverse=True)
+        return deepcopy(incomplete[0])
+
+    async def get_for_user_local_date(self, user_id: UUID, local_date: date) -> ProgressPhotoSet | None:
+        for item in self._by_id.values():
+            if item.user_id == user_id and item.local_date == local_date:
+                return deepcopy(item)
+        return None
+
+    async def save_set(self, photo_set: ProgressPhotoSet) -> ProgressPhotoSet:
+        stored = deepcopy(photo_set)
+        self._by_id[stored.id] = stored
+        return deepcopy(stored)
+
+    async def list_complete_for_user(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[ProgressPhotoSet]:
+        items = sorted(
+            (item for item in self._by_id.values() if item.user_id == user_id and item.complete),
+            key=lambda item: item.local_date,
+            reverse=True,
+        )
+        return [deepcopy(item) for item in items[offset : offset + limit]]
+
+
+class InMemoryProgressPhotoReminderRepository(IProgressPhotoReminderRepository):
+    def __init__(self) -> None:
+        self._by_user: dict[UUID, ProgressPhotoReminder] = {}
+
+    async def get(self, user_id: UUID) -> ProgressPhotoReminder | None:
+        reminder = self._by_user.get(user_id)
+        return deepcopy(reminder) if reminder else None
+
+    async def save(self, reminder: ProgressPhotoReminder) -> ProgressPhotoReminder:
+        stored = deepcopy(reminder)
+        self._by_user[stored.user_id] = stored
+        return deepcopy(stored)
+
+    async def list_all(self) -> list[ProgressPhotoReminder]:
         return [deepcopy(item) for item in self._by_user.values()]
 
 
@@ -285,6 +346,8 @@ class InMemoryUowRepositories(IUowRepositories):
         users: InMemoryUsersRepository | None = None,
         weights: InMemoryWeightRepository | None = None,
         weight_reminders: InMemoryWeightReminderRepository | None = None,
+        progress_photos: InMemoryProgressPhotoRepository | None = None,
+        progress_photo_reminders: InMemoryProgressPhotoReminderRepository | None = None,
         measurements: InMemoryMeasurementRepository | None = None,
         programs: InMemoryProgramsRepository | None = None,
         proposals: InMemoryProposalsRepository | None = None,
@@ -296,6 +359,8 @@ class InMemoryUowRepositories(IUowRepositories):
         self._users = users or InMemoryUsersRepository()
         self._weights = weights or InMemoryWeightRepository()
         self._weight_reminders = weight_reminders or InMemoryWeightReminderRepository()
+        self._progress_photos = progress_photos or InMemoryProgressPhotoRepository()
+        self._progress_photo_reminders = progress_photo_reminders or InMemoryProgressPhotoReminderRepository()
         self._measurements = measurements or InMemoryMeasurementRepository()
         self._programs = programs or InMemoryProgramsRepository()
         self._proposals = proposals or InMemoryProposalsRepository(programs=self._programs)
@@ -315,6 +380,14 @@ class InMemoryUowRepositories(IUowRepositories):
     @property
     def weight_reminders(self) -> InMemoryWeightReminderRepository:
         return self._weight_reminders
+
+    @property
+    def progress_photos(self) -> InMemoryProgressPhotoRepository:
+        return self._progress_photos
+
+    @property
+    def progress_photo_reminders(self) -> InMemoryProgressPhotoReminderRepository:
+        return self._progress_photo_reminders
 
     @property
     def measurements(self) -> InMemoryMeasurementRepository:

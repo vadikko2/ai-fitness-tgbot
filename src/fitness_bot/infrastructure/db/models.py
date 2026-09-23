@@ -601,5 +601,76 @@ class CoachNoteRow(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ProgressPhotoSetRow(Base):
+    __tablename__ = "progress_photo_sets"
+    __table_args__ = (UniqueConstraint("user_id", "local_date", name="uq_progress_photo_sets_user_local_date"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    complete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+    photos: Mapped[list[ProgressPhotoRow]] = relationship(
+        back_populates="photo_set",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class ProgressPhotoRow(Base):
+    __tablename__ = "progress_photos"
+    __table_args__ = (UniqueConstraint("set_id", "angle", name="uq_progress_photos_set_angle"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    set_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("progress_photo_sets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    angle: Mapped[str] = mapped_column(Text, nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    telegram_file_id: Mapped[str | None] = mapped_column(Text)
+
+    photo_set: Mapped[ProgressPhotoSetRow] = relationship(back_populates="photos")
+
+
+class ProgressPhotoReminderRow(Base):
+    __tablename__ = "progress_photo_reminders"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    local_time: Mapped[time] = mapped_column(Time, nullable=False)
+    last_sent_on: Mapped[date | None] = mapped_column(Date)
+
+    weekdays: Mapped[list[ProgressPhotoReminderWeekdayRow]] = relationship(
+        back_populates="reminder",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class ProgressPhotoReminderWeekdayRow(Base):
+    __tablename__ = "progress_photo_reminder_weekdays"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("progress_photo_reminders.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    weekday: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+
+    reminder: Mapped[ProgressPhotoReminderRow] = relationship(back_populates="weekdays")
+
+
 # Satisfy UniqueConstraint import used via table args in future migrations if needed.
 _ = UniqueConstraint

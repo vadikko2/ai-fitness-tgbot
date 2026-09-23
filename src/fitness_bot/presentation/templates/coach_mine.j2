@@ -1,0 +1,12 @@
+{% if linked %}
+<b>🧑‍🏫 Мой тренер</b>
+
+• Имя: <b>{{ display_name }}</b>
+{% if rating_avg is not none %}• Рейтинг: <b>{{ rating_avg }}</b> ({{ rating_count }})
+{% else %}• Рейтинг: пока нет оценок
+{% endif %}{% if bio %}
+{{ bio }}
+{% endif %}
+{% else %}
+Тренер не подключён. Найди тренера или введи код из библиотеки.
+{% endif %}

@@ -72,3 +72,63 @@ def test_default_weight_reminder_is_sunday_morning() -> None:
     reminder = WeightReminder.default_for_user(user_id=uuid4())
     assert reminder.weekdays == frozenset({7})
     assert reminder.local_time == time(9, 0)
+
+
+def test_default_progress_photo_reminder_matches_weight() -> None:
+    from fitness_bot.domain.body.reminder import ProgressPhotoReminder
+
+    reminder = ProgressPhotoReminder.default_for_user(user_id=uuid4())
+    assert reminder.weekdays == frozenset({7})
+    assert reminder.local_time == time(9, 0)
+
+
+def test_progress_photo_reminder_weekdays_required() -> None:
+    from fitness_bot.domain.body.reminder import ProgressPhotoReminder
+
+    with pytest.raises(InvalidReminder):
+        ProgressPhotoReminder.create(user_id=uuid4(), local_time=time(8, 0), weekdays=[])
+
+
+def test_progress_photo_object_key_path() -> None:
+    from fitness_bot.domain.body.progress_photo import progress_photo_object_key
+    from fitness_bot.domain.enums import ProgressPhotoAngle
+
+    user_id = uuid4()
+    set_id = uuid4()
+    key = progress_photo_object_key(
+        user_id=user_id,
+        set_id=set_id,
+        angle=ProgressPhotoAngle.SIDE,
+    )
+    assert key == f"users/{user_id}/progress_photos/{set_id}/side.jpg"
+
+
+def test_progress_photo_set_completes_only_with_three_angles() -> None:
+    from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
+    from fitness_bot.domain.enums import ProgressPhotoAngle
+    from datetime import date
+
+    photo_set = ProgressPhotoSet.create(user_id=uuid4(), local_date=date(2026, 9, 23))
+    assert photo_set.next_angle() == ProgressPhotoAngle.FRONT
+    photo_set.upsert_photo(angle=ProgressPhotoAngle.FRONT, content_type="image/jpeg", byte_size=100)
+    assert not photo_set.complete
+    assert photo_set.next_angle() == ProgressPhotoAngle.SIDE
+    photo_set.upsert_photo(angle=ProgressPhotoAngle.SIDE, content_type="image/jpeg", byte_size=100)
+    assert photo_set.next_angle() == ProgressPhotoAngle.BACK
+    photo_set.upsert_photo(angle=ProgressPhotoAngle.BACK, content_type="image/jpeg", byte_size=100)
+    assert photo_set.complete
+    assert photo_set.next_angle() is None
+
+
+def test_progress_photo_same_angle_replace_clears_file_id() -> None:
+    from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
+    from fitness_bot.domain.enums import ProgressPhotoAngle
+    from datetime import date
+
+    photo_set = ProgressPhotoSet.create(user_id=uuid4(), local_date=date(2026, 9, 23))
+    photo, _ = photo_set.upsert_photo(angle=ProgressPhotoAngle.FRONT, content_type="image/jpeg", byte_size=100)
+    photo_set.remember_file_id(photo_id=photo.id, telegram_file_id="file-1")
+    assert photo_set.photo_for(ProgressPhotoAngle.FRONT).telegram_file_id == "file-1"
+    photo_set.upsert_photo(angle=ProgressPhotoAngle.FRONT, content_type="image/jpeg", byte_size=200)
+    assert photo_set.photo_for(ProgressPhotoAngle.FRONT).telegram_file_id is None
+    assert photo_set.photo_for(ProgressPhotoAngle.FRONT).byte_size == 200

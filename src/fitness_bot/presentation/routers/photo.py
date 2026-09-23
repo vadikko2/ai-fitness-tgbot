@@ -9,7 +9,9 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.presentation.keyboards import coach_apply_submitted_keyboard
+from fitness_bot.presentation.keyboards import back_to_menu_keyboard, coach_apply_submitted_keyboard
+from fitness_bot.presentation.routers.progress_photo import send_angle_prompt
+from fitness_bot.service.models.commands.body import RecordProgressPhotoCommand
 from fitness_bot.service.models.commands.coach import (
     RecordModeratorApplicationMessageCommand,
     SubmitCoachApplicationCommand,
@@ -109,6 +111,40 @@ async def _submit_credential(
     )
 
 
+async def _record_progress_photo(
+    *,
+    message: Message,
+    jinja_env: Environment,
+    mediator: RequestMediator,
+    body: bytes,
+    content_type: str,
+) -> None:
+    assert message.from_user is not None
+    try:
+        result = await mediator.send(
+            RecordProgressPhotoCommand(
+                telegram_user_id=message.from_user.id,
+                body=body,
+                content_type=content_type,
+            ),
+        )
+    except DomainError as exc:
+        await message.answer(str(exc))
+        return
+    if result.complete:
+        text = jinja_env.get_template("progress_photo_done.j2").render()
+        await message.answer(text, reply_markup=back_to_menu_keyboard())
+        return
+    assert result.next_angle is not None
+    await send_angle_prompt(
+        message=message,
+        jinja_env=jinja_env,
+        mediator=mediator,
+        telegram_user_id=message.from_user.id,
+        angle=result.next_angle,
+    )
+
+
 def create_photo_router(
     *,
     jinja_env: Environment,
@@ -124,15 +160,25 @@ def create_photo_router(
             await message.answer(text)
             return
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
-        if workflow.expected_input != ExpectedInput.COACH_CREDENTIAL:
-            text = jinja_env.get_template("photo_not_expected.j2").render()
-            await message.answer(text)
-            return
         photo = message.photo[-1]
         file = await message.bot.get_file(photo.file_id)
         assert file.file_path is not None
         buf = await message.bot.download_file(file.file_path)
         body = buf.read() if hasattr(buf, "read") else bytes(buf)
+
+        if workflow.expected_input == ExpectedInput.PROGRESS_PHOTO:
+            await _record_progress_photo(
+                message=message,
+                jinja_env=jinja_env,
+                mediator=mediator,
+                body=body,
+                content_type="image/jpeg",
+            )
+            return
+        if workflow.expected_input != ExpectedInput.COACH_CREDENTIAL:
+            text = jinja_env.get_template("photo_not_expected.j2").render()
+            await message.answer(text)
+            return
         await _submit_credential(
             message=message,
             mediator=mediator,
@@ -148,6 +194,25 @@ def create_photo_router(
         if mediator is None or object_storage is None or message.from_user is None or message.document is None:
             raise SkipHandler()
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
+        mime = (message.document.mime_type or "").lower()
+
+        if workflow.expected_input == ExpectedInput.PROGRESS_PHOTO:
+            if not mime.startswith("image/"):
+                await message.answer("Нужно фото (image/*).")
+                return
+            file = await message.bot.get_file(message.document.file_id)
+            assert file.file_path is not None
+            buf = await message.bot.download_file(file.file_path)
+            body = buf.read() if hasattr(buf, "read") else bytes(buf)
+            await _record_progress_photo(
+                message=message,
+                jinja_env=jinja_env,
+                mediator=mediator,
+                body=body,
+                content_type=mime or "image/jpeg",
+            )
+            return
+
         if workflow.expected_input != ExpectedInput.COACH_CREDENTIAL:
             raise SkipHandler()
         await message.answer(_CREDENTIAL_PHOTO_HINT)

@@ -12,13 +12,20 @@ from fitness_bot.infrastructure.uow.sqlalchemy import SqlAlchemyUow, create_asyn
 from fitness_bot.presentation.templates_env import create_jinja_env
 from fitness_bot.service.handlers.commands.body import (
     AddCustomMeasurementSiteCommandHandler,
+    CancelProgressPhotoCaptureCommandHandler,
+    EnsureDefaultProgressPhotoReminderCommandHandler,
     EnsureDefaultWeightReminderCommandHandler,
     EnsureFixedMeasurementSitesCommandHandler,
+    MarkProgressPhotoReminderSentCommandHandler,
     MarkWeightReminderSentCommandHandler,
     RecordMeasurementCommandHandler,
+    RecordProgressPhotoCommandHandler,
     RecordWeightCommandHandler,
+    RememberProgressPhotoFileIdCommandHandler,
     SeedMeasurementGuidesCommandHandler,
+    SetProgressPhotoReminderCommandHandler,
     SetWeightReminderCommandHandler,
+    StartProgressPhotoCaptureCommandHandler,
 )
 from fitness_bot.service.handlers.commands.catalog import (
     ApplyCatalogProgramCommandHandler,
@@ -81,8 +88,12 @@ from fitness_bot.service.handlers.commands.users import (
 from fitness_bot.service.handlers.queries.body import (
     GetMeasurementGuideQueryHandler,
     GetMeasurementHistoryQueryHandler,
+    GetProgressPhotoHistoryQueryHandler,
+    GetProgressPhotoReminderQueryHandler,
+    GetProgressPhotoSetQueryHandler,
     GetWeightHistoryQueryHandler,
     GetWeightReminderQueryHandler,
+    ListDueProgressPhotoRemindersQueryHandler,
     ListDueWeightRemindersQueryHandler,
 )
 from fitness_bot.service.handlers.queries.coach import (
@@ -92,6 +103,7 @@ from fitness_bot.service.handlers.queries.coach import (
     GetCoachCabinetQueryHandler,
     GetCoachPublicCardQueryHandler,
     GetMyCoachApplicationQueryHandler,
+    GetMyCoachQueryHandler,
     ListCoachClientsQueryHandler,
     ListModeratorsQueryHandler,
     ListMyCoachApplicationsQueryHandler,
@@ -124,13 +136,20 @@ from fitness_bot.service.handlers.queries.users import (
 )
 from fitness_bot.service.models.commands.body import (
     AddCustomMeasurementSiteCommand,
+    CancelProgressPhotoCaptureCommand,
+    EnsureDefaultProgressPhotoReminderCommand,
     EnsureDefaultWeightReminderCommand,
     EnsureFixedMeasurementSitesCommand,
+    MarkProgressPhotoReminderSentCommand,
     MarkWeightReminderSentCommand,
     RecordMeasurementCommand,
+    RecordProgressPhotoCommand,
     RecordWeightCommand,
+    RememberProgressPhotoFileIdCommand,
     SeedMeasurementGuidesCommand,
+    SetProgressPhotoReminderCommand,
     SetWeightReminderCommand,
+    StartProgressPhotoCaptureCommand,
 )
 from fitness_bot.service.models.commands.catalog import (
     ApplyCatalogProgramCommand,
@@ -193,8 +212,12 @@ from fitness_bot.service.models.commands.users import (
 from fitness_bot.service.models.queries.body import (
     GetMeasurementGuideQuery,
     GetMeasurementHistoryQuery,
+    GetProgressPhotoHistoryQuery,
+    GetProgressPhotoReminderQuery,
+    GetProgressPhotoSetQuery,
     GetWeightHistoryQuery,
     GetWeightReminderQuery,
+    ListDueProgressPhotoRemindersQuery,
     ListDueWeightRemindersQuery,
 )
 from fitness_bot.service.models.queries.coach import (
@@ -204,6 +227,7 @@ from fitness_bot.service.models.queries.coach import (
     GetCoachCabinetQuery,
     GetCoachPublicCardQuery,
     GetMyCoachApplicationQuery,
+    GetMyCoachQuery,
     ListCoachClientsQuery,
     ListModeratorsQuery,
     ListMyCoachApplicationsQuery,
@@ -283,6 +307,26 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
     )
     mark_weight_reminder_sent_handler = providers.Factory(MarkWeightReminderSentCommandHandler, uow=uow)
+    start_progress_photo_capture_handler = providers.Factory(StartProgressPhotoCaptureCommandHandler, uow=uow)
+    record_progress_photo_handler = providers.Factory(
+        RecordProgressPhotoCommandHandler,
+        uow=uow,
+        object_storage=object_storage,
+    )
+    cancel_progress_photo_capture_handler = providers.Factory(CancelProgressPhotoCaptureCommandHandler, uow=uow)
+    remember_progress_photo_file_id_handler = providers.Factory(
+        RememberProgressPhotoFileIdCommandHandler,
+        uow=uow,
+    )
+    set_progress_photo_reminder_handler = providers.Factory(SetProgressPhotoReminderCommandHandler, uow=uow)
+    ensure_default_progress_photo_reminder_handler = providers.Factory(
+        EnsureDefaultProgressPhotoReminderCommandHandler,
+        uow=uow,
+    )
+    mark_progress_photo_reminder_sent_handler = providers.Factory(
+        MarkProgressPhotoReminderSentCommandHandler,
+        uow=uow,
+    )
     record_measurement_handler = providers.Factory(RecordMeasurementCommandHandler, uow=uow)
     add_custom_measurement_site_handler = providers.Factory(AddCustomMeasurementSiteCommandHandler, uow=uow)
     ensure_fixed_measurement_sites_handler = providers.Factory(
@@ -428,6 +472,7 @@ class Container(containers.DeclarativeContainer):
     list_moderators_handler = providers.Factory(ListModeratorsQueryHandler, uow=uow)
     search_coaches_handler = providers.Factory(SearchCoachesQueryHandler, uow=uow)
     get_coach_public_card_handler = providers.Factory(GetCoachPublicCardQueryHandler, uow=uow)
+    get_my_coach_handler = providers.Factory(GetMyCoachQueryHandler, uow=uow)
     list_coach_clients_handler = providers.Factory(ListCoachClientsQueryHandler, uow=uow)
     get_client_card_handler = providers.Factory(GetClientCardQueryHandler, uow=uow)
     get_coach_cabinet_handler = providers.Factory(GetCoachCabinetQueryHandler, uow=uow)
@@ -442,6 +487,17 @@ class Container(containers.DeclarativeContainer):
     get_measurement_history_handler = providers.Factory(GetMeasurementHistoryQueryHandler, uow=uow)
     get_measurement_guide_handler = providers.Factory(GetMeasurementGuideQueryHandler, uow=uow)
     list_due_weight_reminders_handler = providers.Factory(ListDueWeightRemindersQueryHandler, uow=uow)
+    get_progress_photo_history_handler = providers.Factory(GetProgressPhotoHistoryQueryHandler, uow=uow)
+    get_progress_photo_set_handler = providers.Factory(
+        GetProgressPhotoSetQueryHandler,
+        uow=uow,
+        object_storage=object_storage,
+    )
+    get_progress_photo_reminder_handler = providers.Factory(GetProgressPhotoReminderQueryHandler, uow=uow)
+    list_due_progress_photo_reminders_handler = providers.Factory(
+        ListDueProgressPhotoRemindersQueryHandler,
+        uow=uow,
+    )
     get_active_program_handler = providers.Factory(GetActiveProgramQueryHandler, uow=uow)
     get_pending_proposal_handler = providers.Factory(GetPendingProposalQueryHandler, uow=uow)
     get_today_workout_handler = providers.Factory(GetTodayWorkoutQueryHandler, uow=uow)
@@ -478,6 +534,13 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(SetWeightReminderCommand, SetWeightReminderCommandHandler)
     request_map.bind(EnsureDefaultWeightReminderCommand, EnsureDefaultWeightReminderCommandHandler)
     request_map.bind(MarkWeightReminderSentCommand, MarkWeightReminderSentCommandHandler)
+    request_map.bind(StartProgressPhotoCaptureCommand, StartProgressPhotoCaptureCommandHandler)
+    request_map.bind(RecordProgressPhotoCommand, RecordProgressPhotoCommandHandler)
+    request_map.bind(CancelProgressPhotoCaptureCommand, CancelProgressPhotoCaptureCommandHandler)
+    request_map.bind(RememberProgressPhotoFileIdCommand, RememberProgressPhotoFileIdCommandHandler)
+    request_map.bind(SetProgressPhotoReminderCommand, SetProgressPhotoReminderCommandHandler)
+    request_map.bind(EnsureDefaultProgressPhotoReminderCommand, EnsureDefaultProgressPhotoReminderCommandHandler)
+    request_map.bind(MarkProgressPhotoReminderSentCommand, MarkProgressPhotoReminderSentCommandHandler)
     request_map.bind(RecordMeasurementCommand, RecordMeasurementCommandHandler)
     request_map.bind(AddCustomMeasurementSiteCommand, AddCustomMeasurementSiteCommandHandler)
     request_map.bind(EnsureFixedMeasurementSitesCommand, EnsureFixedMeasurementSitesCommandHandler)
@@ -511,6 +574,10 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(GetMeasurementHistoryQuery, GetMeasurementHistoryQueryHandler)
     request_map.bind(GetMeasurementGuideQuery, GetMeasurementGuideQueryHandler)
     request_map.bind(ListDueWeightRemindersQuery, ListDueWeightRemindersQueryHandler)
+    request_map.bind(GetProgressPhotoHistoryQuery, GetProgressPhotoHistoryQueryHandler)
+    request_map.bind(GetProgressPhotoSetQuery, GetProgressPhotoSetQueryHandler)
+    request_map.bind(GetProgressPhotoReminderQuery, GetProgressPhotoReminderQueryHandler)
+    request_map.bind(ListDueProgressPhotoRemindersQuery, ListDueProgressPhotoRemindersQueryHandler)
     request_map.bind(GetActiveProgramQuery, GetActiveProgramQueryHandler)
     request_map.bind(GetPendingProposalQuery, GetPendingProposalQueryHandler)
     request_map.bind(GetTodayWorkoutQuery, GetTodayWorkoutQueryHandler)
@@ -552,6 +619,7 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(ListModeratorsQuery, ListModeratorsQueryHandler)
     request_map.bind(SearchCoachesQuery, SearchCoachesQueryHandler)
     request_map.bind(GetCoachPublicCardQuery, GetCoachPublicCardQueryHandler)
+    request_map.bind(GetMyCoachQuery, GetMyCoachQueryHandler)
     request_map.bind(ListCoachClientsQuery, ListCoachClientsQueryHandler)
     request_map.bind(GetClientCardQuery, GetClientCardQueryHandler)
     request_map.bind(GetCoachCabinetQuery, GetCoachCabinetQueryHandler)

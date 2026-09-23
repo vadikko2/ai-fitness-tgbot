@@ -15,9 +15,9 @@ from fitness_bot.presentation.keyboards import (
     coach_apps_keyboard,
     coach_client_proposal_keyboard,
     coach_history_session_keyboard,
+    coach_mine_keyboard,
     coach_recent_videos_keyboard,
     coach_session_history_keyboard,
-    home_keyboard,
 )
 from fitness_bot.presentation.routers.program import _can_approve_program, render_proposal
 from fitness_bot.service.models.commands.coach import (
@@ -33,6 +33,7 @@ from fitness_bot.service.models.queries.coach import (
     GetClientCardQuery,
     GetCoachCabinetQuery,
     GetMyCoachApplicationQuery,
+    GetMyCoachQuery,
     ListCoachClientsQuery,
     ListMyCoachApplicationsQuery,
     SearchCoachesQuery,
@@ -239,24 +240,11 @@ async def render_home(
     mediator: RequestMediator,
     telegram_user_id: int,
 ) -> None:
+    from fitness_bot.presentation.flow_helpers import home_keyboard_from, render_home_text
+
     home = await mediator.send(GetHomeQuery(telegram_user_id=telegram_user_id))
-    status_line = ""
-    if home.show_coach_badge:
-        status_line = f"\nСтатус: тренер · подопечных: {home.active_clients_count}"
-    elif home.coach_status == "pending":
-        status_line = "\nЗаявка на проверке. Обычно 1–2 дня."
-    text = jinja_env.get_template("home.j2").render(
-        age=home.age,
-        weight_kg=home.weight_kg,
-        goal=home.goal,
-        goal_label=str(home.goal) if home.goal else None,
-        coach_status_line=status_line,
-    )
-    markup = home_keyboard(
-        show_coach_badge=home.show_coach_badge,
-        active_clients_count=home.active_clients_count,
-        is_moderator=home.is_moderator,
-    )
+    text = render_home_text(jinja_env=jinja_env, home=home)
+    markup = home_keyboard_from(home)
     if hasattr(message_or_callback, "message") and message_or_callback.message:
         await message_or_callback.message.answer(text, reply_markup=markup)
     else:
@@ -521,6 +509,12 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             [
                 [InlineKeyboardButton(text="Изменить план клиента", callback_data=f"coach_edit:{card.client_user_id}")],
                 [InlineKeyboardButton(text="История", callback_data=f"coach_hist:{card.client_user_id}")],
+                [
+                    InlineKeyboardButton(
+                        text="📷 Фото прогресса",
+                        callback_data=f"coach_pp_hist:{card.client_user_id}",
+                    ),
+                ],
                 [
                     InlineKeyboardButton(
                         text=f"Последние видео ({card.recent_technique_video_count})",
@@ -897,6 +891,49 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             text = str(exc)
         if callback.message:
             await callback.message.answer(text)
+        await callback.answer()
+
+    @router.callback_query(F.data == "coach_mine")
+    async def coach_mine(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        result = await mediator.send(GetMyCoachQuery(telegram_user_id=callback.from_user.id))
+        text = jinja_env.get_template("coach_mine.j2").render(
+            linked=result.linked,
+            display_name=result.display_name,
+            bio=result.bio,
+            rating_avg=result.rating_avg,
+            rating_count=result.rating_count,
+        )
+        markup = (
+            coach_mine_keyboard()
+            if result.linked
+            else _kb(
+                [
+                    [InlineKeyboardButton(text="🔎 Найти тренера", callback_data="coach_search")],
+                    [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
+                ],
+            )
+        )
+        if callback.message:
+            await callback.message.answer(text, reply_markup=markup)
+        await callback.answer()
+
+    @router.callback_query(F.data == "coach_mine_unlink")
+    async def coach_mine_unlink(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        try:
+            await mediator.send(UnlinkCoachClientCommand(telegram_user_id=callback.from_user.id))
+            text = "Связь с тренером отвязана."
+        except DomainError as exc:
+            text = str(exc)
+        if callback.message:
+            await callback.message.answer(text)
+        await render_home(
+            message_or_callback=callback,
+            jinja_env=jinja_env,
+            mediator=mediator,
+            telegram_user_id=callback.from_user.id,
+        )
         await callback.answer()
 
     @router.callback_query(F.data == "coach_search")

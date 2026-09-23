@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import cqrs
 
-from fitness_bot.domain.enums import CoachVerificationStatus, SessionStatus
+from fitness_bot.domain.enums import CoachVerificationStatus
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.week_progress import training_week_progress
@@ -421,5 +421,25 @@ class GetCatalogProgramQueryHandler(
             )
 
 
-# silence unused import for SessionStatus if needed later
-_ = SessionStatus
+class GetMyCoachQueryHandler(cqrs.RequestHandler[queries.GetMyCoachQuery, queries.GetMyCoachQueryResult]):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: queries.GetMyCoachQuery) -> queries.GetMyCoachQueryResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            link = await repos.coaches.get_active_link(client_user_id=user.id)
+            if link is None:
+                return queries.GetMyCoachQueryResult(linked=False)
+            profile = await repos.coaches.get_profile(link.coach_user_id)
+            if profile is None:
+                return queries.GetMyCoachQueryResult(linked=False)
+            return queries.GetMyCoachQueryResult(
+                linked=True,
+                coach_user_id=profile.user_id,
+                display_name=profile.display_name,
+                bio=profile.bio,
+                rating_avg=profile.rating_avg,
+                rating_count=profile.rating_count,
+                accepting_clients=profile.accepting_clients,
+            )

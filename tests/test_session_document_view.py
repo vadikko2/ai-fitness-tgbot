@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import uuid4
 
 from fitness_bot.domain.enums import ProgramType, WorkoutIntensity
 from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay, WorkoutDocument
+from fitness_bot.presentation.routers.program import _slot_view as program_slot_view
 from fitness_bot.presentation.routers.session import _document_view
 from fitness_bot.presentation.templates_env import create_jinja_env
 
@@ -143,3 +145,40 @@ def test_session_card_marks_actual_with_green_check_emoji() -> None:
     assert lines[0].endswith("✅")
     assert "✅" not in lines[1]
     assert "<b>Жим</b>" in lines[0]
+
+
+def test_program_and_session_slot_templates_include_planned_weight() -> None:
+    exercise_id = uuid4()
+    slot = ExerciseSlot(
+        position=1,
+        exercise_id=exercise_id,
+        sets=3,
+        reps=12,
+        weight_kg=Decimal("100"),
+        rest_seconds=90,
+        rpe=7,
+    )
+    env = create_jinja_env()
+    program_text = env.get_template("program_slot.j2").render(
+        slot=program_slot_view(slot, {exercise_id: "Жим ногами"}),
+    )
+    assert "100 кг" in program_text
+    assert "3×12" in program_text
+
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[
+            WorkoutDay(
+                weekday=1,
+                title="День 1",
+                position=1,
+                intensity=WorkoutIntensity.MEDIUM,
+                slots=[slot],
+            ),
+        ],
+    )
+    view = _document_view(document, {exercise_id: "Жим ногами"})
+    day_text = env.get_template("proposal_day.j2").render(day=view["days"][0], reply="")
+    assert "100 кг" in day_text
+    card = env.get_template("session_card.j2").render(document=view)
+    assert "100 кг" in card

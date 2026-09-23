@@ -25,10 +25,43 @@ from fitness_bot.presentation.keyboards import (
     weekdays_keyboard,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
-from fitness_bot.service.models.queries.users import GetHomeQuery, GetProfileQuery, GetProfileQueryResult
+from fitness_bot.service.models.queries.users import (
+    GetHomeQuery,
+    GetHomeQueryResult,
+    GetProfileQuery,
+    GetProfileQueryResult,
+)
 
 # Users who opened a field from the profile edit menu — save one field, then stop.
 _PROFILE_EDIT_SESSION: set[int] = set()
+
+
+def coach_status_line(home: GetHomeQueryResult) -> str:
+    if home.show_coach_badge:
+        return f"\nСтатус: тренер · подопечных: {home.active_clients_count}"
+    if home.coach_status == "pending":
+        return "\nЗаявка на проверке. Обычно 1–2 дня."
+    return ""
+
+
+def home_keyboard_from(home: GetHomeQueryResult) -> InlineKeyboardMarkup:
+    return home_keyboard(
+        show_coach_badge=home.show_coach_badge,
+        active_clients_count=home.active_clients_count,
+        is_moderator=home.is_moderator,
+        has_linked_coach=home.linked_coach_user_id is not None,
+    )
+
+
+def render_home_text(*, jinja_env: Environment, home: GetHomeQueryResult) -> str:
+    return jinja_env.get_template("home.j2").render(
+        age=home.age,
+        weight_kg=home.weight_kg,
+        goal=home.goal,
+        goal_label=goal_label(home.goal),
+        linked_coach_display_name=home.linked_coach_display_name,
+        coach_status_line=coach_status_line(home),
+    )
 
 
 def begin_profile_edit(telegram_user_id: int) -> None:
@@ -217,13 +250,8 @@ async def show_next_onboarding_step(
 ) -> None:
     if profile.profile_complete:
         home = await mediator.send(GetHomeQuery(telegram_user_id=profile.telegram_user_id))
-        text = jinja_env.get_template("home.j2").render(
-            age=home.age,
-            weight_kg=home.weight_kg,
-            goal=home.goal,
-            goal_label=goal_label(home.goal),
-        )
-        await message.answer(text, reply_markup=home_keyboard())
+        text = render_home_text(jinja_env=jinja_env, home=home)
+        await message.answer(text, reply_markup=home_keyboard_from(home))
         return
     if profile.next_field is None and profile.goal is None:
         text = jinja_env.get_template("onboarding_prompt.j2").render(field="goal", days_per_week=profile.days_per_week)

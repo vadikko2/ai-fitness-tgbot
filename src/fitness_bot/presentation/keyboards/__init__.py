@@ -119,22 +119,30 @@ def home_keyboard(
     show_coach_badge: bool = False,
     active_clients_count: int = 0,
     is_moderator: bool = False,
+    has_linked_coach: bool = False,
 ) -> InlineKeyboardMarkup:
+    coach_btn = (
+        InlineKeyboardButton(text="🧑‍🏫 Мой тренер", callback_data="coach_mine")
+        if has_linked_coach
+        else InlineKeyboardButton(text="🔎 Найти тренера", callback_data="coach_search")
+    )
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="🏋️ Тренировка сегодня", callback_data="sess")],
         [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
-        [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
-        [InlineKeyboardButton(text="🔗 Ввести код или ссылку", callback_data="code_link")],
         [
             InlineKeyboardButton(text="⚖️ Вес", callback_data="wt_menu"),
             InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu"),
+            InlineKeyboardButton(text="📷 Результаты", callback_data="pp_menu"),
         ],
-        [InlineKeyboardButton(text="🥗 Питание", callback_data="nutr")],
         [
-            InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+            InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
             InlineKeyboardButton(text="📜 История", callback_data="hist"),
         ],
-        [InlineKeyboardButton(text="🔎 Найти тренера", callback_data="coach_search")],
+        [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+            coach_btn,
+        ],
     ]
     if show_coach_badge:
         rows.append(
@@ -325,6 +333,104 @@ def history_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🏋️ Тренировки", callback_data="hist_sess")],
             [InlineKeyboardButton(text="⚖️ Вес", callback_data="hist_wt")],
             [InlineKeyboardButton(text="📏 Обхваты", callback_data="hist_meas")],
+            [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="hist_pp")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def progress_photo_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📷 Сфотографировать", callback_data="pp_log")],
+            [InlineKeyboardButton(text="📈 История", callback_data="pp_hist")],
+            [InlineKeyboardButton(text="⏰ Расписание напоминаний", callback_data="pp_remind")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def progress_photo_reminder_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📅 Раз в неделю (вс)", callback_data="pp_rm_preset:weekly")],
+            [InlineKeyboardButton(text="🔁 Каждый день", callback_data="pp_rm_preset:daily")],
+            [InlineKeyboardButton(text="🗓 Выбрать дни", callback_data="pp_rm_custom")],
+            [InlineKeyboardButton(text="🕐 Изменить время", callback_data="pp_rm_time")],
+            [InlineKeyboardButton(text="⬅️ К результатам", callback_data="pp_menu")],
+        ],
+    )
+
+
+def progress_photo_reminder_weekdays_keyboard(selected: set[int]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for day, label in WEEKDAY_LABELS.items():
+        mark = "✅ " if day in selected else ""
+        row.append(InlineKeyboardButton(text=f"{mark}{label}", callback_data=f"pp_rm_day:{day}"))
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    if selected:
+        rows.append([InlineKeyboardButton(text=_DONE, callback_data="pp_rm_day:done")])
+    rows.append([InlineKeyboardButton(text=_BACK, callback_data="pp_remind")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def progress_photo_reminder_time_keyboard() -> InlineKeyboardMarkup:
+    presets = ("08:00", "09:00", "10:00", "12:00", "18:00", "20:00")
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for value in presets:
+        row.append(InlineKeyboardButton(text=f"🕐 {value}", callback_data=f"pp_rm_at:{value}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="✏️ Другое время", callback_data="pp_rm_at:custom")])
+    rows.append([InlineKeyboardButton(text=_BACK, callback_data="pp_remind")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def progress_photo_history_keyboard(
+    *,
+    items: list[tuple[str, str]],
+    offset: int,
+    has_more: bool,
+    subject_user_id: str | None = None,
+    back_callback: str = "pp_menu",
+) -> InlineKeyboardMarkup:
+    """Date buttons for progress-photo history. ``items`` are (set_id, label)."""
+    if subject_user_id is None:
+        one_prefix = "pp_hist_one"
+        list_prefix = "pp_hist"
+    else:
+        # Coach drill-down uses set id only (≤64 bytes); authz resolves owner in the handler.
+        one_prefix = "coach_pp_one"
+        list_prefix = f"coach_pp_hist:{subject_user_id}"
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=label[:64], callback_data=f"{one_prefix}:{set_id}")] for set_id, label in items
+    ]
+    nav: list[InlineKeyboardButton] = []
+    if offset > 0:
+        prev_offset = max(0, offset - 10)
+        nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{list_prefix}:{prev_offset}"))
+    if has_more:
+        nav.append(InlineKeyboardButton(text="Ещё ➡️", callback_data=f"{list_prefix}:{offset + 10}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text=_BACK, callback_data=back_callback)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def coach_mine_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔓 Отвязать", callback_data="coach_mine_unlink")],
+            [InlineKeyboardButton(text="🔎 Сменить / найти другого", callback_data="coach_search")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )

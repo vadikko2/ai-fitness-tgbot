@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from fitness_bot.infrastructure.db.repositories.body import (
     SqlAlchemyMeasurementRepository,
+    SqlAlchemyProgressPhotoReminderRepository,
+    SqlAlchemyProgressPhotoRepository,
     SqlAlchemyWeightReminderRepository,
     SqlAlchemyWeightRepository,
 )
@@ -37,6 +39,8 @@ class SqlAlchemyUowRepositories(IUowRepositories):
         self._users = SqlAlchemyUsersRepository(session)
         self._weights = SqlAlchemyWeightRepository(session)
         self._weight_reminders = SqlAlchemyWeightReminderRepository(session)
+        self._progress_photos = SqlAlchemyProgressPhotoRepository(session)
+        self._progress_photo_reminders = SqlAlchemyProgressPhotoReminderRepository(session)
         self._measurements = SqlAlchemyMeasurementRepository(session)
         self._programs = SqlAlchemyProgramsRepository(session)
         self._proposals = SqlAlchemyProposalsRepository(session)
@@ -56,6 +60,14 @@ class SqlAlchemyUowRepositories(IUowRepositories):
     @property
     def weight_reminders(self) -> SqlAlchemyWeightReminderRepository:
         return self._weight_reminders
+
+    @property
+    def progress_photos(self) -> SqlAlchemyProgressPhotoRepository:
+        return self._progress_photos
+
+    @property
+    def progress_photo_reminders(self) -> SqlAlchemyProgressPhotoReminderRepository:
+        return self._progress_photo_reminders
 
     @property
     def measurements(self) -> SqlAlchemyMeasurementRepository:

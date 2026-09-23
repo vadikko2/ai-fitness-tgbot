@@ -46,7 +46,14 @@ class ExerciseSlot(BaseModel):
     sets: int
     reps: int | None = None
     duration_seconds: int | None = None
-    weight_kg: Decimal | None = None
+    weight_kg: Decimal | None = Field(
+        default=None,
+        description=(
+            "Planned working weight in kilograms for loaded exercises "
+            "(machines, free weights, cables). Null only for bodyweight "
+            "or duration-based slots."
+        ),
+    )
     rest_seconds: int
     rpe: int
     technique_note: str = ""

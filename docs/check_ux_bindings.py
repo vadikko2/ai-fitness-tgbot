@@ -107,13 +107,29 @@ PLAN_TO_UX: dict[str, str] = {
     "S15.08": "hist_vid_ok",
 }
 
+# Progress-photo / my-coach UX ids (feature plan; not yet in main plan registry).
+EXTRA_UX_CODES: set[str] = {
+    "pp_menu",
+    "pp_log",
+    "pp_save",
+    "pp_hist",
+    "pp_hist_one",
+    "pp_remind",
+    "pp_tick",
+    "pp_ask",
+    "hist_pp",
+    "coach_mine",
+    "coach_pp_hist",
+    "coach_pp_one",
+}
+
 CODE_RE = re.compile(r"^(C\d+|TG-TEXT|TG-VIDEO|TG-VOICE|[a-z][a-z0-9_]{1,31})$")
 HANDLER_RE = re.compile(r"`([A-Z][A-Za-z]+(?:Command|Query))`")
 CALLBACK_RE = re.compile(r"callback `([^`]+)`")
 ROW_RE = re.compile(r"^\| `?(S\d+\.\d+|C\d+|TG-TEXT|TG-VIDEO|TG-VOICE)`? \|")
 
 ANNOTATIONS = {"TG-TEXT", "TG-VOICE", "C1", "C2"}
-ENTRIES = ANNOTATIONS | {"start", "wt_tick"}
+ENTRIES = ANNOTATIONS | {"start", "wt_tick", "pp_tick", "coach_pp_hist"}
 
 DEFERRED_DIAGRAM_CODES: set[str] = set()
 
@@ -215,6 +231,13 @@ JOURNEYS: dict[str, list[str]] = {
     "technique_how_to": ["slot", "slot_how"],
     "history_open_session": ["hist", "hist_sess", "hist_one", "hist_card"],
     "history_watch": ["hist_card", "hist_vid"],
+    "progress_photo_capture": ["home", "pp_menu", "pp_log", "pp_save"],
+    "progress_photo_history": ["pp_menu", "pp_hist", "pp_hist_one"],
+    "progress_photo_schedule": ["pp_menu", "pp_remind"],
+    "progress_photo_reminder": ["pp_tick", "pp_ask", "pp_log"],
+    "history_progress_photo_tab": ["hist", "hist_pp", "pp_hist"],
+    "my_coach_card": ["home", "coach_mine"],
+    "coach_progress_photo_history": ["coach_pp_hist", "coach_pp_one"],
 }
 
 
@@ -322,7 +345,7 @@ def main() -> int:
             errors.append(f"CQRS handler {handler} has no registry row")
 
     outgoing, diamonds, present = diagram_graph(DRAWIO)
-    ux_codes = {to_ux(code) for code in codes}
+    ux_codes = {to_ux(code) for code in codes} | EXTRA_UX_CODES
     required_on_diagram = ux_codes - DEFERRED_DIAGRAM_CODES
     missing_on_diagram = sorted(required_on_diagram - present)
     extra_on_diagram = sorted(present - ux_codes - ANNOTATIONS)

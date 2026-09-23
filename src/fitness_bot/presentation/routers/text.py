@@ -9,7 +9,8 @@ from fitness_bot.domain.enums import ExpectedInput, ProfileField, Supplement, We
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.flow_helpers import (
     finish_profile_edit_if_active,
-    goal_label,
+    home_keyboard_from,
+    render_home_text,
     show_next_onboarding_step,
 )
 from fitness_bot.presentation.keyboards import home_keyboard
@@ -20,6 +21,7 @@ from fitness_bot.presentation.routers.program import (
     parse_proposal_planned_field,
     save_proposal_slot_planned,
 )
+from fitness_bot.presentation.routers.progress_photo import apply_progress_photo_reminder_time
 from fitness_bot.presentation.routers.session import (
     handle_completion_deviation_utterance,
     handle_slot_actual_utterance,
@@ -127,6 +129,21 @@ async def handle_user_utterance(
                 await message.answer("Время напоминания сохранено.", reply_markup=home_keyboard())
                 return
 
+            if field_name == "progress_photo_reminder_time":
+                await apply_progress_photo_reminder_time(
+                    mediator=mediator,
+                    telegram_user_id=message.from_user.id,
+                    text=text,
+                )
+                await mediator.send(
+                    ExpectInputCommand(
+                        telegram_user_id=message.from_user.id,
+                        expected_input=ExpectedInput.NONE,
+                    ),
+                )
+                await message.answer("Время напоминания сохранено.", reply_markup=home_keyboard())
+                return
+
             if field_name == "custom_measurement_name":
                 result = await mediator.send(
                     AddCustomMeasurementSiteCommand(
@@ -161,13 +178,8 @@ async def handle_user_utterance(
                 profile = await mediator.send(GetProfileQuery(telegram_user_id=message.from_user.id))
                 if profile.profile_complete:
                     home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
-                    home_text = jinja_env.get_template("home.j2").render(
-                        age=home.age,
-                        weight_kg=home.weight_kg,
-                        goal=home.goal,
-                        goal_label=goal_label(home.goal),
-                    )
-                    await message.answer(home_text, reply_markup=home_keyboard())
+                    home_text = render_home_text(jinja_env=jinja_env, home=home)
+                    await message.answer(home_text, reply_markup=home_keyboard_from(home))
                     return
                 await show_next_onboarding_step(
                     message=message,
@@ -223,13 +235,8 @@ async def handle_user_utterance(
             profile = await mediator.send(GetProfileQuery(telegram_user_id=message.from_user.id))
             if profile.profile_complete:
                 home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
-                home_text = jinja_env.get_template("home.j2").render(
-                    age=home.age,
-                    weight_kg=home.weight_kg,
-                    goal=home.goal,
-                    goal_label=goal_label(home.goal),
-                )
-                await message.answer(home_text, reply_markup=home_keyboard())
+                home_text = render_home_text(jinja_env=jinja_env, home=home)
+                await message.answer(home_text, reply_markup=home_keyboard_from(home))
                 return
             await show_next_onboarding_step(
                 message=message,

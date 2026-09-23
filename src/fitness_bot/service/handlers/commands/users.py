@@ -5,7 +5,7 @@ from uuid import UUID
 
 import cqrs
 
-from fitness_bot.domain.body.reminder import WeightReminder
+from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.enums import ExpectedInput, ProfileField
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User
@@ -30,9 +30,14 @@ class EnsureUserCommandHandler(cqrs.RequestHandler[cmds.EnsureUserCommand, cmds.
                 chat_id=request.chat_id,
             )
             if created:
-                existing = await repos.weight_reminders.get(user.id)
-                if existing is None:
+                existing_weight = await repos.weight_reminders.get(user.id)
+                if existing_weight is None:
                     await repos.weight_reminders.save(WeightReminder.default_for_user(user_id=user.id))
+                existing_photo = await repos.progress_photo_reminders.get(user.id)
+                if existing_photo is None:
+                    await repos.progress_photo_reminders.save(
+                        ProgressPhotoReminder.default_for_user(user_id=user.id),
+                    )
             return cmds.EnsureUserCommandResult(user_id=user.id, created=created)
 
 

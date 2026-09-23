@@ -3,14 +3,27 @@ from __future__ import annotations
 import json
 
 from fitness_bot.domain.body.measurement import MeasurementEntry, MeasurementGuide, MeasurementSite
-from fitness_bot.domain.body.reminder import WeightReminder
+from fitness_bot.domain.body.progress_photo import ProgressPhoto, ProgressPhotoSet
+from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
-from fitness_bot.domain.enums import ActivityLevel, ExpectedInput, ExperienceLevel, Goal, Sex, WeightSource
+from fitness_bot.domain.enums import (
+    ActivityLevel,
+    ExpectedInput,
+    ExperienceLevel,
+    Goal,
+    ProgressPhotoAngle,
+    Sex,
+    WeightSource,
+)
 from fitness_bot.domain.users.user import User
 from fitness_bot.infrastructure.db.models import (
     MeasurementEntryRow,
     MeasurementGuideRow,
     MeasurementSiteRow,
+    ProgressPhotoReminderRow,
+    ProgressPhotoReminderWeekdayRow,
+    ProgressPhotoRow,
+    ProgressPhotoSetRow,
     UserRow,
     UserTrainingWeekdayRow,
     WeightEntryRow,
@@ -211,3 +224,84 @@ def apply_reminder_to_row(row: WeightReminderRow, reminder: WeightReminder) -> N
     for weekday in desired:
         if weekday not in existing:
             row.weekdays.append(WeightReminderWeekdayRow(user_id=reminder.user_id, weekday=weekday))
+
+
+def progress_photo_to_domain(row: ProgressPhotoRow) -> ProgressPhoto:
+    return ProgressPhoto(
+        id=row.id,
+        set_id=row.set_id,
+        angle=ProgressPhotoAngle(row.angle),
+        object_key=row.object_key,
+        content_type=row.content_type,
+        byte_size=row.byte_size,
+        telegram_file_id=row.telegram_file_id,
+    )
+
+
+def progress_photo_set_to_domain(row: ProgressPhotoSetRow) -> ProgressPhotoSet:
+    return ProgressPhotoSet(
+        id=row.id,
+        user_id=row.user_id,
+        captured_at=row.captured_at,
+        local_date=row.local_date,
+        complete=row.complete,
+        photos=[progress_photo_to_domain(photo) for photo in row.photos],
+    )
+
+
+def apply_progress_photo_set_to_row(row: ProgressPhotoSetRow, photo_set: ProgressPhotoSet) -> None:
+    row.captured_at = photo_set.captured_at
+    row.local_date = photo_set.local_date
+    row.complete = photo_set.complete
+    existing = {item.angle: item for item in row.photos}
+    desired = {photo.angle.value: photo for photo in photo_set.photos}
+    for angle, item in list(existing.items()):
+        if angle not in desired:
+            row.photos.remove(item)
+    for angle, photo in desired.items():
+        if angle in existing:
+            item = existing[angle]
+            item.id = photo.id
+            item.object_key = photo.object_key
+            item.content_type = photo.content_type
+            item.byte_size = photo.byte_size
+            item.telegram_file_id = photo.telegram_file_id
+        else:
+            row.photos.append(
+                ProgressPhotoRow(
+                    id=photo.id,
+                    set_id=photo_set.id,
+                    angle=photo.angle.value,
+                    object_key=photo.object_key,
+                    content_type=photo.content_type,
+                    byte_size=photo.byte_size,
+                    telegram_file_id=photo.telegram_file_id,
+                ),
+            )
+
+
+def progress_photo_reminder_to_domain(row: ProgressPhotoReminderRow) -> ProgressPhotoReminder:
+    return ProgressPhotoReminder(
+        user_id=row.user_id,
+        local_time=row.local_time,
+        weekdays=frozenset(item.weekday for item in row.weekdays),
+        last_sent_on=row.last_sent_on,
+    )
+
+
+def apply_progress_photo_reminder_to_row(
+    row: ProgressPhotoReminderRow,
+    reminder: ProgressPhotoReminder,
+) -> None:
+    row.local_time = reminder.local_time
+    row.last_sent_on = reminder.last_sent_on
+    existing = {item.weekday: item for item in row.weekdays}
+    desired = set(reminder.weekdays)
+    for weekday, item in list(existing.items()):
+        if weekday not in desired:
+            row.weekdays.remove(item)
+    for weekday in desired:
+        if weekday not in existing:
+            row.weekdays.append(
+                ProgressPhotoReminderWeekdayRow(user_id=reminder.user_id, weekday=weekday),
+            )

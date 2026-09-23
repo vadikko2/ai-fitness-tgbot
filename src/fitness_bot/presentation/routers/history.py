@@ -14,6 +14,7 @@ from fitness_bot.presentation.keyboards import (
     history_session_keyboard,
     session_history_keyboard,
 )
+from fitness_bot.presentation.routers.progress_photo import show_progress_photo_history
 from fitness_bot.service.models.commands.session import RememberTechniqueVideoFileIdCommand
 from fitness_bot.service.models.queries.body import GetMeasurementHistoryQuery, GetWeightHistoryQuery
 from fitness_bot.service.models.queries.session import (
@@ -73,6 +74,17 @@ def create_history_router(*, jinja_env: Environment, mediator: RequestMediator) 
         history = await mediator.send(GetMeasurementHistoryQuery(telegram_user_id=callback.from_user.id))
         text = jinja_env.get_template("history.j2").render(entries=history.entries, site_name=None)
         await _answer(callback, text, reply_markup=back_to_menu_keyboard())
+
+    @router.callback_query(F.data == "hist_pp")
+    async def handle_hist_pp(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        await show_progress_photo_history(
+            callback=callback,
+            jinja_env=jinja_env,
+            mediator=mediator,
+            telegram_user_id=callback.from_user.id,
+            back_callback="hist",
+        )
 
     @router.callback_query(F.data.startswith("hist_one:"))
     async def handle_hist_one(callback: CallbackQuery) -> None:

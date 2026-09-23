@@ -83,6 +83,14 @@ class GetHomeQueryHandler(cqrs.RequestHandler[queries.GetHomeQuery, queries.GetH
             if coach_profile is not None and coach_profile.is_verified:
                 active_clients = await repos.coaches.count_active_clients(user.id)
                 show_badge = True
+            linked_coach_user_id = None
+            linked_coach_display_name = None
+            link = await repos.coaches.get_active_link(client_user_id=user.id)
+            if link is not None:
+                coach_profile_linked = await repos.coaches.get_profile(link.coach_user_id)
+                if coach_profile_linked is not None:
+                    linked_coach_user_id = coach_profile_linked.user_id
+                    linked_coach_display_name = coach_profile_linked.display_name
             return queries.GetHomeQueryResult(
                 user_id=profile.user_id,
                 profile_complete=profile.profile_complete,
@@ -93,6 +101,8 @@ class GetHomeQueryHandler(cqrs.RequestHandler[queries.GetHomeQuery, queries.GetH
                 coach_status=coach_status,
                 active_clients_count=active_clients,
                 show_coach_badge=show_badge,
+                linked_coach_user_id=linked_coach_user_id,
+                linked_coach_display_name=linked_coach_display_name,
             )
 
 

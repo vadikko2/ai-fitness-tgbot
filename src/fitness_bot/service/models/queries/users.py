@@ -69,6 +69,8 @@ class GetHomeQueryResult(QueryResult):
     coach_status: str | None = None
     active_clients_count: int = 0
     show_coach_badge: bool = False
+    linked_coach_user_id: UUID | None = None
+    linked_coach_display_name: str | None = None
 
 
 class GetWorkflowQuery(Query):

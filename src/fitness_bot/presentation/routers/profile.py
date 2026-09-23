@@ -10,9 +10,10 @@ from fitness_bot.presentation.flow_helpers import (
     begin_profile_edit,
     clear_profile_edit,
     finish_profile_edit_if_active,
-    goal_label,
+    home_keyboard_from,
     markup_for_profile_field,
     profile_text,
+    render_home_text,
     show_next_onboarding_step,
 )
 from fitness_bot.presentation.keyboards import (
@@ -21,7 +22,6 @@ from fitness_bot.presentation.keyboards import (
     diet_prefs_none_keyboard,
     experience_keyboard,
     goal_keyboard,
-    home_keyboard,
     pharma_keyboard,
     profile_edit_keyboard,
     session_minutes_keyboard,
@@ -250,13 +250,8 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
         goal = Goal(callback.data.split(":", 1)[1])
         await mediator.send(SetGoalCommand(telegram_user_id=callback.from_user.id, goal=goal))
         home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
-        text = jinja_env.get_template("home.j2").render(
-            age=home.age,
-            weight_kg=home.weight_kg,
-            goal=home.goal,
-            goal_label=goal_label(home.goal),
-        )
-        await _answer(callback, text, reply_markup=home_keyboard())
+        text = render_home_text(jinja_env=jinja_env, home=home)
+        await _answer(callback, text, reply_markup=home_keyboard_from(home))
 
     @router.callback_query(F.data == "home")
     async def handle_home(callback: CallbackQuery) -> None:
@@ -270,13 +265,8 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
             ),
         )
         home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
-        text = jinja_env.get_template("home.j2").render(
-            age=home.age,
-            weight_kg=home.weight_kg,
-            goal=home.goal,
-            goal_label=goal_label(home.goal),
-        )
-        await _answer(callback, text, reply_markup=home_keyboard())
+        text = render_home_text(jinja_env=jinja_env, home=home)
+        await _answer(callback, text, reply_markup=home_keyboard_from(home))
 
     @router.callback_query(F.data == "profile")
     async def handle_profile(callback: CallbackQuery) -> None:

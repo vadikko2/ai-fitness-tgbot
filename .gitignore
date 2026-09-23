@@ -151,6 +151,9 @@ activemq-data/
 .env
 .envrc
 .venv
+
+# Cursor MCP config (contains API tokens)
+.cursor/mcp.json
 env/
 venv/
 ENV/
@@ -222,3 +225,6 @@ graphify-out/
 
 # sherpa-onnx ASR model packs (large binaries; see `make download-stt-model`)
 /models/
+
+# Local Timeweb Apps env dump (secrets)
+deploy/timeweb.panel.env

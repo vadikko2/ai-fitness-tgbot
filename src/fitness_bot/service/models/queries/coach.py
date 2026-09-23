@@ -225,3 +225,17 @@ class GetCatalogProgramQueryResult(QueryResult):
     author_label: str | None
     document: WorkoutDocument
     is_author_template: bool
+
+
+class GetMyCoachQuery(Query):
+    telegram_user_id: int
+
+
+class GetMyCoachQueryResult(QueryResult):
+    linked: bool
+    coach_user_id: UUID | None = None
+    display_name: str | None = None
+    bio: str | None = None
+    rating_avg: Decimal | None = None
+    rating_count: int = 0
+    accepting_clients: bool = False

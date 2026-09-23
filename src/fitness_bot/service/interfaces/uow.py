@@ -8,7 +8,8 @@ from uuid import UUID
 
 from fitness_bot.domain.body.measurement import MeasurementEntry, MeasurementGuide, MeasurementSite
 from fitness_bot.domain.body.nutrition import NutritionRecommendation
-from fitness_bot.domain.body.reminder import WeightReminder
+from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
+from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
 from fitness_bot.domain.coach.application import CoachApplication, CoachApplicationModeratorMessage
 from fitness_bot.domain.coach.invite import CoachInvite
@@ -92,6 +93,48 @@ class IWeightReminderRepository(abc.ABC):
 
     @abc.abstractmethod
     async def list_all(self) -> list[WeightReminder]:
+        raise NotImplementedError
+
+
+class IProgressPhotoRepository(abc.ABC):
+    @abc.abstractmethod
+    async def get_set(self, set_id: UUID) -> ProgressPhotoSet | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_incomplete_for_user(self, user_id: UUID) -> ProgressPhotoSet | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_for_user_local_date(self, user_id: UUID, local_date: date) -> ProgressPhotoSet | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def save_set(self, photo_set: ProgressPhotoSet) -> ProgressPhotoSet:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_complete_for_user(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[ProgressPhotoSet]:
+        raise NotImplementedError
+
+
+class IProgressPhotoReminderRepository(abc.ABC):
+    @abc.abstractmethod
+    async def get(self, user_id: UUID) -> ProgressPhotoReminder | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def save(self, reminder: ProgressPhotoReminder) -> ProgressPhotoReminder:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_all(self) -> list[ProgressPhotoReminder]:
         raise NotImplementedError
 
 
@@ -459,6 +502,16 @@ class IUowRepositories(abc.ABC):
 
     @property
     @abc.abstractmethod
+    def progress_photos(self) -> IProgressPhotoRepository:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def progress_photo_reminders(self) -> IProgressPhotoReminderRepository:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def measurements(self) -> IMeasurementRepository:
         raise NotImplementedError
 
@@ -523,6 +576,8 @@ __all__ = [
     "IMeasurementRepository",
     "INutritionRepository",
     "IProgramsRepository",
+    "IProgressPhotoReminderRepository",
+    "IProgressPhotoRepository",
     "IProposalsRepository",
     "ISessionsRepository",
     "ITechniqueVideosRepository",
@@ -536,6 +591,8 @@ __all__ = [
     "MeasurementSite",
     "NutritionRecommendation",
     "Program",
+    "ProgressPhotoReminder",
+    "ProgressPhotoSet",
     "Proposal",
     "Session",
     "TechniqueVideo",

@@ -14,14 +14,16 @@ from fitness_bot.domain.body.measurement import (
     MeasurementSite,
     default_guide_for,
 )
-from fitness_bot.domain.body.reminder import WeightReminder
+from fitness_bot.domain.body.progress_photo import MAX_PROGRESS_PHOTO_BYTES, ProgressPhotoSet
+from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
-from fitness_bot.domain.enums import ExpectedInput
+from fitness_bot.domain.enums import ExpectedInput, ProgressPhotoAngle
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.domain.users.user import User, local_day_bounds
+from fitness_bot.domain.users.user import User, local_calendar_date, local_day_bounds
 from fitness_bot.service.interfaces.uow import IUow
 from fitness_bot.service.models.commands import body as cmds
 from fitness_bot.service.ports.language_model import LanguageModel
+from fitness_bot.service.ports.object_storage import ObjectStorage
 
 PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts"
 
@@ -264,3 +266,237 @@ class SeedMeasurementGuidesCommandHandler(
                 await repos.measurements.upsert_guide(MeasurementGuide(site_id=site.id, instruction=instruction))
                 seeded += 1
         return cmds.SeedMeasurementGuidesCommandResult(seeded=seeded, skipped=skipped)
+
+
+class StartProgressPhotoCaptureCommandHandler(
+    cqrs.RequestHandler[cmds.StartProgressPhotoCaptureCommand, cmds.StartProgressPhotoCaptureCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.StartProgressPhotoCaptureCommand,
+    ) -> cmds.StartProgressPhotoCaptureCommandResult:
+        now = request.now or datetime.now(UTC)
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            local_date = local_calendar_date(now=now, timezone_offset=user.timezone_offset)
+            incomplete = await repos.progress_photos.get_incomplete_for_user(user.id)
+            resumed = False
+            if incomplete is not None:
+                photo_set = incomplete
+                resumed = True
+            else:
+                existing = await repos.progress_photos.get_for_user_local_date(user.id, local_date)
+                if existing is not None:
+                    photo_set = existing
+                    if photo_set.complete:
+                        # Same-day retake: clear angles and walk front → side → back again.
+                        photo_set.photos = []
+                        photo_set.complete = False
+                        photo_set.captured_at = now
+                        photo_set = await repos.progress_photos.save_set(photo_set)
+                    else:
+                        resumed = True
+                else:
+                    photo_set = ProgressPhotoSet.create(user_id=user.id, local_date=local_date, captured_at=now)
+                    photo_set = await repos.progress_photos.save_set(photo_set)
+            next_angle = photo_set.next_angle() or ProgressPhotoAngle.FRONT
+            user.expect_input(ExpectedInput.PROGRESS_PHOTO, expected_field=next_angle.value)
+            await repos.users.save(user)
+            return cmds.StartProgressPhotoCaptureCommandResult(
+                set_id=photo_set.id,
+                local_date=photo_set.local_date,
+                next_angle=next_angle.value,
+                resumed=resumed,
+            )
+
+
+class RecordProgressPhotoCommandHandler(
+    cqrs.RequestHandler[cmds.RecordProgressPhotoCommand, cmds.RecordProgressPhotoCommandResult],
+):
+    def __init__(self, uow: IUow, object_storage: ObjectStorage) -> None:
+        self._uow = uow
+        self._object_storage = object_storage
+
+    async def handle(self, request: cmds.RecordProgressPhotoCommand) -> cmds.RecordProgressPhotoCommandResult:
+        content_type = (request.content_type or "").strip().lower()
+        if not content_type.startswith("image/"):
+            raise DomainError("progress photo must be an image/* file")
+        byte_size = len(request.body)
+        if byte_size <= 0 or byte_size > MAX_PROGRESS_PHOTO_BYTES:
+            raise DomainError("progress photo size must be between 1 and 10 MiB")
+        now = request.now or datetime.now(UTC)
+
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            photo_set = await repos.progress_photos.get_incomplete_for_user(user.id)
+            if photo_set is None:
+                local_date = local_calendar_date(now=now, timezone_offset=user.timezone_offset)
+                photo_set = await repos.progress_photos.get_for_user_local_date(user.id, local_date)
+            if photo_set is None:
+                raise DomainError("progress photo set not found; start capture first")
+
+            if request.angle is not None:
+                angle = ProgressPhotoAngle(request.angle)
+            elif user.expected_input == ExpectedInput.PROGRESS_PHOTO and user.expected_field:
+                angle = ProgressPhotoAngle(user.expected_field)
+            else:
+                angle = photo_set.next_angle() or ProgressPhotoAngle.FRONT
+
+            photo, replaced = photo_set.upsert_photo(
+                angle=angle,
+                content_type=content_type,
+                byte_size=byte_size,
+                now=now,
+            )
+            await self._object_storage.put(photo.object_key, request.body, content_type)
+            saved = await repos.progress_photos.save_set(photo_set)
+            next_angle = saved.next_angle()
+            if next_angle is None:
+                user.clear_expectation()
+            else:
+                user.expect_input(ExpectedInput.PROGRESS_PHOTO, expected_field=next_angle.value)
+            await repos.users.save(user)
+            return cmds.RecordProgressPhotoCommandResult(
+                set_id=saved.id,
+                photo_id=photo.id,
+                angle=angle.value,
+                next_angle=next_angle.value if next_angle else None,
+                complete=saved.complete,
+                replaced=replaced,
+            )
+
+
+class CancelProgressPhotoCaptureCommandHandler(
+    cqrs.RequestHandler[cmds.CancelProgressPhotoCaptureCommand, cmds.CancelProgressPhotoCaptureCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.CancelProgressPhotoCaptureCommand,
+    ) -> cmds.CancelProgressPhotoCaptureCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            cleared = user.expected_input == ExpectedInput.PROGRESS_PHOTO
+            if cleared:
+                user.clear_expectation()
+                await repos.users.save(user)
+            return cmds.CancelProgressPhotoCaptureCommandResult(cleared=cleared)
+
+
+class RememberProgressPhotoFileIdCommandHandler(
+    cqrs.RequestHandler[cmds.RememberProgressPhotoFileIdCommand, cmds.RememberProgressPhotoFileIdCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.RememberProgressPhotoFileIdCommand,
+    ) -> cmds.RememberProgressPhotoFileIdCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            photo_set = await repos.progress_photos.get_set(request.set_id)
+            if photo_set is None or photo_set.user_id != user.id:
+                raise DomainError("progress photo not found")
+            updated = photo_set.remember_file_id(
+                photo_id=request.photo_id,
+                telegram_file_id=request.telegram_file_id,
+            )
+            await repos.progress_photos.save_set(photo_set)
+            return cmds.RememberProgressPhotoFileIdCommandResult(
+                photo_id=updated.id,
+                telegram_file_id=updated.telegram_file_id or request.telegram_file_id,
+            )
+
+
+class SetProgressPhotoReminderCommandHandler(
+    cqrs.RequestHandler[cmds.SetProgressPhotoReminderCommand, cmds.SetProgressPhotoReminderCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.SetProgressPhotoReminderCommand,
+    ) -> cmds.SetProgressPhotoReminderCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            existing = await repos.progress_photo_reminders.get(user.id)
+            reminder = ProgressPhotoReminder.create(
+                user_id=user.id,
+                local_time=request.local_time,
+                weekdays=request.weekdays,
+            )
+            if existing is not None:
+                reminder.last_sent_on = existing.last_sent_on
+            saved = await repos.progress_photo_reminders.save(reminder)
+            return cmds.SetProgressPhotoReminderCommandResult(
+                user_id=saved.user_id,
+                local_time=saved.local_time,
+                weekdays=sorted(saved.weekdays),
+            )
+
+
+class EnsureDefaultProgressPhotoReminderCommandHandler(
+    cqrs.RequestHandler[
+        cmds.EnsureDefaultProgressPhotoReminderCommand,
+        cmds.EnsureDefaultProgressPhotoReminderCommandResult,
+    ],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.EnsureDefaultProgressPhotoReminderCommand,
+    ) -> cmds.EnsureDefaultProgressPhotoReminderCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            existing = await repos.progress_photo_reminders.get(user.id)
+            if existing is not None:
+                return cmds.EnsureDefaultProgressPhotoReminderCommandResult(
+                    user_id=existing.user_id,
+                    local_time=existing.local_time,
+                    weekdays=sorted(existing.weekdays),
+                    created=False,
+                )
+            saved = await repos.progress_photo_reminders.save(
+                ProgressPhotoReminder.default_for_user(user_id=user.id),
+            )
+            return cmds.EnsureDefaultProgressPhotoReminderCommandResult(
+                user_id=saved.user_id,
+                local_time=saved.local_time,
+                weekdays=sorted(saved.weekdays),
+                created=True,
+            )
+
+
+class MarkProgressPhotoReminderSentCommandHandler(
+    cqrs.RequestHandler[
+        cmds.MarkProgressPhotoReminderSentCommand,
+        cmds.MarkProgressPhotoReminderSentCommandResult,
+    ],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.MarkProgressPhotoReminderSentCommand,
+    ) -> cmds.MarkProgressPhotoReminderSentCommandResult:
+        async with self._uow.transaction() as repos:
+            reminder = await repos.progress_photo_reminders.get(request.user_id)
+            if reminder is None:
+                raise DomainError("progress photo reminder not found")
+            reminder.mark_sent(request.sent_on)
+            saved = await repos.progress_photo_reminders.save(reminder)
+            assert saved.last_sent_on is not None
+            return cmds.MarkProgressPhotoReminderSentCommandResult(
+                user_id=saved.user_id,
+                last_sent_on=saved.last_sent_on,
+            )

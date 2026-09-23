@@ -37,6 +37,13 @@ class ExpectedInput(StrEnum):
     COACH_REVIEW = "coach_review"
     COACH_REPORT = "coach_report"
     COACH_EDIT_CLIENT = "coach_edit_client"
+    PROGRESS_PHOTO = "progress_photo"
+
+
+class ProgressPhotoAngle(StrEnum):
+    FRONT = "front"
+    SIDE = "side"
+    BACK = "back"
 
 
 class WeightSource(StrEnum):

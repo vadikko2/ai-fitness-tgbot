@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from fitness_bot.domain.enums import WeightSource
+from fitness_bot.domain.enums import ProgressPhotoAngle, WeightSource
 from fitness_bot.service.models.queries.base import Query, QueryResult
 
 
@@ -86,3 +86,72 @@ class ListDueWeightRemindersQuery(Query):
 
 class ListDueWeightRemindersQueryResult(QueryResult):
     items: list[DueWeightReminderItem]
+
+
+class ProgressPhotoHistoryItem(QueryResult):
+    set_id: UUID
+    local_date: date
+    captured_at: datetime
+
+
+class GetProgressPhotoHistoryQuery(Query):
+    telegram_user_id: int
+    subject_user_id: UUID | None = None
+    limit: int = 30
+    offset: int = 0
+
+
+class GetProgressPhotoHistoryQueryResult(QueryResult):
+    items: list[ProgressPhotoHistoryItem]
+    offset: int
+    limit: int
+    has_more: bool
+    subject_user_id: UUID | None = None
+
+
+class ProgressPhotoDeliveryItem(QueryResult):
+    angle: ProgressPhotoAngle
+    content_type: str
+    photo_id: UUID | None = None
+    telegram_file_id: str | None = None
+    body: bytes | None = None
+    missing: bool = False
+
+
+class GetProgressPhotoSetQuery(Query):
+    telegram_user_id: int
+    set_id: UUID
+    subject_user_id: UUID | None = None
+
+
+class GetProgressPhotoSetQueryResult(QueryResult):
+    set_id: UUID
+    local_date: date
+    complete: bool
+    photos: list[ProgressPhotoDeliveryItem]
+    subject_user_id: UUID | None = None
+
+
+class GetProgressPhotoReminderQuery(Query):
+    telegram_user_id: int
+
+
+class GetProgressPhotoReminderQueryResult(QueryResult):
+    local_time: time | None
+    weekdays: list[int]
+
+
+class DueProgressPhotoReminderItem(QueryResult):
+    user_id: UUID
+    telegram_user_id: int
+    chat_id: int
+    local_date: date
+    local_time: time
+
+
+class ListDueProgressPhotoRemindersQuery(Query):
+    now: datetime | None = None
+
+
+class ListDueProgressPhotoRemindersQueryResult(QueryResult):
+    items: list[DueProgressPhotoReminderItem]
