@@ -102,9 +102,8 @@ async def _submit_credential(
                 )
             except Exception:
                 continue
-    mods = len(result.moderator_user_ids)
     await message.answer(
-        f"Заявка 3/3 отправлена модераторам ({mods}). Обычно ответ за 1–2 дня.",
+        "Заявка 3/3 отправлена модераторам. Обычно ответ за 1–2 дня.",
     )
 
 
