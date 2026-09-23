@@ -561,6 +561,7 @@ async def test_list_and_get_my_coach_applications() -> None:
             GetMyCoachApplicationQuery(telegram_user_id=72, application_id=submitted.application_id),
         )
 
+
 @pytest.mark.asyncio
 async def test_prepare_coach_application_credential_for_moderator() -> None:
     uow = InMemoryUow()
@@ -599,4 +600,3 @@ async def test_prepare_coach_application_credential_for_moderator() -> None:
                 application_id=submitted.application_id,
             ),
         )
-

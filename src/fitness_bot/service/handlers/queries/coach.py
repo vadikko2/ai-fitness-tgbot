@@ -83,7 +83,6 @@ class ListPendingCoachApplicationsQueryHandler(
             )
 
 
-
 class PrepareCoachApplicationCredentialQueryHandler(
     cqrs.RequestHandler[
         queries.PrepareCoachApplicationCredentialQuery,
