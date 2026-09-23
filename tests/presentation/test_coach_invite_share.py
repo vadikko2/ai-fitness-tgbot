@@ -3,8 +3,11 @@
 from urllib.parse import parse_qs, unquote, urlparse
 
 from fitness_bot.presentation.routers.coach import (
+    _INVITE_REGEN_STEPS,
     _coach_share_code,
     _invite_form_keyboard,
+    _invite_regen_confirm_keyboard,
+    _invite_regen_confirm_text,
     _invite_share_button,
     _invite_share_url,
     _is_own_invite_code,
@@ -58,3 +61,36 @@ def test_is_own_invite_code() -> None:
     assert _is_own_invite_code(raw_or_share="abcd1234", cabinet_invite_code="ABCD1234")
     assert not _is_own_invite_code(raw_or_share="c_OTHER999", cabinet_invite_code="ABCD1234")
     assert not _is_own_invite_code(raw_or_share="c_ABCD1234", cabinet_invite_code=None)
+
+
+def test_invite_regen_confirm_steps_do_not_regenerate_until_ok() -> None:
+    """Steps 1–3 only advance; regenerate callback is coach_invite_new_ok."""
+    assert set(_INVITE_REGEN_STEPS) == {1, 2, 3}
+    assert _INVITE_REGEN_STEPS[1][2] == "coach_invite_new_2"
+    assert _INVITE_REGEN_STEPS[2][2] == "coach_invite_new_3"
+    assert _INVITE_REGEN_STEPS[3][2] == "coach_invite_new_ok"
+    for step in (1, 2, 3):
+        kb = _invite_regen_confirm_keyboard(step)
+        rows = kb.inline_keyboard
+        assert rows[0][0].text == _INVITE_REGEN_STEPS[step][1]
+        assert rows[0][0].callback_data == _INVITE_REGEN_STEPS[step][2]
+        assert rows[1][0].text == "Отменить"
+        assert rows[1][0].callback_data == "coach_invite_new_cancel"
+        assert rows[2][0].text == "В кабинет"
+        assert rows[2][0].callback_data == "coach_cab"
+    # Only the final confirm callback triggers CreateCoachInviteCommand in the router.
+    assert _invite_regen_confirm_keyboard(1).inline_keyboard[0][0].callback_data != "coach_invite_new_ok"
+    assert _invite_regen_confirm_keyboard(2).inline_keyboard[0][0].callback_data != "coach_invite_new_ok"
+    assert _invite_regen_confirm_keyboard(3).inline_keyboard[0][0].callback_data == "coach_invite_new_ok"
+
+
+def test_invite_regen_confirm_texts_mention_risks() -> None:
+    t1 = _invite_regen_confirm_text(1)
+    assert "шаг 1 из 3" in t1
+    assert "Старый код" in t1
+    t2 = _invite_regen_confirm_text(2)
+    assert "шаг 2 из 3" in t2
+    assert "привязанные" in t2
+    t3 = _invite_regen_confirm_text(3)
+    assert "шаг 3 из 3" in t3
+    assert "необратимо" in t3

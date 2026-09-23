@@ -124,6 +124,44 @@ def _invite_form_keyboard(share_code: str, bot_username: str | None) -> InlineKe
     )
 
 
+_INVITE_REGEN_STEPS: dict[int, tuple[str, str, str]] = {
+    # step → (body, confirm_label, confirm_callback)
+    1: (
+        "Старый код перестанет работать для новых клиентов: "
+        "кто ещё не привязался и у кого на руках старый код — войти по нему уже не получится.",
+        "Понятно, дальше",
+        "coach_invite_new_2",
+    ),
+    2: (
+        "Уже привязанные клиенты останутся с вами. "
+        "Меняется только код для новых приглашений — но старый код вернуть нельзя.",
+        "Да, дальше",
+        "coach_invite_new_3",
+    ),
+    3: (
+        "Точно обновить код? Действие необратимо: будет выпущен новый код, старый сразу перестанет действовать.",
+        "Да, обновить код",
+        "coach_invite_new_ok",
+    ),
+}
+
+
+def _invite_regen_confirm_text(step: int) -> str:
+    body, _, _ = _INVITE_REGEN_STEPS[step]
+    return f"Обновление кода · шаг {step} из 3\n\n{body}"
+
+
+def _invite_regen_confirm_keyboard(step: int) -> InlineKeyboardMarkup:
+    _, confirm_label, confirm_cb = _INVITE_REGEN_STEPS[step]
+    return _kb(
+        [
+            [InlineKeyboardButton(text=confirm_label, callback_data=confirm_cb)],
+            [InlineKeyboardButton(text="Отменить", callback_data="coach_invite_new_cancel")],
+            [InlineKeyboardButton(text="В кабинет", callback_data="coach_cab")],
+        ],
+    )
+
+
 def _is_own_invite_code(*, raw_or_share: str, cabinet_invite_code: str | None) -> bool:
     """True when the athlete-facing token matches this coach's active invite."""
     if not cabinet_invite_code:
@@ -266,8 +304,63 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             )
         await callback.answer()
 
-    @router.callback_query(F.data == "coach_invite_new")
-    async def invite_new(callback: CallbackQuery) -> None:
+    async def _answer_invite_form(callback: CallbackQuery) -> None:
+        """Re-show current invite form without regenerating (cancel path)."""
+        cab = await mediator.send(GetCoachCabinetQuery(telegram_user_id=callback.from_user.id))
+        invite_code = cab.invite_code
+        if not invite_code:
+            if callback.message:
+                await callback.message.answer("Код приглашения пока не создан.")
+            return
+        share = _coach_share_code(invite_code)
+        bot_username = await _resolve_bot_username(callback.bot)
+        if callback.message:
+            await callback.message.answer(
+                _invite_code_message(invite_code),
+                reply_markup=_invite_form_keyboard(share, bot_username),
+            )
+
+    async def _invite_regen_step(callback: CallbackQuery, step: int) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
+        if callback.message:
+            await callback.message.answer(
+                _invite_regen_confirm_text(step),
+                reply_markup=_invite_regen_confirm_keyboard(step),
+            )
+        await callback.answer()
+
+    @router.callback_query(F.data.in_({"coach_invite_new", "coach_invite_new_1"}))
+    async def invite_new_step1(callback: CallbackQuery) -> None:
+        await _invite_regen_step(callback, 1)
+
+    @router.callback_query(F.data == "coach_invite_new_2")
+    async def invite_new_step2(callback: CallbackQuery) -> None:
+        await _invite_regen_step(callback, 2)
+
+    @router.callback_query(F.data == "coach_invite_new_3")
+    async def invite_new_step3(callback: CallbackQuery) -> None:
+        await _invite_regen_step(callback, 3)
+
+    @router.callback_query(F.data == "coach_invite_new_cancel")
+    async def invite_new_cancel(callback: CallbackQuery) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
+        if callback.message:
+            await callback.message.answer("Обновление кода отменено.")
+        await _answer_invite_form(callback)
+        await callback.answer()
+
+    @router.callback_query(F.data == "coach_invite_new_ok")
+    async def invite_new_confirm(callback: CallbackQuery) -> None:
         await mediator.send(
             ExpectInputCommand(
                 telegram_user_id=callback.from_user.id,
