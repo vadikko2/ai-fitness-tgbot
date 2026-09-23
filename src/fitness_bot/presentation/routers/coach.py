@@ -57,6 +57,26 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _coach_share_code(raw_code: str) -> str:
+    """Athlete-facing invite token: c_<CODE> (raw storage has no prefix)."""
+    code = raw_code.strip()
+    if code.casefold().startswith("c_"):
+        return f"c_{code[2:].upper()}"
+    return f"c_{code.upper()}"
+
+
+def _invite_code_message(raw_code: str, *, regenerated: bool = False) -> str:
+    share = _coach_share_code(raw_code)
+    title = "Новый код приглашения:" if regenerated else "Код приглашения:"
+    return (
+        f"{title}\n\n"
+        f"{share}\n\n"
+        "Отправь этот код клиенту — он введёт его в боте "
+        "(«Ввести код или ссылку»).\n"
+        "Долгое нажатие по коду → копировать."
+    )
+
+
 async def render_home(
     *,
     message_or_callback,
@@ -117,18 +137,31 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             await callback.message.answer(text) if callback.message else None
             await callback.answer()
             return
-        code = result.invite_code or "—"
+        invite_code = result.invite_code
+        if not invite_code:
+            try:
+                created = await mediator.send(
+                    CreateCoachInviteCommand(telegram_user_id=callback.from_user.id),
+                )
+                invite_code = created.code
+            except DomainError as exc:
+                if callback.message:
+                    await callback.message.answer(str(exc))
+                await callback.answer()
+                return
+        share = _coach_share_code(invite_code)
         text = (
             f"Кабинет тренера\n"
             f"Подопечных: {result.active_clients}\n"
-            f"Принимаю клиентов: {'да' if result.accepting_clients else 'нет'}\n"
-            f"Инвайт-код: {code}\n"
-            f"Ссылка: https://t.me/share/url?url=c_{code}"
+            f"Принимаю клиентов: {'да' if result.accepting_clients else 'нет'}\n\n"
+            f"Код для клиента:\n{share}\n\n"
+            "Отправь этот код клиенту — он вставит его через «Ввести код или ссылку»."
         )
         kb = _kb(
             [
                 [InlineKeyboardButton(text="Мои клиенты", callback_data="coach_roster")],
-                [InlineKeyboardButton(text="Обновить инвайт", callback_data="coach_invite_new")],
+                [InlineKeyboardButton(text="📤 Код приглашения", callback_data="coach_invite_show")],
+                [InlineKeyboardButton(text="Обновить код", callback_data="coach_invite_new")],
                 [
                     InlineKeyboardButton(
                         text="Принимаю ✓" if result.accepting_clients else "Не принимаю",
@@ -143,11 +176,30 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             await callback.message.answer(text, reply_markup=kb)
         await callback.answer()
 
+    @router.callback_query(F.data == "coach_invite_show")
+    async def invite_show(callback: CallbackQuery) -> None:
+        cab = await mediator.send(GetCoachCabinetQuery(telegram_user_id=callback.from_user.id))
+        invite_code = cab.invite_code
+        if not invite_code:
+            try:
+                created = await mediator.send(
+                    CreateCoachInviteCommand(telegram_user_id=callback.from_user.id),
+                )
+                invite_code = created.code
+            except DomainError as exc:
+                if callback.message:
+                    await callback.message.answer(str(exc))
+                await callback.answer()
+                return
+        if callback.message:
+            await callback.message.answer(_invite_code_message(invite_code))
+        await callback.answer()
+
     @router.callback_query(F.data == "coach_invite_new")
     async def invite_new(callback: CallbackQuery) -> None:
         try:
             result = await mediator.send(CreateCoachInviteCommand(telegram_user_id=callback.from_user.id))
-            text = f"Новый код: {result.code}\nDeep-link: start=c_{result.code}"
+            text = _invite_code_message(result.code, regenerated=True)
         except DomainError as exc:
             text = str(exc)
         if callback.message:
