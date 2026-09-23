@@ -616,6 +616,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         if callback.message:
             await callback.message.answer(
                 "Заявка 1/3: отправьте имя и био в одном сообщении (имя на первой строке).",
+                reply_markup=_kb([[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]]),
             )
         await callback.answer()
 
@@ -630,6 +631,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         if callback.message:
             await callback.message.answer(
                 "Введите код или ссылку (программа p_… / тренер c_…).",
+                reply_markup=_kb([[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]]),
             )
         await callback.answer()
 

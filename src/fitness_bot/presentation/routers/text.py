@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
@@ -369,8 +369,6 @@ async def handle_user_utterance(
             return
 
         if workflow.expected_input == ExpectedInput.CODE_OR_LINK:
-            from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
             from fitness_bot.service.models.commands.catalog import ClaimProgramByCodeCommand
             from fitness_bot.service.models.commands.coach import AcceptCoachInviteCommand
 
@@ -527,7 +525,12 @@ async def handle_user_utterance(
                         expected_field=f"{name}|{bio}|{text.strip()}",
                     ),
                 )
-                await message.answer("Заявка 3/3: пришлите фото/скан/PDF подтверждения (документ или фото).")
+                await message.answer(
+                    "Заявка 3/3: пришлите фото/скан/PDF подтверждения (документ или фото).",
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]],
+                    ),
+                )
                 return
             lines = text.splitlines()
             name = lines[0].strip()
@@ -539,7 +542,12 @@ async def handle_user_utterance(
                     expected_field=f"2:{name}|{bio}",
                 ),
             )
-            await message.answer("Заявка 2/3: пришлите URL портфолио.")
+            await message.answer(
+                "Заявка 2/3: пришлите URL портфолио.",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]],
+                ),
+            )
             return
 
         if (
