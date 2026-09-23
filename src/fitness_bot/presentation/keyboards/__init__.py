@@ -473,6 +473,24 @@ def coach_apply_submitted_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def coach_application_approved_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Кабинет тренера", callback_data="coach_cab")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def coach_application_rejected_keyboard(*, application_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Посмотреть заявку", callback_data=f"coach_app:{application_id}")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
 def coach_client_proposal_keyboard(*, client_user_id: str, can_approve: bool) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✏️ Ещё правка текстом", callback_data=f"coach_edit:{client_user_id}")],
