@@ -127,20 +127,20 @@ def _invite_form_keyboard(share_code: str, bot_username: str | None) -> InlineKe
 _INVITE_REGEN_STEPS: dict[int, tuple[str, str, str]] = {
     # step → (body, confirm_label, confirm_callback)
     1: (
-        "Старый код перестанет работать для новых клиентов: "
+        "⚠️ Старый код перестанет работать для новых клиентов: "
         "кто ещё не привязался и у кого на руках старый код — войти по нему уже не получится.",
-        "Понятно, дальше",
+        "✅ Понятно, дальше",
         "coach_invite_new_2",
     ),
     2: (
         "Уже привязанные клиенты останутся с вами. "
-        "Меняется только код для новых приглашений — но старый код вернуть нельзя.",
-        "Да, дальше",
+        "❗️ Меняется только код для новых приглашений — старый код вернуть нельзя.",
+        "✅ Да, дальше",
         "coach_invite_new_3",
     ),
     3: (
-        "Точно обновить код? Действие необратимо: будет выпущен новый код, старый сразу перестанет действовать.",
-        "Да, обновить код",
+        "❗️ Точно обновить код? Действие необратимо: будет выпущен новый код, старый сразу перестанет действовать.",
+        "✅ Да, обновить код",
         "coach_invite_new_ok",
     ),
 }
@@ -148,7 +148,7 @@ _INVITE_REGEN_STEPS: dict[int, tuple[str, str, str]] = {
 
 def _invite_regen_confirm_text(step: int) -> str:
     body, _, _ = _INVITE_REGEN_STEPS[step]
-    return f"Обновление кода · шаг {step} из 3\n\n{body}"
+    return f"⚠️ Обновление кода\n\n{body}"
 
 
 def _invite_regen_confirm_keyboard(step: int) -> InlineKeyboardMarkup:
@@ -156,8 +156,8 @@ def _invite_regen_confirm_keyboard(step: int) -> InlineKeyboardMarkup:
     return _kb(
         [
             [InlineKeyboardButton(text=confirm_label, callback_data=confirm_cb)],
-            [InlineKeyboardButton(text="Отменить", callback_data="coach_invite_new_cancel")],
-            [InlineKeyboardButton(text="В кабинет", callback_data="coach_cab")],
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="coach_invite_new_cancel")],
+            [InlineKeyboardButton(text="🏠 В кабинет", callback_data="coach_cab")],
         ],
     )
 

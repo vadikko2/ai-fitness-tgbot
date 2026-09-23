@@ -74,9 +74,9 @@ def test_invite_regen_confirm_steps_do_not_regenerate_until_ok() -> None:
         rows = kb.inline_keyboard
         assert rows[0][0].text == _INVITE_REGEN_STEPS[step][1]
         assert rows[0][0].callback_data == _INVITE_REGEN_STEPS[step][2]
-        assert rows[1][0].text == "Отменить"
+        assert rows[1][0].text == "❌ Отменить"
         assert rows[1][0].callback_data == "coach_invite_new_cancel"
-        assert rows[2][0].text == "В кабинет"
+        assert rows[2][0].text == "🏠 В кабинет"
         assert rows[2][0].callback_data == "coach_cab"
     # Only the final confirm callback triggers CreateCoachInviteCommand in the router.
     assert _invite_regen_confirm_keyboard(1).inline_keyboard[0][0].callback_data != "coach_invite_new_ok"
@@ -86,11 +86,16 @@ def test_invite_regen_confirm_steps_do_not_regenerate_until_ok() -> None:
 
 def test_invite_regen_confirm_texts_mention_risks() -> None:
     t1 = _invite_regen_confirm_text(1)
-    assert "шаг 1 из 3" in t1
-    assert "Старый код" in t1
+    assert "⚠️ Обновление кода" in t1
+    assert "шаг" not in t1
+    assert "⚠️ Старый код" in t1
     t2 = _invite_regen_confirm_text(2)
-    assert "шаг 2 из 3" in t2
+    assert "⚠️ Обновление кода" in t2
+    assert "шаг" not in t2
     assert "привязанные" in t2
+    assert "❗️" in t2
     t3 = _invite_regen_confirm_text(3)
-    assert "шаг 3 из 3" in t3
+    assert "⚠️ Обновление кода" in t3
+    assert "шаг" not in t3
+    assert "❗️" in t3
     assert "необратимо" in t3
