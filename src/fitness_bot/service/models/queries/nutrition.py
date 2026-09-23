@@ -9,6 +9,7 @@ from fitness_bot.service.models.queries.base import Query, QueryResult
 
 class GetNutritionQuery(Query):
     telegram_user_id: int
+    subject_user_id: UUID | None = None
 
 
 class GetNutritionQueryResult(QueryResult):

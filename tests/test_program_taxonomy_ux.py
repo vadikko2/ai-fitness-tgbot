@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from fitness_bot.domain.enums import ProgramType
-from fitness_bot.domain.program_catalog import PROGRAM_TYPE_COPY, structure_choice_items
+from fitness_bot.domain.program_catalog import PROGRAM_TYPE_COPY, program_status_label, structure_choice_items
+from fitness_bot.domain.workout.program import Program
 from fitness_bot.presentation.keyboards import program_type_keyboard
 from fitness_bot.presentation.templates_env import create_jinja_env
 
@@ -27,3 +28,36 @@ def test_program_type_keyboard_callback_prefixes() -> None:
     assert "prog_type:full_body" in callbacks
     assert "prog_type:upper_lower" in callbacks
     assert "prog_type:antagonist" in callbacks
+
+
+def test_program_display_title_and_status_are_russian() -> None:
+    from uuid import uuid4
+
+    from fitness_bot.domain.enums import ProgramStatus
+
+    program = Program(
+        user_id=uuid4(),
+        program_type=ProgramType.FULL_BODY,
+        status=ProgramStatus.ACTIVE,
+        title=None,
+    )
+    assert program.display_title() == PROGRAM_TYPE_COPY[ProgramType.FULL_BODY].label
+
+    legacy = Program(
+        user_id=uuid4(),
+        program_type=ProgramType.FULL_BODY,
+        status=ProgramStatus.ACTIVE,
+        title="Full Body",
+    )
+    assert legacy.display_title() == PROGRAM_TYPE_COPY[ProgramType.FULL_BODY].label
+
+    custom = Program(
+        user_id=uuid4(),
+        program_type=ProgramType.FULL_BODY,
+        status=ProgramStatus.ACTIVE,
+        title="Мой план",
+    )
+    assert custom.display_title() == "Мой план"
+
+    assert program_status_label("draft") == "черновик"
+    assert program_status_label(ProgramStatus.PUBLISHED) == "опубликована"

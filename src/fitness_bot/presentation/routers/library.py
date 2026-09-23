@@ -8,6 +8,7 @@ from cqrs import RequestMediator
 from jinja2 import Environment
 
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.domain.program_catalog import program_status_label
 from fitness_bot.service.models.commands.catalog import (
     ApplyCatalogProgramCommand,
     ClaimProgramByCodeCommand,
@@ -36,7 +37,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
         else:
             text = "Библиотека программ:"
             for item in result.items:
-                badge = f" · {item.status}"
+                badge = f" · {program_status_label(item.status)}"
                 if item.author_label:
                     badge += f" · от {item.author_label}"
                 rows.insert(
@@ -71,7 +72,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
         code_line = ""
         if result.distribution_code:
             code_line = f"\nКод: {result.distribution_code}\nСсылка: start=p_{result.distribution_code}"
-        text = f"{result.title}\nСтатус: {result.status}{code_line}{claim_note}"
+        text = f"{result.title}\nСтатус: {program_status_label(result.status)}{code_line}{claim_note}"
         rows = [
             [InlineKeyboardButton(text="Применить сейчас", callback_data=f"lib_apply:{program_id}:adapt")],
             [InlineKeyboardButton(text="Как у автора", callback_data=f"lib_apply:{program_id}:as_is")],
@@ -134,7 +135,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 text = "План активирован как «Мой план сейчас»."
             else:
                 diff = result.adapt_diff or result.reply or ""
-                text = f"Подстроили план.\n{diff}\nПодтвердите proposal как обычно."
+                text = f"Подстроили план.\n{diff}\nПодтвердите черновик как обычно."
         except DomainError as exc:
             text = str(exc)
         if callback.message:

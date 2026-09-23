@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fitness_bot.domain.enums import ProgramStatus, ProgramType
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.domain.program_catalog import program_type_label
 from fitness_bot.domain.workout.document import WorkoutDay, WorkoutDocument
 
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -100,9 +101,14 @@ class Program(BaseModel):
         )
 
     def display_title(self) -> str:
-        if self.title:
-            return self.title
-        return self.program_type.value.replace("_", " ").title()
+        localized = program_type_label(self.program_type)
+        if not self.title:
+            return localized
+        # Older auto-titles used English enum values ("Full Body").
+        english_auto = self.program_type.value.replace("_", " ").title()
+        if self.title == english_auto:
+            return localized
+        return self.title
 
     def publish(self, *, code: str | None = None, now: datetime | None = None) -> None:
         if self.status not in {ProgramStatus.DRAFT, ProgramStatus.PUBLISHED}:

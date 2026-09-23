@@ -382,6 +382,72 @@ async def test_nutrition_without_program(uow: InMemoryUow) -> None:
     assert status.status == "no_program"
 
 
+async def test_coach_can_view_client_nutrition(uow: InMemoryUow) -> None:
+    from fitness_bot.service.authz import AuthorizationError
+    from fitness_bot.service.handlers.commands.coach import (
+        AcceptCoachInviteCommandHandler,
+        ApproveCoachApplicationCommandHandler,
+        CreateCoachInviteCommandHandler,
+        SubmitCoachApplicationCommandHandler,
+    )
+    from fitness_bot.service.models.commands.coach import (
+        AcceptCoachInviteCommand,
+        ApproveCoachApplicationCommand,
+        CreateCoachInviteCommand,
+        SubmitCoachApplicationCommand,
+    )
+
+    await _seed_profile(uow, telegram_user_id=7)
+    await _activate_program(uow)
+    lm = ScriptedLanguageModel([_nutrition_json()])
+    generated = await GenerateNutritionCommandHandler(uow, lm).handle(GenerateNutritionCommand(telegram_user_id=7))
+    assert generated.kcal == 2400
+
+    await EnsureUserCommandHandler(uow).handle(EnsureUserCommand(telegram_user_id=1, chat_id=1))
+    async with uow.transaction() as repos:
+        mod = await repos.users.get_by_telegram_id(1)
+        assert mod is not None
+        mod.is_moderator = True
+        await repos.users.save(mod)
+    await EnsureUserCommandHandler(uow).handle(EnsureUserCommand(telegram_user_id=11, chat_id=11))
+    await SubmitCoachApplicationCommandHandler(uow).handle(
+        SubmitCoachApplicationCommand(
+            telegram_user_id=11,
+            display_name="Coach",
+            bio="bio",
+            portfolio_url="https://example.com",
+            credential_object_key="k",
+            credential_content_type="image/png",
+            credential_byte_size=1,
+        ),
+    )
+    async with uow.transaction() as repos:
+        app_id = (await repos.coaches.list_pending_applications())[0].id
+        client = await repos.users.get_by_telegram_id(7)
+        assert client is not None
+        client_id = client.id
+    await ApproveCoachApplicationCommandHandler(uow).handle(
+        ApproveCoachApplicationCommand(telegram_user_id=1, application_id=app_id),
+    )
+    invite = await CreateCoachInviteCommandHandler(uow).handle(CreateCoachInviteCommand(telegram_user_id=11))
+    await AcceptCoachInviteCommandHandler(uow).handle(
+        AcceptCoachInviteCommand(telegram_user_id=7, code=invite.code),
+    )
+
+    viewed = await GetNutritionQueryHandler(uow).handle(
+        GetNutritionQuery(telegram_user_id=11, subject_user_id=client_id),
+    )
+    assert viewed.status == "current"
+    assert viewed.kcal == 2400
+    assert viewed.protein_g == 160
+
+    await EnsureUserCommandHandler(uow).handle(EnsureUserCommand(telegram_user_id=99, chat_id=99))
+    with pytest.raises(AuthorizationError):
+        await GetNutritionQueryHandler(uow).handle(
+            GetNutritionQuery(telegram_user_id=99, subject_user_id=client_id),
+        )
+
+
 def _next_week_json(*, weight_kg: float = 70) -> str:
     weekday = _today_weekday()
     other = 1 if weekday != 1 else 2

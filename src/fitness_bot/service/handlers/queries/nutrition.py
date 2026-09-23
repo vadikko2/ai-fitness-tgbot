@@ -6,6 +6,7 @@ from fitness_bot.domain.body.nutrition import NutritionRecommendation
 from fitness_bot.domain.enums import Goal, ProgramType
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User
+from fitness_bot.service.authz import require_coach_of
 from fitness_bot.service.interfaces.uow import IUow
 from fitness_bot.service.models.queries import nutrition as queries
 
@@ -50,7 +51,12 @@ class GetNutritionQueryHandler(cqrs.RequestHandler[queries.GetNutritionQuery, qu
 
     async def handle(self, request: queries.GetNutritionQuery) -> queries.GetNutritionQueryResult:
         async with self._uow.transaction() as repos:
-            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            actor = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            if request.subject_user_id is not None:
+                await require_coach_of(repos, actor, request.subject_user_id)
+                user = _require_user(await repos.users.get_by_id(request.subject_user_id))
+            else:
+                user = actor
             if user.active_program_id is None or user.goal is None:
                 return _result("no_program", goal=user.goal)
 

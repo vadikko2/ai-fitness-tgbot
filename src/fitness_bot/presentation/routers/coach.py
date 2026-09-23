@@ -19,6 +19,7 @@ from fitness_bot.presentation.keyboards import (
     coach_recent_videos_keyboard,
     coach_session_history_keyboard,
 )
+from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
 from fitness_bot.presentation.routers.program import _can_approve_program, render_proposal
 from fitness_bot.service.models.commands.coach import (
     AcceptCoachInviteCommand,
@@ -27,6 +28,7 @@ from fitness_bot.service.models.commands.coach import (
     StartCoachClientProgramEditCommand,
     UnlinkCoachClientCommand,
 )
+from fitness_bot.service.models.commands.nutrition import GenerateNutritionCommand
 from fitness_bot.service.models.commands.program import ApproveProposalCommand, DiscardProposalCommand
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.coach import (
@@ -38,6 +40,7 @@ from fitness_bot.service.models.queries.coach import (
     ListMyCoachApplicationsQuery,
     SearchCoachesQuery,
 )
+from fitness_bot.service.models.queries.nutrition import GetNutritionQuery
 from fitness_bot.service.models.queries.users import GetHomeQuery
 
 _APPLICATION_STATUS_LABELS = {
@@ -549,32 +552,99 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
     async def coach_nutrition(callback: CallbackQuery) -> None:
         from uuid import UUID
 
-        from fitness_bot.service.models.commands.nutrition import GenerateNutritionCommand
-
+        assert callback.from_user is not None
         client_id = UUID(callback.data.split(":", 1)[1])
+        back_kb = _kb(
+            [[InlineKeyboardButton(text="⬅️ К клиенту", callback_data=f"coach_client:{client_id}")]],
+        )
+
         try:
-            result = await mediator.send(
-                GenerateNutritionCommand(
+            status = await mediator.send(
+                GetNutritionQuery(
                     telegram_user_id=callback.from_user.id,
                     subject_user_id=client_id,
                 ),
             )
-            if result.agent_unavailable:
-                text = "Агент временно недоступен."
-            elif result.already_current:
-                text = "Питание клиента уже актуально."
-            else:
-                text = f"Питание обновлено: {result.kcal} ккал."
-                if result.client_chat_id and callback.bot:
-                    await callback.bot.send_message(
-                        result.client_chat_id,
-                        "Тренер обновил рекомендации по питанию. Откройте раздел «Питание».",
-                    )
         except DomainError as exc:
-            text = str(exc)
-        if callback.message:
-            await callback.message.answer(text)
+            if callback.message:
+                await callback.message.answer(str(exc), reply_markup=back_kb)
+            await callback.answer()
+            return
+
+        if status.status == "no_program":
+            if callback.message:
+                await callback.message.answer(
+                    "У клиента нет активной программы — питание недоступно.",
+                    reply_markup=back_kb,
+                )
+            await callback.answer()
+            return
+
+        if status.status == "current":
+            text = jinja_env.get_template("nutrition.j2").render(
+                reply="",
+                kcal=status.kcal,
+                protein_g=status.protein_g,
+                fat_g=status.fat_g,
+                carb_g=status.carb_g,
+                calculation=status.calculation,
+                meal_regularity=status.meal_regularity,
+            )
+            if callback.message:
+                await callback.message.answer(text, reply_markup=back_kb)
+            await callback.answer()
+            return
+
+        # missing or stale → generate once (same as athlete «Питание»)
+        if callback.message is None:
+            await callback.answer()
+            return
         await callback.answer()
+        draft_preview = ""
+        try:
+            async with message_draft_scope(callback.bot, callback.message.chat.id) as draft:
+                result = await mediator.send(
+                    GenerateNutritionCommand(
+                        telegram_user_id=callback.from_user.id,
+                        subject_user_id=client_id,
+                    ),
+                )
+                draft_preview = draft.preview_text
+        except DomainError as exc:
+            await callback.message.answer(f"Не удалось посчитать питание: {exc}", reply_markup=back_kb)
+            return
+
+        if result.agent_unavailable:
+            await callback.message.answer(
+                jinja_env.get_template("agent_unavailable.j2").render(),
+                reply_markup=back_kb,
+            )
+            return
+        if result.schema_failed or result.kcal is None:
+            await callback.message.answer(
+                assistant_parse_failure_text(
+                    result.reply or draft_preview,
+                    hint="Не удалось разобрать ответ помощника. Попробуй ещё раз.",
+                ),
+                reply_markup=back_kb,
+            )
+            return
+
+        text = jinja_env.get_template("nutrition.j2").render(
+            reply=result.reply,
+            kcal=result.kcal,
+            protein_g=result.protein_g,
+            fat_g=result.fat_g,
+            carb_g=result.carb_g,
+            calculation=result.calculation,
+            meal_regularity=result.meal_regularity,
+        )
+        await callback.message.answer(text, reply_markup=back_kb)
+        if result.client_chat_id and callback.bot:
+            await callback.bot.send_message(
+                result.client_chat_id,
+                "Тренер обновил рекомендации по питанию. Откройте раздел «Питание».",
+            )
 
     @router.callback_query(F.data.startswith("coach_assign:"))
     async def coach_assign(callback: CallbackQuery) -> None:

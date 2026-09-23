@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fitness_bot.domain.enums import ProgramType, TrainingStyle
+from fitness_bot.domain.enums import ProgramStatus, ProgramType, TrainingStyle
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,6 +10,14 @@ class ProgramKindCopy:
     label: str
     blurb: str
     detail: str
+
+
+PROGRAM_STATUS_LABELS: dict[ProgramStatus, str] = {
+    ProgramStatus.DRAFT: "черновик",
+    ProgramStatus.PUBLISHED: "опубликована",
+    ProgramStatus.ACTIVE: "активна",
+    ProgramStatus.ARCHIVED: "в архиве",
+}
 
 
 PROGRAM_TYPE_COPY: dict[ProgramType, ProgramKindCopy] = {
@@ -116,6 +124,12 @@ def program_type_label(program_type: ProgramType | str) -> str:
     if isinstance(program_type, str):
         program_type = ProgramType(program_type)
     return PROGRAM_TYPE_COPY[program_type].label
+
+
+def program_status_label(status: ProgramStatus | str) -> str:
+    if isinstance(status, str):
+        status = ProgramStatus(status)
+    return PROGRAM_STATUS_LABELS[status]
 
 
 def training_style_label(style: TrainingStyle | str) -> str:
