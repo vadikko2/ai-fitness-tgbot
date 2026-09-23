@@ -52,16 +52,17 @@ class Program(BaseModel):
     ) -> Program:
         document.assert_approvable()
         moment = now or datetime.now(UTC)
+        detached = document.without_slot_ids()
         return cls(
             user_id=user_id,
-            program_type=document.program_type,
+            program_type=detached.program_type,
             status=ProgramStatus.ACTIVE,
             title=title,
             assigned_by_user_id=assigned_by_user_id,
             author_label=author_label,
             source_program_id=source_program_id,
             source_author_user_id=source_author_user_id,
-            days=list(document.days),
+            days=list(detached.days),
             created_at=moment,
             activated_at=moment,
         )
@@ -79,15 +80,16 @@ class Program(BaseModel):
         now: datetime | None = None,
     ) -> Program:
         moment = now or datetime.now(UTC)
+        detached = document.without_slot_ids()
         return cls(
             user_id=user_id,
-            program_type=document.program_type,
+            program_type=detached.program_type,
             status=ProgramStatus.DRAFT,
             title=title or "Черновик программы",
             author_label=author_label,
             source_program_id=source_program_id,
             source_author_user_id=source_author_user_id,
-            days=list(document.days),
+            days=list(detached.days),
             created_at=moment,
         )
 
@@ -146,6 +148,6 @@ class Program(BaseModel):
             source_program_id=self.id,
             source_author_user_id=self.user_id,
             author_label=author_label or self.author_label,
-            days=list(self.days),
+            days=list(self.to_document().without_slot_ids().days),
             created_at=moment,
         )

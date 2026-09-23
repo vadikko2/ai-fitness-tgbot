@@ -154,6 +154,26 @@ class WorkoutDocument(BaseModel):
     def unresolved_slots(self) -> list[ExerciseSlot]:
         return [slot for day in self.days for slot in day.slots if not slot.is_resolved]
 
+    def without_slot_ids(self) -> WorkoutDocument:
+        """Detach from persisted slot rows so a clone can be inserted under a new owner.
+
+        Programs, proposals, and sessions share the ``exercise_slots`` PK space.
+        Cloning a document that still carries source slot UUIDs causes UniqueViolation
+        on INSERT (e.g. coach live-edit of a client's active program).
+        """
+        return self.model_copy(
+            update={
+                "days": [
+                    day.model_copy(
+                        update={
+                            "slots": [slot.model_copy(update={"id": None}) for slot in day.slots],
+                        },
+                    )
+                    for day in self.days
+                ],
+            },
+        )
+
     def assert_day_count(self, days_per_week: int) -> None:
         if len(self.days) != days_per_week:
             raise InvalidWorkoutDocument(

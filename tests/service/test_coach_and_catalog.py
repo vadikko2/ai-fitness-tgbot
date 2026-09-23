@@ -415,14 +415,29 @@ async def test_coach_live_edit_client_program_approve_push_fields() -> None:
     )
     async with uow.transaction() as repos:
         program = Program.from_approved_document(user_id=client.id, document=doc, title="Клиентский")
+        # Simulate persisted program slots (SQL would assign UUIDs on insert).
+        program.days = [
+            day.model_copy(
+                update={
+                    "slots": [slot.model_copy(update={"id": uuid4()}) for slot in day.slots],
+                },
+            )
+            for day in program.days
+        ]
         saved = await repos.programs.add(program)
         client.active_program_id = saved.id
         await repos.users.save(client)
+        program_slot_ids = {slot.id for day in saved.days for slot in day.slots}
+        assert None not in program_slot_ids
 
     started = await StartCoachClientProgramEditCommandHandler(uow).handle(
         StartCoachClientProgramEditCommand(telegram_user_id=51, client_user_id=client.id),
     )
     assert started.has_active_program is True
+    # Proposal must not reuse program exercise_slots PKs (UniqueViolation in Postgres).
+    assert started.document is not None
+    proposal_slot_ids = {slot.id for day in started.document.days for slot in day.slots}
+    assert proposal_slot_ids == {None} or proposal_slot_ids.isdisjoint(program_slot_ids)
     async with uow.transaction() as repos:
         coach_fresh = await repos.users.get_by_telegram_id(51)
         assert coach_fresh is not None

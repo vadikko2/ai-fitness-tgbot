@@ -49,7 +49,7 @@ class Proposal(BaseModel):
             user_id=user_id,
             kind=ProposalKind.PROGRAM,
             program_type=program_type,
-            document=document,
+            document=document.without_slot_ids(),
             reply=reply,
             base_program_id=base_program_id,
         )
@@ -69,7 +69,7 @@ class Proposal(BaseModel):
             user_id=user_id,
             kind=ProposalKind.WORKOUT_EDIT,
             program_type=document.program_type,
-            document=document,
+            document=document.without_slot_ids(),
             reply=reply,
             base_session_id=base_session_id,
         )
@@ -89,7 +89,7 @@ class Proposal(BaseModel):
             user_id=user_id,
             kind=ProposalKind.PERFORMANCE,
             program_type=document.program_type,
-            document=document,
+            document=document.without_slot_ids(),
             reply=reply,
             base_session_id=base_session_id,
         )
@@ -109,7 +109,7 @@ class Proposal(BaseModel):
             user_id=user_id,
             kind=ProposalKind.COMPLETION_DEVIATION,
             program_type=document.program_type,
-            document=document,
+            document=document.without_slot_ids(),
             reply=reply,
             base_session_id=base_session_id,
         )
@@ -129,7 +129,7 @@ class Proposal(BaseModel):
             user_id=user_id,
             kind=ProposalKind.NEXT_SESSION,
             program_type=document.program_type,
-            document=document,
+            document=document.without_slot_ids(),
             reply=reply,
             base_program_id=base_program_id,
         )
@@ -149,7 +149,7 @@ class Proposal(BaseModel):
             if len(document.days) != 1:
                 raise InvalidWorkoutDocument(f"{self.kind.value} proposal requires exactly one day")
             self.program_type = document.program_type
-        self.document = document
+        self.document = document.without_slot_ids()
         self.reply = reply
         self.status = ProposalStatus.PENDING
 

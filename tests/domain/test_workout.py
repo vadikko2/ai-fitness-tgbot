@@ -27,6 +27,33 @@ def test_workout_day_defaults_warmup_cooldown_empty() -> None:
     assert day.cooldown == ""
 
 
+def test_without_slot_ids_clears_persisted_keys() -> None:
+    slot_id = uuid4()
+    doc = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[
+            WorkoutDay(
+                title="День 1",
+                position=1,
+                slots=[
+                    ExerciseSlot(
+                        id=slot_id,
+                        position=1,
+                        exercise_id=uuid4(),
+                        sets=3,
+                        reps=8,
+                        rest_seconds=60,
+                        rpe=7,
+                    ),
+                ],
+            ),
+        ],
+    )
+    detached = doc.without_slot_ids()
+    assert detached.days[0].slots[0].id is None
+    assert doc.days[0].slots[0].id == slot_id
+
+
 def test_reps_xor_duration() -> None:
     with pytest.raises(InvalidWorkoutDocument):
         ExerciseSlot(position=1, exercise_id=uuid4(), sets=3, rest_seconds=60, rpe=5)
