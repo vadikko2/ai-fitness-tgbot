@@ -1,0 +1,4 @@
+{% import "_macros.j2" as m %}
+<b>💪 {{ slot.position }}. {{ m.slot_name(slot) }}</b>
+
+📌 План: <b>{{ m.load(slot) }}</b>{% if slot.rest_seconds %} · отдых {{ slot.rest_seconds }}с{% endif %}{% if slot.rpe %} · RPE {{ slot.rpe }}{% endif %}

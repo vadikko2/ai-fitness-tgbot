@@ -1,0 +1,5 @@
+{% import "_macros.j2" as m %}
+<b>🏖 Выходной</b>
+📅 {{ weekday_label or "—" }}
+{{ m.week_progress(planned_count, completed_count, week_finished) }}
+Сегодня по программе отдыхаем. Можно глянуть историю или начать новую неделю.

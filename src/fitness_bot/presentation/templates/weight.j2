@@ -1,0 +1,10 @@
+<b>⚖️ Вес</b>
+{% if latest_kg is not none %}
+Сейчас: <b>{{ latest_kg }} кг</b>
+{% else %}
+Вес ещё не записан.
+{% endif %}
+{% if reminder_weekdays_label and reminder_time %}
+⏰ Напоминание: {{ reminder_weekdays_label }} в <b>{{ reminder_time }}</b>
+{% endif %}
+Запиши новый, открой историю или настрой напоминание.

@@ -1,0 +1,59 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.12.8,<0.13.0"]
+
+[dependency-groups]
+dev = [
+  "pre-commit>=4.6.2",
+  "pycln>=2.6.0",
+  "pytest>=9.1.1",
+  "pytest-asyncio>=1.4.0",
+  "ruff>=0.16.8"
+]
+
+[project]
+authors = [
+  {name = "Вадим Козыревский", email = "v.kozyrevskiy@timeweb.ru"}
+]
+dependencies = [
+  "aiogram>=3.31.0",
+  "alembic>=1.20.0",
+  "asyncpg>=0.31.0",
+  "boto3>=1.40.0",
+  "dependency-injector>=4.49.1",
+  "greenlet>=3.5.6",
+  "httpx>=0.28.1",
+  "jinja2>=3.1.6",
+  "numpy>=2.5.3",
+  "psycopg[binary]>=3.3.6",
+  "pydantic>=2.13.5",
+  "pydantic-settings>=2.15.0",
+  "python-cqrs>=4.13.0",
+  "sherpa-onnx>=1.13.8",
+  "sherpa-onnx-core>=1.13.8",
+  "sqlalchemy>=2.0.54"
+]
+description = "Telegram fitness training bot"
+name = "fitness-bot"
+requires-python = ">=3.13"
+version = "0.1.0"
+
+[project.scripts]
+enrich-exercise-catalog = "fitness_bot.presentation.cli.enrich_catalog:main"
+fitness-bot = "fitness_bot:main"
+fitness-bot-cli = "fitness_bot.presentation.cli:main"
+load-exercise-catalog = "fitness_bot.presentation.cli.load_catalog:main"
+seed-exercise-catalog = "fitness_bot.presentation.cli.seed_catalog:main"
+seed-measurement-guides = "fitness_bot.presentation.cli.seed_guides:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

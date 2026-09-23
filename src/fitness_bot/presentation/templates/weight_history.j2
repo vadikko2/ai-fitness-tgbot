@@ -1,0 +1,8 @@
+<b>📈 История веса</b>
+{% if items %}
+{% for item in items %}
+• {{ item.measured_on.strftime('%d.%m.%Y') }} — <b>{{ item.kilograms }} кг</b>
+{% endfor %}
+{% else %}
+Записей пока нет.
+{% endif %}

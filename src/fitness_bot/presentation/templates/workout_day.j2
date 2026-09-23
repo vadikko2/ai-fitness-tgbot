@@ -1,0 +1,14 @@
+{% import "_macros.j2" as m %}
+<b>{{ day.title }}</b>{% if day.weekday_label %} · {{ day.weekday_label }}{% endif %} · {{ day.intensity_label }} · {{ day.training_style_label }}
+
+{% if day.warmup %}<b>Разминка</b>
+{{ day.warmup }}
+
+{% endif %}{% for slot in day.slots %}
+{{ m.slot_line(slot) }}
+{% endfor %}
+{% if day.cooldown %}
+<b>Заминка</b>
+{{ day.cooldown }}
+{% endif %}
+Открой упражнение ниже — там техника и видео из каталога.

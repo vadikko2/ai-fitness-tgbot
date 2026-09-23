@@ -1,0 +1,19 @@
+{% import "_macros.j2" as m %}
+{% if reply %}{{ reply }}
+
+{% endif %}{% if document %}<b>📝 Черновик программы</b>
+Структура: <b>{{ program_type_label }}</b> — {{ program_type_blurb }}
+Дней: <b>{{ document.days|length }}</b> · открой день, чтобы проверить упражнения
+{% for day in document.days %}
+• {% if day.weekday_label %}{{ day.weekday_label }} · {% endif %}{{ day.title }} · {{ day.intensity_label }} · {{ day.training_style_label }} — {{ day.slots|length }} упр.
+{% endfor %}{% if missing_weekdays %}
+
+⚠️ Укажи дни недели (пн–вс) для каждого дня — иначе сделать активной нельзя.
+{% endif %}
+
+✅ <b>Сделать активной</b> — заменить текущую программу этим черновиком.
+❌ <b>Отменить черновик</b> — выбросить правки и вернуться.
+{% else %}<b>📋 Программа</b>
+Структура: <b>{{ program_type_label }}</b> — {{ program_type_blurb }}
+Нажми «Описать текстом или голосом» или «Пусть предложит».
+{% endif %}

@@ -1,0 +1,101 @@
+# Hooks run on git push only (not on git commit).
+# Install: uv run pre-commit install -t pre-push
+
+default_stages: [pre-push]
+
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.6.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-yaml
+    args: [--unsafe]
+  - id: check-json
+  - id: check-merge-conflict
+  - id: check-added-large-files
+  - id: check-toml
+    exclude: ^uv\.lock$
+  - id: check-docstring-first
+    files: ^(src|tests)/.*\.py$
+  - id: check-ast
+    files: ^(src|tests)/.*\.py$
+  - id: name-tests-test
+    name: python tests naming
+    args: [--pytest-test-first]
+    files: ^tests/.*\.py$
+    exclude: ^tests/support/
+
+- repo: https://github.com/asottile/add-trailing-comma
+  rev: v3.1.0
+  hooks:
+  - id: add-trailing-comma
+    files: ^(src|tests)/
+
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.14.0
+  hooks:
+  - id: pretty-format-ini
+    args: [--autofix]
+    files: \.ini$
+  - id: pretty-format-yaml
+    args: [--autofix, --indent, '2']
+    files: (\.ya?ml)$
+  - id: pretty-format-toml
+    args: [--autofix, --indent, '2']
+    files: ^(pyproject\.toml)$
+
+- repo: https://github.com/pappasam/toml-sort
+  rev: v0.23.1
+  hooks:
+  - id: toml-sort
+    files: ^(pyproject\.toml)$
+  - id: toml-sort-fix
+    files: ^(pyproject\.toml)$
+
+- repo: https://github.com/hadialqattan/pycln
+  rev: v2.6.0
+  hooks:
+  - id: pycln
+    args: [--all]
+    files: ^(src|tests)/.*\.py$
+
+- repo: https://github.com/sondrelg/pep585-upgrade
+  rev: v1.0.1
+  hooks:
+  - id: upgrade-type-hints
+    files: ^(src|tests)/.*\.py$
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.6.1
+  hooks:
+  - id: ruff
+    types_or: [python, pyi, jupyter]
+    args: [--fix]
+    files: ^(src|tests)/
+  - id: ruff-format
+    types_or: [python, pyi, jupyter]
+    files: ^(src|tests)/
+
+- repo: https://github.com/RobertCraigie/pyright-python
+  rev: v1.1.380
+  hooks:
+  - id: pyright
+    files: ^(src|tests)/.*\.py$
+    types: [python]
+    stages: [manual]
+
+- repo: local
+  hooks:
+  - id: pytest
+    name: pytest
+    entry: uv run pytest
+    language: system
+    pass_filenames: false
+    always_run: true
+  - id: graphify-update
+    name: graphify update
+    entry: bash -c 'command -v graphify >/dev/null 2>&1 || { echo "graphify not installed — skipping (optional for Cursor users)"; exit 0; }; graphify update . || { echo "graphify update failed — skipping"; exit 0; }'
+    language: system
+    pass_filenames: false
+    files: ^(src/|tests/).*\.py$

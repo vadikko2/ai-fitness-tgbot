@@ -1,0 +1,27 @@
+{# Shared helpers for workout / proposal lists. Keep lines after {{ }} so trim_blocks keeps newlines. #}
+{% macro load(slot) -%}
+{{ slot.sets }}×{% if slot.reps %}{{ slot.reps }}{% else %}{{ slot.duration_seconds }}с{% endif %}{% if slot.weight_kg %} · {{ slot.weight_kg }} кг{% endif %}
+{%- endmacro %}
+
+{% macro slot_name(slot) -%}
+{% if slot.exercise_name %}{{ slot.exercise_name }}{% elif slot.exercise_id %}{{ slot.exercise_id }}{% elif slot.custom_request %}{{ slot.custom_request }}{% else %}упражнение{% endif %}
+{%- endmacro %}
+
+{% macro slot_line(slot, done=false, rest=false) -%}
+{{ slot.position }}. <b>{{ slot_name(slot) }}</b> — {{ load(slot) }}{% if rest and slot.rest_seconds %} · отдых {{ slot.rest_seconds }}с{% endif %}{% if rest and slot.rpe %} · RPE {{ slot.rpe }}{% endif %}{% if done and slot.actual %} ✅{% endif %}
+{%- endmacro %}
+
+{% macro actual_load(actual) -%}
+{{ actual.sets }}×{% if actual.reps %}{{ actual.reps }}{% else %}{{ actual.duration_seconds }}с{% endif %}{% if actual.weight_kg %} · {{ actual.weight_kg }} кг{% endif %}
+{%- endmacro %}
+
+{% macro history_slot_line(slot) -%}
+{% if slot.actual %}{{ slot.position }}. <b>{% if slot.exercise_name %}{{ slot.exercise_name }}{% elif slot.custom_request %}{{ slot.custom_request }}{% else %}Упражнение{% endif %}</b> — {{ actual_load(slot.actual) }}{% if slot.actual.note %} · {{ slot.actual.note }}{% endif %}{% if slot.has_technique_video %} · 🎥{% endif %}
+{% else %}{{ slot.position }}. <b>{% if slot.exercise_name %}{{ slot.exercise_name }}{% elif slot.custom_request %}{{ slot.custom_request }}{% else %}Упражнение{% endif %}</b> — факт не записан{% if slot.has_technique_video %} · 🎥{% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro week_progress(planned_count, completed_count, week_finished) -%}
+{% if planned_count %}📊 Неделя: <b>{{ completed_count }}/{{ planned_count }}</b>{% if week_finished %} · завершена{% endif %}
+{% endif %}
+{%- endmacro %}

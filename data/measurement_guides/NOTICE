@@ -1,0 +1,30 @@
+Measurement guide diagrams
+==========================
+
+Layout (gender-specific; resolved from profile ``User.sex``):
+
+  male/{neck,chest,waist,hips,biceps,thigh,calf,shoulder_girdle,overview}.png
+  female/{…same…}.png
+
+Fallback: if profile sex is unset, guides use the ``male`` folder
+(onboarding normally sets sex first).
+
+``overview_source.png`` — inspiration only (FB/VK-style bodybuilder chart with
+labels). Served overviews are restyled originals:
+  male/overview.png and female/overview.png
+(no vk.com/bicepsclub watermark). Layout inspired by that diagram; assets are
+project-authored.
+
+Per-site cards: instructional photos with unified chrome
+(dark-navy footer, yellow circle + ruler icon, yellow «одно число в см»).
+Overviews use the same chrome family with footer «выбери точку».
+
+Gender pipeline rule: regenerator never copies male↔female. Staging filenames
+must be prefixed ``male_`` / ``female_``.
+
+License: project-authored instructional illustrations / restyled cards (CC0 1.0
+for chrome and project originals). Source diagram is inspiration only.
+
+Regenerate / restamp (dev machine, Pillow not a runtime dependency):
+
+  uv run --with pillow python scripts/generate_measurement_guide_images.py

@@ -1,0 +1,11 @@
+{% import "_macros.j2" as m %}
+<b>📋 Программа</b>
+Структура: <b>{{ program_type_label }}</b>
+Дней: <b>{{ document.days|length }}</b> · открой день, чтобы увидеть упражнения
+{% for day in document.days %}
+• {% if day.weekday_label %}{{ day.weekday_label }} · {% endif %}{{ day.title }} · {{ day.intensity_label }} · {{ day.training_style_label }} — {{ day.slots|length }} упр.
+{% endfor %}
+{% if has_pending %}
+
+📝 Есть черновик изменений — открой его из меню «Изменить программу».
+{% endif %}

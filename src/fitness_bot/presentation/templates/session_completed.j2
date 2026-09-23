@@ -1,0 +1,11 @@
+{% import "_macros.j2" as m %}
+<b>🏁 Тренировка завершена</b>
+
+{% for day in document.days %}
+{{ day.title }} · {{ day.intensity_label }}
+{% for slot in day.slots %}
+{% if slot.actual %}{{ slot.position }}. <b>{{ m.slot_name(slot) }}</b> — {{ m.actual_load(slot.actual) }} ✅
+{% else %}{{ slot.position }}. <b>{{ m.slot_name(slot) }}</b> — без факта
+{% endif %}
+{% endfor %}
+{% endfor %}

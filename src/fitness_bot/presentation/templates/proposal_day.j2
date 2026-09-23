@@ -1,0 +1,17 @@
+{% import "_macros.j2" as m %}
+{% if reply %}{{ reply }}
+
+{% endif %}{{ day.title }}{% if day.weekday_label %} · {{ day.weekday_label }}{% endif %} · {{ day.intensity_label }} · {{ day.training_style_label }}
+
+{% if day.warmup %}<b>Разминка</b>
+{{ day.warmup }}
+
+{% endif %}{% for slot in day.slots %}
+{% if slot.exercise_id %}{{ m.slot_line(slot, rest=true) }}
+{% else %}{{ slot.position }}. ⚠️ не выбрано: <i>{{ slot.custom_request }}</i> ({{ slot.muscle_group }}) — {{ m.load(slot) }}
+{% endif %}
+{% endfor %}
+{% if day.cooldown %}
+<b>Заминка</b>
+{{ day.cooldown }}
+{% endif %}

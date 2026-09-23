@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16
+    env_file:
+    - ../../.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+    - 5432:5432
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+    - ../../.env
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    ports:
+    - 9000:9000
+    - 9001:9001
+    volumes:
+    - minio_data:/data
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    env_file:
+    - ../../.env
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local $${S3_ENDPOINT} $${S3_ACCESS_KEY} $${S3_SECRET_KEY} &&
+      mc mb --ignore-existing local/$${S3_BUCKET} &&
+      exit 0
+      "
+
+  bot:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+    env_file:
+    - ../../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    volumes:
+    - ../../data:/app/data
+    - ../../models:/app/models
+    command: >
+      /bin/sh -c "alembic upgrade head && seed-measurement-guides --offline --force && fitness-bot"
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  minio_data:

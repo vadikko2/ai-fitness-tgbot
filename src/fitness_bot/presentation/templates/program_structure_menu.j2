@@ -1,0 +1,6 @@
+<b>📋 Структура недели</b>
+
+Выбери, как делить тренировки по дням:
+{% for item in structure_items %}
+• <b>{{ item.label }}</b> — {{ item.blurb }}
+{% endfor %}

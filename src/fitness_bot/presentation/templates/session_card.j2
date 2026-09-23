@@ -1,0 +1,15 @@
+{% import "_macros.j2" as m %}
+<b>🏋️ Тренировка сегодня</b>
+
+{% for day in document.days %}
+{{ day.title }} · {{ day.intensity_label }}
+{% if day.warmup %}<b>Разминка</b>
+{{ day.warmup }}
+{% endif %}
+{% for slot in day.slots %}
+{{ m.slot_line(slot, done=true) }}
+{% endfor %}
+{% if day.cooldown %}<b>Заминка</b>
+{{ day.cooldown }}
+{% endif %}
+{% endfor %}

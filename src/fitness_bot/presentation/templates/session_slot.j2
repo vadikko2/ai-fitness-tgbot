@@ -1,0 +1,8 @@
+{% import "_macros.j2" as m %}
+<b>💪 {{ slot.position }}. {{ m.slot_name(slot) }}</b>
+
+📌 План: <b>{{ m.load(slot) }}</b>
+{% if slot.actual %}✅ Факт: <b>{{ m.actual_load(slot.actual) }}</b>{% if slot.actual.note %}
+💬 {{ slot.actual.note }}{% endif %}
+{% else %}⏳ Факт ещё не записан.
+{% endif %}

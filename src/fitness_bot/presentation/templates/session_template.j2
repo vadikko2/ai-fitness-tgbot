@@ -1,0 +1,16 @@
+{% import "_macros.j2" as m %}
+<b>📋 План на сегодня</b>
+📅 {{ weekday_label or "—" }}
+{{ m.week_progress(planned_count, completed_count, week_finished) }}
+{% for day in document.days %}
+{{ day.title }} · {{ day.intensity_label }}
+{% if day.warmup %}<b>Разминка</b>
+{{ day.warmup }}
+{% endif %}
+{% for slot in day.slots %}
+{{ m.slot_line(slot) }}
+{% endfor %}
+{% if day.cooldown %}<b>Заминка</b>
+{{ day.cooldown }}
+{% endif %}
+{% endfor %}

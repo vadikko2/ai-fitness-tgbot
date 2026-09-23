@@ -1,0 +1,8 @@
+<b>🏋️ Тренировки</b>
+{% if items %}
+{% for item in items %}
+• {{ item.title }}{% if item.completed_at %} · {{ item.completed_at.strftime('%d.%m.%Y') }}{% endif %}
+{% endfor %}
+{% else %}
+Завершённых тренировок пока нет.
+{% endif %}

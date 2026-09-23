@@ -1,0 +1,9 @@
+{% import "_macros.j2" as m %}
+<b>🏋️ {{ title }}</b>{% if completed_at %} · {{ completed_at.strftime('%d.%m.%Y') }}{% endif %}
+
+{% for slot in slots %}
+{{ m.history_slot_line(slot) }}
+{% endfor %}
+{% if has_watch_videos %}
+🎥 Есть своё видео — кнопка ниже.
+{% endif %}

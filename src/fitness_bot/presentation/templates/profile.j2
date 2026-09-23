@@ -1,0 +1,21 @@
+<b>👤 Профиль</b>
+
+• Пол: <b>{{ sex_label or "—" }}</b>
+• Год рождения: <b>{{ birth_year or "—" }}</b>
+• Возраст: <b>{{ age if age is not none else "—" }}</b>
+• Рост: <b>{% if height_cm %}{{ height_cm }} см{% else %}—{% endif %}</b>
+• Вес: <b>{% if weight_kg %}{{ weight_kg }} кг{% else %}—{% endif %}</b>
+• Опыт: <b>{{ experience_label or "—" }}</b>
+{% if experience_details %}• Детали опыта: {{ experience_details }}
+{% endif %}
+• Дней в неделю: <b>{{ days_per_week or "—" }}</b>
+• Дни: <b>{{ weekdays_label or "—" }}</b>
+• Место: {{ equipment or "—" }}
+• Ограничения: {{ limitations_label }}
+• Активность вне зала: <b>{{ activity_label or "—" }}</b>
+• Длительность тренировки: <b>{% if session_minutes %}{{ session_minutes }} мин{% else %}—{% endif %}</b>
+• % жира: <b>{{ body_fat_label }}</b>
+• Спортпит: {{ supplements_label }}
+• Питание: {{ diet_prefs_label }}
+• Фарма / ПЭД: {{ pharma_label }}
+• Цель: <b>{{ goal_label or "—" }}</b>

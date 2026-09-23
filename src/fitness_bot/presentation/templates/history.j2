@@ -1,0 +1,8 @@
+<b>📏 История обхватов</b>{% if site_name %} — {{ site_name }}{% endif %}
+{% if entries %}
+{% for item in entries %}
+• {{ item.measured_at.strftime('%d.%m.%Y') }} — {{ item.site_name }}: <b>{{ item.centimeters }} см</b>
+{% endfor %}
+{% else %}
+Записей пока нет.
+{% endif %}
