@@ -69,6 +69,28 @@ def _coach_share_code(raw_code: str) -> str:
     return f"c_{code.upper()}"
 
 
+def _invite_token_from_start_payload(payload: str) -> str | None:
+    """Normalize /start payload to c_<CODE> for coach invites (c_… or join_c_… / join_…)."""
+    token = payload.strip()
+    if not token:
+        return None
+    lower = token.casefold()
+    if lower.startswith("join_"):
+        token = token[5:]
+        lower = token.casefold()
+    if lower.startswith("c_"):
+        return _coach_share_code(token)
+    # join_<RAW> without c_ prefix
+    if payload.strip().casefold().startswith("join_") and token:
+        return _coach_share_code(token)
+    return None
+
+
+def _invite_join_start_payload(share_code: str) -> str:
+    """Deep-link payload for already-onboarded clients: join_c_<CODE>."""
+    return f"join_{_coach_share_code(share_code)}"
+
+
 def _invite_code_message(raw_code: str, *, regenerated: bool = False) -> str:
     share = _coach_share_code(raw_code)
     title = "Новый код приглашения:" if regenerated else "Код приглашения:"
@@ -96,28 +118,69 @@ async def _resolve_bot_username(bot: Bot) -> str | None:
     return None
 
 
-def _invite_share_url(share_code: str, bot_username: str | None) -> str:
-    """Native Telegram share sheet: recipient picker with pasteable code in text=."""
-    share_text = f"{share_code}\n\nВставь этот код в боте («Ввести код или ссылку»)."
+def _invite_share_text(
+    share_code: str,
+    bot_username: str | None,
+    *,
+    coach_name: str | None,
+) -> str:
+    """Plain-text body for t.me/share (HTML does not apply in the recipient chat)."""
+    name = (coach_name or "").strip() or "тренер"
+    share = _coach_share_code(share_code)
     if bot_username:
-        deep_link = f"https://t.me/{bot_username.lstrip('@')}?start={share_code}"
+        bot = bot_username.lstrip("@")
+        new_link = f"https://t.me/{bot}?start={share}"
+        join_link = f"https://t.me/{bot}?start={_invite_join_start_payload(share)}"
     else:
-        # Harmless HTTPS placeholder so the picker still opens when username is unknown.
-        deep_link = "https://t.me"
-    return f"https://t.me/share/url?url={quote(deep_link, safe='')}&text={quote(share_text, safe='')}"
-
-
-def _invite_share_button(share_code: str, bot_username: str | None) -> InlineKeyboardButton:
-    return InlineKeyboardButton(
-        text="📤 Отправить код",
-        url=_invite_share_url(share_code, bot_username),
+        new_link = "(ссылка недоступна — открой бота и вставь код)"
+        join_link = new_link
+    return (
+        f"Тренер «{name}» приглашает тебя в AI Fitness.\n\n"
+        f"🆕 Ещё не в боте — открой:\n{new_link}\n\n"
+        f"✅ Уже в боте — открой:\n{join_link}\n\n"
+        f"Или вставь код вручную («Ввести код или ссылку»):\n"
+        f"`{share}`"
     )
 
 
-def _invite_form_keyboard(share_code: str, bot_username: str | None) -> InlineKeyboardMarkup:
+def _invite_share_url(
+    share_code: str,
+    bot_username: str | None,
+    *,
+    coach_name: str | None = None,
+) -> str:
+    """Native Telegram share sheet: two deep links + pasteable code in text=."""
+    share_text = _invite_share_text(share_code, bot_username, coach_name=coach_name)
+    if bot_username:
+        # Bot home for link preview; labeled deep links live in text=.
+        preview_url = f"https://t.me/{bot_username.lstrip('@')}"
+    else:
+        # Harmless HTTPS placeholder so the picker still opens when username is unknown.
+        preview_url = "https://t.me"
+    return f"https://t.me/share/url?url={quote(preview_url, safe='')}&text={quote(share_text, safe='')}"
+
+
+def _invite_share_button(
+    share_code: str,
+    bot_username: str | None,
+    *,
+    coach_name: str | None = None,
+) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text="📤 Отправить код",
+        url=_invite_share_url(share_code, bot_username, coach_name=coach_name),
+    )
+
+
+def _invite_form_keyboard(
+    share_code: str,
+    bot_username: str | None,
+    *,
+    coach_name: str | None = None,
+) -> InlineKeyboardMarkup:
     return _kb(
         [
-            [_invite_share_button(share_code, bot_username)],
+            [_invite_share_button(share_code, bot_username, coach_name=coach_name)],
             [InlineKeyboardButton(text="⬅️ Назад в кабинет", callback_data="coach_cab")],
             [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
         ],
@@ -301,7 +364,11 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         if callback.message:
             await callback.message.answer(
                 _invite_code_message(invite_code),
-                reply_markup=_invite_form_keyboard(share, bot_username),
+                reply_markup=_invite_form_keyboard(
+                    share,
+                    bot_username,
+                    coach_name=cab.display_name,
+                ),
             )
         await callback.answer()
 
@@ -318,7 +385,11 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         if callback.message:
             await callback.message.answer(
                 _invite_code_message(invite_code),
-                reply_markup=_invite_form_keyboard(share, bot_username),
+                reply_markup=_invite_form_keyboard(
+                    share,
+                    bot_username,
+                    coach_name=cab.display_name,
+                ),
             )
 
     async def _invite_regen_step(callback: CallbackQuery, step: int) -> None:
@@ -374,7 +445,8 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             text = _invite_code_message(result.code, regenerated=True)
             share = _coach_share_code(result.code)
             bot_username = await _resolve_bot_username(callback.bot)
-            markup = _invite_form_keyboard(share, bot_username)
+            cab = await mediator.send(GetCoachCabinetQuery(telegram_user_id=callback.from_user.id))
+            markup = _invite_form_keyboard(share, bot_username, coach_name=cab.display_name)
         except DomainError as exc:
             text = str(exc)
         if callback.message:

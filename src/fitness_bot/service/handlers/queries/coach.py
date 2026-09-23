@@ -365,6 +365,7 @@ class GetCoachCabinetQueryHandler(
                 accepting_clients=profile.accepting_clients,
                 invite_code=invite.code if invite and invite.is_active else None,
                 pending_application=pending,
+                display_name=profile.display_name,
             )
 
 

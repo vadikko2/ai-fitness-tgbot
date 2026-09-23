@@ -190,6 +190,7 @@ class GetCoachCabinetQueryResult(QueryResult):
     accepting_clients: bool
     invite_code: str | None = None
     pending_application: bool = False
+    display_name: str | None = None
 
 
 class ListProgramCatalogQuery(Query):

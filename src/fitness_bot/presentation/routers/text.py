@@ -378,6 +378,8 @@ async def handle_user_utterance(
             lowered = raw.casefold()
             if "start=" in lowered:
                 raw = raw.split("start=", 1)[1].split("&", 1)[0].strip()
+            if raw.casefold().startswith("join_"):
+                raw = raw[5:]
             code = raw
             if code.startswith("c_") or code.startswith("C_"):
                 invite_code = code[2:]
