@@ -5,9 +5,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from cqrs import RequestMediator
 from jinja2 import Environment
 
-from fitness_bot.domain.enums import ExpectedInput
+from fitness_bot.domain.enums import CoachApplicationStatus, ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.keyboards import (
+    coach_app_detail_keyboard,
+    coach_apply_menu_keyboard,
+    coach_apps_keyboard,
     coach_client_proposal_keyboard,
     coach_history_session_keyboard,
     coach_recent_videos_keyboard,
@@ -27,10 +30,27 @@ from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.coach import (
     GetClientCardQuery,
     GetCoachCabinetQuery,
+    GetMyCoachApplicationQuery,
     ListCoachClientsQuery,
+    ListMyCoachApplicationsQuery,
     SearchCoachesQuery,
 )
 from fitness_bot.service.models.queries.users import GetHomeQuery
+
+_APPLICATION_STATUS_LABELS = {
+    CoachApplicationStatus.PENDING: "На проверке",
+    CoachApplicationStatus.APPROVED: "Одобрена",
+    CoachApplicationStatus.REJECTED: "Отклонена",
+}
+
+
+def _application_status_label(status: CoachApplicationStatus | str) -> str:
+    if isinstance(status, str):
+        try:
+            status = CoachApplicationStatus(status)
+        except ValueError:
+            return status
+    return _APPLICATION_STATUS_LABELS.get(status, str(status))
 
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
@@ -605,6 +625,21 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         await callback.answer()
 
     @router.callback_query(F.data == "coach_apply")
+    async def apply_menu(callback: CallbackQuery) -> None:
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
+        if callback.message:
+            await callback.message.answer(
+                "Стать тренером\n\nПодайте заявку или посмотрите статус уже отправленных.",
+                reply_markup=coach_apply_menu_keyboard(),
+            )
+        await callback.answer()
+
+    @router.callback_query(F.data == "coach_apply_start")
     async def apply_start(callback: CallbackQuery) -> None:
         await mediator.send(
             ExpectInputCommand(
@@ -618,6 +653,60 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 "Заявка 1/3: отправьте имя и био в одном сообщении (имя на первой строке).",
                 reply_markup=_kb([[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]]),
             )
+        await callback.answer()
+
+    @router.callback_query(F.data == "coach_apps")
+    async def my_applications(callback: CallbackQuery) -> None:
+        result = await mediator.send(ListMyCoachApplicationsQuery(telegram_user_id=callback.from_user.id))
+        if not result.items:
+            text = "Пока нет заявок."
+            kb = coach_apps_keyboard(items=[])
+        else:
+            text = "Мои заявки:"
+            items: list[tuple[str, str]] = []
+            for item in result.items:
+                status = _application_status_label(item.status)
+                date = item.created_at.strftime("%d.%m.%Y")
+                name = item.display_name.strip() or "Без имени"
+                if len(name) > 24:
+                    name = name[:23] + "…"
+                items.append((str(item.application_id), f"{status} · {name} · {date}"))
+            kb = coach_apps_keyboard(items=items)
+        if callback.message:
+            await callback.message.answer(text, reply_markup=kb)
+        await callback.answer()
+
+    @router.callback_query(F.data.startswith("coach_app:"))
+    async def application_detail(callback: CallbackQuery) -> None:
+        from uuid import UUID
+
+        application_id = UUID(callback.data.split(":", 1)[1])
+        try:
+            detail = await mediator.send(
+                GetMyCoachApplicationQuery(
+                    telegram_user_id=callback.from_user.id,
+                    application_id=application_id,
+                ),
+            )
+        except DomainError as exc:
+            if callback.message:
+                await callback.message.answer(str(exc), reply_markup=coach_app_detail_keyboard())
+            await callback.answer()
+            return
+        status = _application_status_label(detail.status)
+        lines = [
+            "Заявка",
+            "",
+            f"Статус: {status}",
+            f"Имя: {detail.display_name}",
+            f"Подана: {detail.created_at.strftime('%d.%m.%Y %H:%M')}",
+        ]
+        if detail.status == CoachApplicationStatus.REJECTED and detail.moderator_comment:
+            lines.append(f"Комментарий: {detail.moderator_comment}")
+        elif detail.resolved_at is not None:
+            lines.append(f"Решена: {detail.resolved_at.strftime('%d.%m.%Y %H:%M')}")
+        if callback.message:
+            await callback.message.answer("\n".join(lines), reply_markup=coach_app_detail_keyboard())
         await callback.answer()
 
     @router.callback_query(F.data == "code_link")

@@ -133,6 +133,23 @@ class SqlAlchemyCoachesRepository(ICoachesRepository):
         rows = (await self._session.execute(stmt)).scalars().all()
         return [coach_application_to_domain(row) for row in rows]
 
+    async def list_applications_for_user(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[CoachApplication]:
+        stmt = (
+            select(CoachApplicationRow)
+            .where(CoachApplicationRow.user_id == user_id)
+            .order_by(CoachApplicationRow.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [coach_application_to_domain(row) for row in rows]
+
     async def resolve_application_if_pending(
         self,
         application: CoachApplication,

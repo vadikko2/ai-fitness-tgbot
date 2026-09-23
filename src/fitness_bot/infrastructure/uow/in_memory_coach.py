@@ -75,6 +75,17 @@ class InMemoryCoachesRepository(ICoachesRepository):
         items.sort(key=lambda a: a.created_at)
         return [deepcopy(a) for a in items[offset : offset + limit]]
 
+    async def list_applications_for_user(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[CoachApplication]:
+        items = [a for a in self._applications.values() if a.user_id == user_id]
+        items.sort(key=lambda a: a.created_at, reverse=True)
+        return [deepcopy(a) for a in items[offset : offset + limit]]
+
     async def resolve_application_if_pending(self, application: CoachApplication) -> CoachApplication | None:
         current = self._applications.get(application.id)
         if current is None or current.status != CoachApplicationStatus.PENDING:

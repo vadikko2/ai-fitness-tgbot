@@ -91,8 +91,10 @@ from fitness_bot.service.handlers.queries.coach import (
     GetClientCardQueryHandler,
     GetCoachCabinetQueryHandler,
     GetCoachPublicCardQueryHandler,
+    GetMyCoachApplicationQueryHandler,
     ListCoachClientsQueryHandler,
     ListModeratorsQueryHandler,
+    ListMyCoachApplicationsQueryHandler,
     ListPendingCoachApplicationsQueryHandler,
     ListProgramCatalogQueryHandler,
     SearchCoachesQueryHandler,
@@ -200,8 +202,10 @@ from fitness_bot.service.models.queries.coach import (
     GetClientCardQuery,
     GetCoachCabinetQuery,
     GetCoachPublicCardQuery,
+    GetMyCoachApplicationQuery,
     ListCoachClientsQuery,
     ListModeratorsQuery,
+    ListMyCoachApplicationsQuery,
     ListPendingCoachApplicationsQuery,
     ListProgramCatalogQuery,
     SearchCoachesQuery,
@@ -412,6 +416,8 @@ class Container(containers.DeclarativeContainer):
     )
     count_active_clients_handler = providers.Factory(CountActiveClientsForCoachQueryHandler, uow=uow)
     list_pending_coach_applications_handler = providers.Factory(ListPendingCoachApplicationsQueryHandler, uow=uow)
+    list_my_coach_applications_handler = providers.Factory(ListMyCoachApplicationsQueryHandler, uow=uow)
+    get_my_coach_application_handler = providers.Factory(GetMyCoachApplicationQueryHandler, uow=uow)
     list_moderators_handler = providers.Factory(ListModeratorsQueryHandler, uow=uow)
     search_coaches_handler = providers.Factory(SearchCoachesQueryHandler, uow=uow)
     get_coach_public_card_handler = providers.Factory(GetCoachPublicCardQueryHandler, uow=uow)
@@ -533,6 +539,8 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(AssignProgramToClientCommand, AssignProgramToClientCommandHandler)
     request_map.bind(CountActiveClientsForCoachQuery, CountActiveClientsForCoachQueryHandler)
     request_map.bind(ListPendingCoachApplicationsQuery, ListPendingCoachApplicationsQueryHandler)
+    request_map.bind(ListMyCoachApplicationsQuery, ListMyCoachApplicationsQueryHandler)
+    request_map.bind(GetMyCoachApplicationQuery, GetMyCoachApplicationQueryHandler)
     request_map.bind(ListModeratorsQuery, ListModeratorsQueryHandler)
     request_map.bind(SearchCoachesQuery, SearchCoachesQueryHandler)
     request_map.bind(GetCoachPublicCardQuery, GetCoachPublicCardQueryHandler)

@@ -82,6 +82,65 @@ class ListPendingCoachApplicationsQueryHandler(
             )
 
 
+class ListMyCoachApplicationsQueryHandler(
+    cqrs.RequestHandler[queries.ListMyCoachApplicationsQuery, queries.ListMyCoachApplicationsQueryResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: queries.ListMyCoachApplicationsQuery,
+    ) -> queries.ListMyCoachApplicationsQueryResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            apps = await repos.coaches.list_applications_for_user(
+                user.id,
+                limit=request.limit,
+                offset=request.offset,
+            )
+            return queries.ListMyCoachApplicationsQueryResult(
+                items=[
+                    queries.MyCoachApplicationItem(
+                        application_id=item.id,
+                        display_name=item.display_name,
+                        status=item.status,
+                        created_at=item.created_at,
+                        moderator_comment=item.moderator_comment,
+                        resolved_at=item.resolved_at,
+                    )
+                    for item in apps
+                ],
+            )
+
+
+class GetMyCoachApplicationQueryHandler(
+    cqrs.RequestHandler[queries.GetMyCoachApplicationQuery, queries.GetMyCoachApplicationQueryResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: queries.GetMyCoachApplicationQuery,
+    ) -> queries.GetMyCoachApplicationQueryResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            application = await repos.coaches.get_application(request.application_id)
+            if application is None or application.user_id != user.id:
+                raise DomainError("application not found")
+            return queries.GetMyCoachApplicationQueryResult(
+                application_id=application.id,
+                display_name=application.display_name,
+                status=application.status,
+                created_at=application.created_at,
+                moderator_comment=application.moderator_comment,
+                resolved_at=application.resolved_at,
+                bio=application.bio,
+                portfolio_url=application.portfolio_url,
+            )
+
+
 class ListModeratorsQueryHandler(
     cqrs.RequestHandler[queries.ListModeratorsQuery, queries.ListModeratorsQueryResult],
 ):

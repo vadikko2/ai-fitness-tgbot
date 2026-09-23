@@ -9,6 +9,7 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.presentation.keyboards import coach_apply_submitted_keyboard
 from fitness_bot.service.models.commands.coach import (
     RecordModeratorApplicationMessageCommand,
     SubmitCoachApplicationCommand,
@@ -104,6 +105,7 @@ async def _submit_credential(
                 continue
     await message.answer(
         "Заявка 3/3 отправлена модераторам. Обычно ответ за 1–2 дня.",
+        reply_markup=coach_apply_submitted_keyboard(),
     )
 
 

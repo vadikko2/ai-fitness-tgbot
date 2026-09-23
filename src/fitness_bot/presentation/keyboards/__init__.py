@@ -438,6 +438,41 @@ def coach_recent_videos_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def coach_apply_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Подать заявку", callback_data="coach_apply_start")],
+            [InlineKeyboardButton(text="📋 Мои заявки", callback_data="coach_apps")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def coach_apps_keyboard(*, items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=label, callback_data=f"coach_app:{app_id}")] for app_id, label in items]
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="coach_apply")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def coach_app_detail_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К заявкам", callback_data="coach_apps")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def coach_apply_submitted_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Мои заявки", callback_data="coach_apps")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
 def coach_client_proposal_keyboard(*, client_user_id: str, can_approve: bool) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✏️ Ещё правка текстом", callback_data=f"coach_edit:{client_user_id}")],

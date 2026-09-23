@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from fitness_bot.domain.enums import CoachVerificationStatus, ProgramType
+from fitness_bot.domain.enums import CoachApplicationStatus, CoachVerificationStatus, ProgramType
 from fitness_bot.domain.workout.document import WorkoutDocument
 from fitness_bot.service.models.queries.base import Query, QueryResult
 
@@ -36,6 +36,57 @@ class PendingApplicationItem(QueryResult):
 
 class ListPendingCoachApplicationsQueryResult(QueryResult):
     items: list[PendingApplicationItem]
+
+
+class PrepareCoachApplicationCredentialQuery(Query):
+    telegram_user_id: int
+    application_id: UUID
+
+
+class PrepareCoachApplicationCredentialQueryResult(QueryResult):
+    application_id: UUID
+    display_name: str
+    bio: str
+    portfolio_url: str
+    credential_caption: str | None = None
+    body: bytes | None = None
+    content_type: str | None = None
+    missing: bool = False
+
+
+class ListMyCoachApplicationsQuery(Query):
+    telegram_user_id: int
+    limit: int = 20
+    offset: int = 0
+
+
+class MyCoachApplicationItem(QueryResult):
+    application_id: UUID
+    display_name: str
+    status: CoachApplicationStatus
+    created_at: datetime
+    moderator_comment: str | None = None
+    resolved_at: datetime | None = None
+
+
+class ListMyCoachApplicationsQueryResult(QueryResult):
+    items: list[MyCoachApplicationItem]
+
+
+class GetMyCoachApplicationQuery(Query):
+    telegram_user_id: int
+    application_id: UUID
+
+
+class GetMyCoachApplicationQueryResult(QueryResult):
+    application_id: UUID
+    display_name: str
+    status: CoachApplicationStatus
+    created_at: datetime
+    moderator_comment: str | None = None
+    resolved_at: datetime | None = None
+    bio: str
+    portfolio_url: str
 
 
 class ListModeratorsQuery(Query):

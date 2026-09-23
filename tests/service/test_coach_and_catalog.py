@@ -27,7 +27,11 @@ from fitness_bot.service.handlers.commands.coach import (
     UnlinkCoachClientCommandHandler,
 )
 from fitness_bot.service.handlers.commands.users import EnsureUserCommandHandler
-from fitness_bot.service.handlers.queries.coach import CountActiveClientsForCoachQueryHandler
+from fitness_bot.service.handlers.queries.coach import (
+    CountActiveClientsForCoachQueryHandler,
+    GetMyCoachApplicationQueryHandler,
+    ListMyCoachApplicationsQueryHandler,
+)
 from fitness_bot.service.handlers.queries.users import GetHomeQueryHandler
 from fitness_bot.service.models.commands.catalog import (
     ClaimProgramByCodeCommand,
@@ -46,7 +50,11 @@ from fitness_bot.service.models.commands.coach import (
     UnlinkCoachClientCommand,
 )
 from fitness_bot.service.models.commands.users import EnsureUserCommand
-from fitness_bot.service.models.queries.coach import CountActiveClientsForCoachQuery
+from fitness_bot.service.models.queries.coach import (
+    CountActiveClientsForCoachQuery,
+    GetMyCoachApplicationQuery,
+    ListMyCoachApplicationsQuery,
+)
 from fitness_bot.service.models.queries.users import GetHomeQuery
 
 
@@ -485,3 +493,67 @@ def test_domain_program_publish_requires_approvable() -> None:
     )
     with pytest.raises(Exception):
         program.publish()
+
+
+@pytest.mark.asyncio
+async def test_list_and_get_my_coach_applications() -> None:
+    from fitness_bot.domain.enums import CoachApplicationStatus
+
+    uow = InMemoryUow()
+    await _user(uow, 70, moderator=True)
+    await _user(uow, 71)
+    await _user(uow, 72)
+
+    submitted = await SubmitCoachApplicationCommandHandler(uow).handle(
+        SubmitCoachApplicationCommand(
+            telegram_user_id=71,
+            display_name="Alice Coach",
+            bio="bio",
+            portfolio_url="https://example.com/a",
+            credential_object_key="k1",
+            credential_content_type="image/png",
+            credential_byte_size=1,
+        ),
+    )
+    await RejectCoachApplicationCommandHandler(uow).handle(
+        RejectCoachApplicationCommand(
+            telegram_user_id=70,
+            application_id=submitted.application_id,
+            comment="Недостаточно документов",
+        ),
+    )
+    pending = await SubmitCoachApplicationCommandHandler(uow).handle(
+        SubmitCoachApplicationCommand(
+            telegram_user_id=71,
+            display_name="Alice Coach",
+            bio="bio2",
+            portfolio_url="https://example.com/a2",
+            credential_object_key="k2",
+            credential_content_type="image/png",
+            credential_byte_size=1,
+        ),
+    )
+
+    mine = await ListMyCoachApplicationsQueryHandler(uow).handle(
+        ListMyCoachApplicationsQuery(telegram_user_id=71),
+    )
+    assert len(mine.items) == 2
+    assert mine.items[0].application_id == pending.application_id
+    assert mine.items[0].status == CoachApplicationStatus.PENDING
+    assert mine.items[1].status == CoachApplicationStatus.REJECTED
+
+    other = await ListMyCoachApplicationsQueryHandler(uow).handle(
+        ListMyCoachApplicationsQuery(telegram_user_id=72),
+    )
+    assert other.items == []
+
+    detail = await GetMyCoachApplicationQueryHandler(uow).handle(
+        GetMyCoachApplicationQuery(telegram_user_id=71, application_id=submitted.application_id),
+    )
+    assert detail.status == CoachApplicationStatus.REJECTED
+    assert detail.moderator_comment == "Недостаточно документов"
+
+    with pytest.raises(DomainError, match="application not found"):
+        await GetMyCoachApplicationQueryHandler(uow).handle(
+            GetMyCoachApplicationQuery(telegram_user_id=72, application_id=submitted.application_id),
+        )

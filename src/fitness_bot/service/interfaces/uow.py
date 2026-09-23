@@ -215,6 +215,16 @@ class ICoachesRepository(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    async def list_applications_for_user(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[CoachApplication]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     async def resolve_application_if_pending(
         self,
         application: CoachApplication,
