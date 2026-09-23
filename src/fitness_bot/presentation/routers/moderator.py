@@ -4,7 +4,7 @@ from uuid import UUID
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
@@ -18,7 +18,11 @@ from fitness_bot.service.models.commands.coach import (
     RevokeModeratorCommand,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
-from fitness_bot.service.models.queries.coach import ListModeratorsQuery, ListPendingCoachApplicationsQuery
+from fitness_bot.service.models.queries.coach import (
+    ListModeratorsQuery,
+    ListPendingCoachApplicationsQuery,
+    PrepareCoachApplicationCredentialQuery,
+)
 
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
@@ -102,31 +106,54 @@ def create_moderator_router(*, jinja_env: Environment, mediator: RequestMediator
 
     @router.callback_query(F.data.startswith("mod_app:"))
     async def app_card(callback: CallbackQuery) -> None:
-        app_id = callback.data.split(":", 1)[1]
+        app_id = UUID(callback.data.split(":", 1)[1])
         try:
-            result = await mediator.send(ListPendingCoachApplicationsQuery(telegram_user_id=callback.from_user.id))
+            delivery = await mediator.send(
+                PrepareCoachApplicationCredentialQuery(
+                    telegram_user_id=callback.from_user.id,
+                    application_id=app_id,
+                ),
+            )
         except DomainError as exc:
             if callback.message:
                 await callback.message.answer(str(exc))
             await callback.answer()
             return
-        item = next((x for x in result.items if str(x.application_id) == app_id), None)
-        if item is None:
-            text = "Заявка уже обработана или не найдена."
-            kb = _kb([[InlineKeyboardButton(text="Очередь", callback_data="mod")]])
-        else:
-            text = f"{item.display_name}\n{item.bio}\nПортфолио: {item.portfolio_url}"
-            kb = _kb(
+        text = f"{delivery.display_name}\n{delivery.bio}\nПортфолио: {delivery.portfolio_url}"
+        kb = _kb(
+            [
                 [
-                    [
-                        InlineKeyboardButton(text="✅ Approve", callback_data=f"mod_c_ok:{item.application_id}"),
-                        InlineKeyboardButton(text="❌ Reject", callback_data=f"mod_c_no:{item.application_id}"),
-                    ],
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="mod")],
+                    InlineKeyboardButton(text="✅ Approve", callback_data=f"mod_c_ok:{delivery.application_id}"),
+                    InlineKeyboardButton(text="❌ Reject", callback_data=f"mod_c_no:{delivery.application_id}"),
                 ],
-            )
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="mod")],
+            ],
+        )
         if callback.message:
             await callback.message.answer(text, reply_markup=kb)
+            if delivery.missing or delivery.body is None:
+                await callback.message.answer("Фото подтверждения недоступно.")
+            else:
+                content_type = (delivery.content_type or "").lower()
+                caption = delivery.credential_caption
+                try:
+                    if content_type.startswith("image/") or content_type in {"", "application/octet-stream"}:
+                        ext = "jpg"
+                        if "png" in content_type:
+                            ext = "png"
+                        elif "webp" in content_type:
+                            ext = "webp"
+                        await callback.message.answer_photo(
+                            BufferedInputFile(delivery.body, filename=f"credential.{ext}"),
+                            caption=caption,
+                        )
+                    else:
+                        await callback.message.answer_document(
+                            BufferedInputFile(delivery.body, filename="credential.bin"),
+                            caption=caption,
+                        )
+                except Exception:
+                    await callback.message.answer("Не удалось отправить фото подтверждения.")
         await callback.answer()
 
     @router.callback_query(F.data.startswith("mod_c_ok:"))

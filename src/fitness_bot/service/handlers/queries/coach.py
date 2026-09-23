@@ -11,6 +11,7 @@ from fitness_bot.domain.workout.week_progress import training_week_progress
 from fitness_bot.service.authz import require_coach_of, require_moderator, require_verified_coach
 from fitness_bot.service.interfaces.uow import IUow
 from fitness_bot.service.models.queries import coach as queries
+from fitness_bot.service.ports.object_storage import ObjectStorage
 
 IDLE_DAYS_THRESHOLD = queries.IDLE_DAYS_THRESHOLD
 
@@ -79,6 +80,48 @@ class ListPendingCoachApplicationsQueryHandler(
                     )
                     for item in apps
                 ],
+            )
+
+
+
+class PrepareCoachApplicationCredentialQueryHandler(
+    cqrs.RequestHandler[
+        queries.PrepareCoachApplicationCredentialQuery,
+        queries.PrepareCoachApplicationCredentialQueryResult,
+    ],
+):
+    def __init__(self, uow: IUow, object_storage: ObjectStorage) -> None:
+        self._uow = uow
+        self._object_storage = object_storage
+
+    async def handle(
+        self,
+        request: queries.PrepareCoachApplicationCredentialQuery,
+    ) -> queries.PrepareCoachApplicationCredentialQueryResult:
+        async with self._uow.transaction() as repos:
+            require_moderator(_require_user(await repos.users.get_by_telegram_id(request.telegram_user_id)))
+            application = await repos.coaches.get_application(request.application_id)
+            if application is None:
+                raise DomainError("application not found")
+            try:
+                body = await self._object_storage.get(application.credential_object_key)
+            except KeyError:
+                return queries.PrepareCoachApplicationCredentialQueryResult(
+                    application_id=application.id,
+                    display_name=application.display_name,
+                    bio=application.bio,
+                    portfolio_url=application.portfolio_url,
+                    credential_caption=application.credential_caption,
+                    missing=True,
+                )
+            return queries.PrepareCoachApplicationCredentialQueryResult(
+                application_id=application.id,
+                display_name=application.display_name,
+                bio=application.bio,
+                portfolio_url=application.portfolio_url,
+                credential_caption=application.credential_caption,
+                body=body,
+                content_type=application.credential_content_type,
             )
 
 

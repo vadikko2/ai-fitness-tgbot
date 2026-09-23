@@ -526,7 +526,7 @@ async def handle_user_utterance(
                     ),
                 )
                 await message.answer(
-                    "Заявка 3/3: пришлите фото/скан/PDF подтверждения (документ или фото).",
+                    "Заявка 3/3: пришлите фото подтверждения (именно фото, не файл).",
                     reply_markup=InlineKeyboardMarkup(
                         inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="home")]],
                     ),

@@ -8,6 +8,7 @@ from fitness_bot.domain.enums import ProgramStatus, ProgramType, TrainingStyle, 
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
 from fitness_bot.domain.workout.program import Program
+from fitness_bot.infrastructure.adapters.object_storage import InMemoryObjectStorage
 from fitness_bot.infrastructure.uow.in_memory import InMemoryUow
 from fitness_bot.service.authz import AuthorizationError, require_moderator
 from fitness_bot.service.handlers.commands.catalog import (
@@ -31,6 +32,7 @@ from fitness_bot.service.handlers.queries.coach import (
     CountActiveClientsForCoachQueryHandler,
     GetMyCoachApplicationQueryHandler,
     ListMyCoachApplicationsQueryHandler,
+    PrepareCoachApplicationCredentialQueryHandler,
 )
 from fitness_bot.service.handlers.queries.users import GetHomeQueryHandler
 from fitness_bot.service.models.commands.catalog import (
@@ -54,6 +56,7 @@ from fitness_bot.service.models.queries.coach import (
     CountActiveClientsForCoachQuery,
     GetMyCoachApplicationQuery,
     ListMyCoachApplicationsQuery,
+    PrepareCoachApplicationCredentialQuery,
 )
 from fitness_bot.service.models.queries.users import GetHomeQuery
 
@@ -557,3 +560,43 @@ async def test_list_and_get_my_coach_applications() -> None:
         await GetMyCoachApplicationQueryHandler(uow).handle(
             GetMyCoachApplicationQuery(telegram_user_id=72, application_id=submitted.application_id),
         )
+
+@pytest.mark.asyncio
+async def test_prepare_coach_application_credential_for_moderator() -> None:
+    uow = InMemoryUow()
+    storage = InMemoryObjectStorage()
+    await _user(uow, 201, moderator=True)
+    await _user(uow, 202)
+    key = "users/x/cred.png"
+    await storage.put(key, b"png-bytes", "image/png")
+    submitted = await SubmitCoachApplicationCommandHandler(uow).handle(
+        SubmitCoachApplicationCommand(
+            telegram_user_id=202,
+            display_name="Coach",
+            bio="bio",
+            portfolio_url="https://example.com",
+            credential_object_key=key,
+            credential_content_type="image/png",
+            credential_byte_size=9,
+            credential_caption="диплом",
+        ),
+    )
+    delivery = await PrepareCoachApplicationCredentialQueryHandler(uow, storage).handle(
+        PrepareCoachApplicationCredentialQuery(
+            telegram_user_id=201,
+            application_id=submitted.application_id,
+        ),
+    )
+    assert delivery.missing is False
+    assert delivery.body == b"png-bytes"
+    assert delivery.content_type == "image/png"
+    assert delivery.credential_caption == "диплом"
+
+    with pytest.raises(AuthorizationError):
+        await PrepareCoachApplicationCredentialQueryHandler(uow, storage).handle(
+            PrepareCoachApplicationCredentialQuery(
+                telegram_user_id=202,
+                application_id=submitted.application_id,
+            ),
+        )
+

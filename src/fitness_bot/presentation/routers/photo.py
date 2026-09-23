@@ -18,6 +18,8 @@ from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.users import GetWorkflowQuery
 from fitness_bot.service.ports.object_storage import ObjectStorage
 
+_CREDENTIAL_PHOTO_HINT = "Нужно фото подтверждения. Отправьте как фото (не файл/документ)."
+
 
 def _mod_kb(application_id: UUID) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -75,34 +77,32 @@ async def _submit_credential(
     )
     text = f"Новая заявка на статус тренера\n{result.display_name}\n{result.bio}\nПортфолио: {result.portfolio_url}"
     kb = _mod_kb(result.application_id)
+    photo_file_id = message.photo[-1].file_id if message.photo else None
     for chat in result.moderator_chats:
         chat_id = chat.get("chat_id")
         mod_user_id = chat.get("user_id")
         if chat_id is None or mod_user_id is None:
             continue
-            try:
-                sent = await message.bot.send_message(chat_id, text, reply_markup=kb)
-                media_id = None
+        try:
+            sent = await message.bot.send_message(chat_id, text, reply_markup=kb)
+            media_id = None
+            if photo_file_id is not None:
                 try:
-                    if message.photo:
-                        media = await message.bot.send_photo(chat_id, message.photo[-1].file_id)
-                        media_id = media.message_id
-                    elif message.document is not None:
-                        media = await message.bot.send_document(chat_id, message.document.file_id)
-                        media_id = media.message_id
+                    media = await message.bot.send_photo(chat_id, photo_file_id)
+                    media_id = media.message_id
                 except Exception:
                     media_id = None
-                await mediator.send(
-                    RecordModeratorApplicationMessageCommand(
-                        application_id=result.application_id,
-                        moderator_user_id=UUID(str(mod_user_id)),
-                        chat_id=chat_id,
-                        message_id=sent.message_id,
-                        media_message_id=media_id,
-                    ),
-                )
-            except Exception:
-                continue
+            await mediator.send(
+                RecordModeratorApplicationMessageCommand(
+                    application_id=result.application_id,
+                    moderator_user_id=UUID(str(mod_user_id)),
+                    chat_id=chat_id,
+                    message_id=sent.message_id,
+                    media_message_id=media_id,
+                ),
+            )
+        except Exception:
+            continue
     await message.answer(
         "Заявка 3/3 отправлена модераторам. Обычно ответ за 1–2 дня.",
         reply_markup=coach_apply_submitted_keyboard(),
@@ -150,20 +150,6 @@ def create_photo_router(
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
         if workflow.expected_input != ExpectedInput.COACH_CREDENTIAL:
             raise SkipHandler()
-        mime = (message.document.mime_type or "").lower()
-        if not (mime.startswith("image/") or mime in {"application/pdf"}):
-            await message.answer("Нужно фото/скан или PDF подтверждения.")
-            return
-        file = await message.bot.get_file(message.document.file_id)
-        assert file.file_path is not None
-        buf = await message.bot.download_file(file.file_path)
-        body = buf.read() if hasattr(buf, "read") else bytes(buf)
-        await _submit_credential(
-            message=message,
-            mediator=mediator,
-            object_storage=object_storage,
-            body=body,
-            content_type=mime or "application/pdf",
-        )
+        await message.answer(_CREDENTIAL_PHOTO_HINT)
 
     return router
