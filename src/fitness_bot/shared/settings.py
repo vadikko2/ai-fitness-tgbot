@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     sherpa_decoder: str = Field(default="decoder.int8.onnx", validation_alias="SHERPA_DECODER")
     sherpa_joiner: str = Field(default="joiner.int8.onnx", validation_alias="SHERPA_JOINER")
     sherpa_tokens: str = Field(default="tokens.txt", validation_alias="SHERPA_TOKENS")
-    sherpa_num_threads: int = Field(default=1, validation_alias="SHERPA_NUM_THREADS")
+    sherpa_num_threads: int = Field(default=2, validation_alias="SHERPA_NUM_THREADS")
     sherpa_sample_rate: int = Field(default=16_000, validation_alias="SHERPA_SAMPLE_RATE")
     # Optional one-shot seed of first moderators (numeric telegram ids), not the runtime ACL.
     bootstrap_moderator_telegram_ids: str = Field(default="", validation_alias="BOOTSTRAP_MODERATOR_TELEGRAM_IDS")

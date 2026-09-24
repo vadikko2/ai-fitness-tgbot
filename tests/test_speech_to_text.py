@@ -45,9 +45,9 @@ def test_build_speech_to_text_empty_dir_uses_stub() -> None:
     assert isinstance(stt, StubSpeechToText)
 
 
-def test_sherpa_clamps_onnx_threads_to_one(tmp_path: Path) -> None:
+def test_sherpa_keeps_requested_thread_count(tmp_path: Path) -> None:
     stt = SherpaOnnxSpeechToText(model_dir=tmp_path, num_threads=2)
-    assert stt._num_threads == 1
+    assert stt._num_threads == 2
 
 
 def test_build_speech_to_text_with_dir_uses_sherpa() -> None:

@@ -4,7 +4,7 @@ Telegram fitness training bot (aiogram 3, CQRS, Postgres).
 
 ## Speech-to-text (sherpa-onnx)
 
-Voice messages go through the `SpeechToText` port (`SherpaOnnxSpeechToText` when configured). One voice is recognized at a time, with a single ONNX thread, so a 1–2 core app is not saturated by two overlapping decodes.
+Voice messages go through the `SpeechToText` port (`SherpaOnnxSpeechToText` when configured). One voice is recognized at a time. ONNX thread count comes from `SHERPA_NUM_THREADS`.
 
 Runtime needs both `sherpa-onnx` (Python bindings) and `sherpa-onnx-core` (ships `libonnxruntime.so`). Both are listed in `pyproject.toml` because `uv` does not always pull the core package transitively from the sdist metadata.
 
@@ -23,7 +23,7 @@ SHERPA_ENCODER=encoder.int8.onnx
 SHERPA_DECODER=decoder.int8.onnx
 SHERPA_JOINER=joiner.int8.onnx
 SHERPA_TOKENS=tokens.txt
-SHERPA_NUM_THREADS=1
+SHERPA_NUM_THREADS=2
 SHERPA_SAMPLE_RATE=16000
 ```
 

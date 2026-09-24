@@ -90,5 +90,5 @@ def test_sherpa_settings_have_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert settings.sherpa_decoder == "decoder.int8.onnx"
     assert settings.sherpa_joiner == "joiner.int8.onnx"
     assert settings.sherpa_tokens == "tokens.txt"
-    assert settings.sherpa_num_threads == 1
+    assert settings.sherpa_num_threads == 2
     assert settings.sherpa_sample_rate == 16_000

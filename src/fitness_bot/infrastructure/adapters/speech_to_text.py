@@ -41,7 +41,7 @@ class SherpaOnnxSpeechToText(SpeechToText):
         decoder: str = "decoder.int8.onnx",
         joiner: str = "joiner.int8.onnx",
         tokens: str = "tokens.txt",
-        num_threads: int = 1,
+        num_threads: int = 2,
         sample_rate: int = 16_000,
     ) -> None:
         self._model_dir = Path(model_dir)
@@ -49,10 +49,7 @@ class SherpaOnnxSpeechToText(SpeechToText):
         self._decoder = self._model_dir / decoder
         self._joiner = self._model_dir / joiner
         self._tokens = self._model_dir / tokens
-        # The Apps env may still request more threads; this process runs on one core.
-        if num_threads != 1:
-            logger.info("clamping sherpa ONNX threads from %s to 1", num_threads)
-        self._num_threads = 1
+        self._num_threads = num_threads
         self._sample_rate = sample_rate
         self._recognizer = None
         self._load_lock = asyncio.Lock()
