@@ -15,6 +15,9 @@ Days per week:
 Program structure (fixed — use exactly this value in program.program_type):
 {{ program_type }}
 
+Russian name for this structure (use in reply only):
+{{ program_type_label }}
+
 Structure guide:
 {{ program_type_hint }}
 
@@ -45,7 +48,7 @@ Rules:
 - Prefer variety within the week: do not reuse the same `exercise_id` across days when catalog alternatives exist. For full_body, vary accessories and machine/cable options day to day; only repeat a key compound when progression truly needs it.
 - Every day must include `warmup` and `cooldown` as short Russian text (1–3 sentences). These are separate steps shown before and after working exercises — not exercise slots and not interactive buttons.
 - Do **not** put warm-up or cool-down movements into `slots`; only use the `warmup` / `cooldown` text fields. Match warm-up to that day's main work (e.g. hips/knees before squats).
-- Every `exercise_id` must come from the catalog. Prefer catalog ids. If you cannot match an exercise, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
+- Every `exercise_id` must be a full UUID copied exactly from the catalog. Prefer catalog ids. Never invent ids, never truncate them, never put exercise names in `exercise_id`. If you cannot match an exercise, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - `weight_kg` is the planned working load in kilograms. Set a concrete starting weight for every loaded exercise (machines, free weights, cables, smith). Estimate from body weight, experience, equipment, and goal — conservative for beginners. Use `null` only for true bodyweight work or duration-based slots (plank, cardio intervals) where external load does not apply.
 - Respect limitations and equipment from the profile. Current limitations are hard constraints: never prescribe movements, loads, or styles that conflict with them (e.g. no deadlift loading, no free weights, avoid straining / Valsalva, back hernia → avoid spinal compression and max-effort holds).
@@ -55,7 +58,7 @@ Rules:
   - `activity_level` (outside the gym): `high` → bias the week toward more `light` / `recovery` days; `sedentary` → volume may be slightly higher for the same goal if recovery allows.
   - `body_fat_pct` / `body_fat_unknown` / `circumferences_cm`: when goal is `fat_loss`, use known composition cues for emphasis only (not medicine). If missing or unknown — do not invent a body-fat %.
   - Ignore `supplements` / `diet_prefs` / `pharma` for programming (nutrition noise). Never recommend drugs or pharma protocols.
-- `reply` follows the system rules.
+- `reply` follows the system rules. Name the structure with «{{ program_type_label }}» — never write enum codes like `push_pull` or `full_body` in reply.
 
 Example shape (types must match the schema above):
 {

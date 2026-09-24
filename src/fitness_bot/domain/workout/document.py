@@ -200,6 +200,37 @@ class WorkoutDocument(BaseModel):
                 if slot.exercise_id is not None and slot.exercise_id not in allowed:
                     raise InvalidWorkoutDocument(f"unknown exercise_id: {slot.exercise_id}")
 
+    def with_unknown_ids_unresolved(self, allowed: set[UUID]) -> WorkoutDocument:
+        """Turn invented / stale catalog UUIDs into unresolved slots instead of failing.
+
+        LLM planners often emit well-formed UUIDs that are not in the catalog. Keep the week
+        usable: the client can pick a real exercise via match flow.
+        """
+        days: list[WorkoutDay] = []
+        changed = False
+        for day in self.days:
+            slots: list[ExerciseSlot] = []
+            day_changed = False
+            for slot in day.slots:
+                if slot.exercise_id is None or slot.exercise_id in allowed:
+                    slots.append(slot)
+                    continue
+                day_changed = True
+                changed = True
+                slots.append(
+                    slot.model_copy(
+                        update={
+                            "exercise_id": None,
+                            "custom_request": slot.custom_request or "уточнить упражнение",
+                            "muscle_group": slot.muscle_group or "общее",
+                        },
+                    ),
+                )
+            days.append(day.model_copy(update={"slots": slots}) if day_changed else day)
+        if not changed:
+            return self
+        return self.model_copy(update={"days": days})
+
     def assert_approvable(self, *, require_schedule: bool = False) -> None:
         if not self.days:
             raise EmptyProgramWeek("program week has no days")

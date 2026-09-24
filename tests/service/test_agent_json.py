@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fitness_bot.domain.enums import ProgramType
+from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
 from fitness_bot.service.handlers.commands.agent_json import parse_workout_document
 
 
@@ -52,3 +53,89 @@ def test_parse_workout_document_reads_day_intensity() -> None:
         },
     )
     assert document.days[0].intensity.value == "heavy"
+
+
+def test_parse_workout_document_salvages_non_uuid_exercise_id() -> None:
+    document = parse_workout_document(
+        {
+            "program_type": "push_pull",
+            "days": [
+                {
+                    "weekday": 1,
+                    "title": "Жимы",
+                    "position": 1,
+                    "slots": [
+                        {
+                            "exercise_id": "Жим лёжа",
+                            "sets": 3,
+                            "reps": 8,
+                            "rest_seconds": 90,
+                            "rpe": 7,
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+    slot = document.days[0].slots[0]
+    assert slot.exercise_id is None
+    assert slot.custom_request == "Жим лёжа"
+    assert slot.muscle_group == "общее"
+
+
+def test_parse_workout_document_ignores_truncated_uuid() -> None:
+    document = parse_workout_document(
+        {
+            "program_type": "push_pull",
+            "days": [
+                {
+                    "weekday": 1,
+                    "title": "Тяги",
+                    "position": 1,
+                    "slots": [{"exercise_id": "54648257-b93d-4363-9792", "reps": 10}],
+                },
+            ],
+        },
+    )
+    slot = document.days[0].slots[0]
+    assert slot.exercise_id is None
+    assert slot.custom_request == "54648257-b93d-4363-9792"
+    assert slot.muscle_group == "общее"
+
+
+def test_with_unknown_ids_unresolved() -> None:
+    known = uuid4()
+    unknown = uuid4()
+    document = WorkoutDocument(
+        program_type=ProgramType.PUSH_PULL,
+        days=[
+            WorkoutDay(
+                weekday=1,
+                title="Жимы",
+                position=1,
+                slots=[
+                    ExerciseSlot(
+                        position=1,
+                        exercise_id=known,
+                        sets=3,
+                        reps=8,
+                        rest_seconds=90,
+                        rpe=7,
+                    ),
+                    ExerciseSlot(
+                        position=2,
+                        exercise_id=unknown,
+                        sets=3,
+                        reps=10,
+                        rest_seconds=60,
+                        rpe=7,
+                    ),
+                ],
+            ),
+        ],
+    )
+    cleaned = document.with_unknown_ids_unresolved({known})
+    assert cleaned.days[0].slots[0].exercise_id == known
+    assert cleaned.days[0].slots[1].exercise_id is None
+    assert cleaned.days[0].slots[1].custom_request == "уточнить упражнение"
+    assert cleaned.days[0].slots[1].muscle_group == "общее"

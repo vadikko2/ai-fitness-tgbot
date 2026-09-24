@@ -15,7 +15,11 @@ from fitness_bot.domain.errors import (
     InvalidWorkoutDocument,
     UnresolvedExercises,
 )
-from fitness_bot.domain.program_catalog import planner_program_type_hint, planner_training_styles_guide
+from fitness_bot.domain.program_catalog import (
+    planner_program_type_hint,
+    planner_training_styles_guide,
+    program_type_label,
+)
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.document import WorkoutDay, WorkoutDocument
 from fitness_bot.domain.workout.program import Program
@@ -189,6 +193,7 @@ class ProposeProgramCommandHandler(
                         "weekdays_json": json.dumps(sorted(user.training_weekdays), ensure_ascii=False),
                         "days_per_week": user.days_per_week,
                         "program_type": program_type.value,
+                        "program_type_label": program_type_label(program_type),
                         "program_type_hint": planner_program_type_hint(program_type),
                         "training_styles_guide": planner_training_styles_guide(),
                         "catalog_json": catalog_json(records),
@@ -209,6 +214,7 @@ class ProposeProgramCommandHandler(
                     program_raw = {**program_raw, "program_type": program_type.value}
                 document = parse_workout_document(program_raw, default_program_type=program_type)
                 document = document.model_copy(update={"program_type": program_type})
+                document = document.with_unknown_ids_unresolved(allowed)
                 document.assert_catalog_ids(allowed)
                 document.assert_schedule_complete(days_per_week=user.days_per_week)
                 reply = clip_reply(payload.get("reply"))
@@ -310,6 +316,7 @@ class ProposeProgramChangeCommandHandler(
                         },
                     )
                     document = current.replace_day(edited)
+                document = document.with_unknown_ids_unresolved(allowed)
                 document.assert_catalog_ids(allowed)
                 document.assert_schedule_complete()
                 reply = clip_reply(payload.get("reply"))
@@ -511,6 +518,7 @@ class GenerateNextWeekCommandHandler(
                     raise InvalidWorkoutDocument("response.document must be an object")
                 document = parse_workout_document(document_raw, default_program_type=program.program_type)
                 document = document.model_copy(update={"program_type": program.program_type})
+                document = document.with_unknown_ids_unresolved(allowed)
                 document.assert_catalog_ids(allowed)
                 document.assert_schedule_complete(days_per_week=len(program.days) or None)
                 reply = clip_reply(payload.get("reply"))

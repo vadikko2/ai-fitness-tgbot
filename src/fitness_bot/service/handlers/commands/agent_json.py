@@ -85,7 +85,11 @@ def extract_json_object(text: str) -> dict[str, Any]:
 def _parse_uuid(value: object) -> UUID | None:
     if value is None or value == "" or value == "null":
         return None
-    return UUID(str(value))
+    try:
+        return UUID(str(value).strip())
+    except (ValueError, TypeError, AttributeError):
+        # Models often invent truncated ids or put exercise names here.
+        return None
 
 
 def _parse_decimal(value: object) -> Decimal | None:
@@ -131,6 +135,15 @@ def _assert_training_style_mix(days: list[WorkoutDay]) -> None:
         raise InvalidWorkoutDocument("not all days may use hit training style; mix styles across the week")
 
 
+def _nonempty_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() == "null":
+        return None
+    return text
+
+
 def _parse_slot(raw: dict[str, Any], *, default_position: int = 1) -> ExerciseSlot:
     actual_raw = raw.get("actual")
     actual = _parse_actual(actual_raw) if isinstance(actual_raw, dict) else None
@@ -146,13 +159,22 @@ def _parse_slot(raw: dict[str, Any], *, default_position: int = 1) -> ExerciseSl
     assert rest_seconds is not None
     rpe = _parse_int(raw.get("rpe"), default=7)
     assert rpe is not None
-    custom = str(raw["custom_request"]).strip() if raw.get("custom_request") else None
-    muscle = str(raw["muscle_group"]).strip() if raw.get("muscle_group") else None
+    custom = _nonempty_str(raw.get("custom_request"))
+    muscle = _nonempty_str(raw.get("muscle_group"))
+    raw_exercise_id = raw.get("exercise_id")
+    exercise_id = _parse_uuid(raw_exercise_id)
+    if exercise_id is None:
+        # Prefer an explicit custom_request; otherwise salvage a mistaken name/token from exercise_id.
+        salvage = (
+            _nonempty_str(raw_exercise_id) or _nonempty_str(raw.get("name")) or _nonempty_str(raw.get("exercise_name"))
+        )
+        custom = custom or salvage or "уточнить упражнение"
+        muscle = muscle or "общее"
     return ExerciseSlot(
         position=position,
-        exercise_id=_parse_uuid(raw.get("exercise_id")),
-        custom_request=custom or None,
-        muscle_group=muscle or None,
+        exercise_id=exercise_id,
+        custom_request=custom if exercise_id is None else None,
+        muscle_group=muscle if exercise_id is None else None,
         sets=sets,
         reps=reps,
         duration_seconds=duration_seconds,
