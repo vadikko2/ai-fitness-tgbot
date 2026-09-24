@@ -15,7 +15,6 @@ Skills for managing Timeweb Cloud infrastructure through the Timeweb Cloud MCP s
 - **Cloud server (VDS):** create, reboot, backups, snapshots, disks, PTR, SSH keys, monitoring → `.cursor/skills/timeweb-servers/SKILL.md`
 - **Billing:** balance, charges, catalog prices → `.cursor/skills/timeweb-billing/SKILL.md`
 - **AI agents / RAG / models / token packages** → `.cursor/skills/timeweb-ai/SKILL.md`
-- **Exercise catalog → Timeweb KB sync** → `.cursor/skills/fitness-kb-sync/SKILL.md`
 - **Managed Kubernetes** → `.cursor/skills/timeweb-kubernetes/SKILL.md`
 - **Managed databases** → `.cursor/skills/timeweb-databases/SKILL.md`
 - **S3 object storage** → `.cursor/skills/timeweb-s3/SKILL.md`
