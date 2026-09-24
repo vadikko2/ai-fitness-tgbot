@@ -5,6 +5,7 @@ import pytest
 from fitness_bot.infrastructure.adapters.language_model import (
     DEFAULT_TIMEWEB_BASE_URL,
     TimewebLanguageModel,
+    _message_body,
     normalize_openai_compatible_root,
 )
 
@@ -27,6 +28,13 @@ from fitness_bot.infrastructure.adapters.language_model import (
 )
 def test_normalize_openai_compatible_root(raw: str, expected: str) -> None:
     assert normalize_openai_compatible_root(raw) == expected
+
+
+def test_message_body_omits_sampling_params_rejected_by_gpt5() -> None:
+    body = _message_body(system="s", user="u", model="gpt-5.4-nano", stream=False)
+    assert "temperature" not in body
+    assert "max_tokens" not in body
+    assert body["response_format"] == {"type": "json_object"}
 
 
 def test_timeweb_chat_completions_url_never_doubles_path() -> None:

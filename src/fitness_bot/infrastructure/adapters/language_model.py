@@ -11,8 +11,9 @@ from fitness_bot.service.ports.language_model import LanguageModel
 
 logger = logging.getLogger(__name__)
 
-# Timeweb Cloud OpenAI-compatible DeepSeek V4 Flash (simpler of the two DeepSeek SKUs).
-DEFAULT_TIMEWEB_MODEL = "deepseek-v4-flash"
+# Request model name is ignored by an AI Agent endpoint: the agent uses its own model
+# (Fitness Bot → GPT 5.4 Nano). Kept for OpenAI-compatible clients.
+DEFAULT_TIMEWEB_MODEL = "gpt-5.4-nano"
 # AI Gateway OpenAI-compatible root (docs: https://timeweb.cloud/docs/ai-agents/api-usage/ai-gateway).
 DEFAULT_TIMEWEB_BASE_URL = "https://api.timeweb.ai/v1"
 _CHAT_COMPLETIONS_SUFFIX = "/chat/completions"
@@ -30,10 +31,11 @@ def normalize_openai_compatible_root(base_url: str) -> str:
     return root
 
 
-def _message_body(*, system: str, user: str, model: str, temperature: float, stream: bool) -> dict[str, Any]:
+def _message_body(*, system: str, user: str, model: str, stream: bool) -> dict[str, Any]:
+    # GPT-5 agents reject `temperature` and `max_tokens` (use max_completion_tokens).
+    # Sampling stays on the agent (GPT 5.4 Nano has no temperature; reasoning_effort defaults to none).
     return {
         "model": model,
-        "temperature": temperature,
         "stream": stream,
         "messages": [
             {"role": "system", "content": system},
@@ -64,7 +66,6 @@ class TimewebLanguageModel(LanguageModel):
         api_key: str,
         base_url: str,
         model: str = DEFAULT_TIMEWEB_MODEL,
-        temperature: float = 0.2,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         if not api_key.strip():
@@ -76,7 +77,6 @@ class TimewebLanguageModel(LanguageModel):
         if not self._base_url:
             raise ValueError("TIMEWEB_BASE_URL is required for LanguageModel")
         self._model = model
-        self._temperature = temperature
         self._client = client
         self._owns_client = client is None
 
@@ -115,7 +115,6 @@ class TimewebLanguageModel(LanguageModel):
             system=system,
             user=user,
             model=self._model,
-            temperature=self._temperature,
             stream=True,
         )
         async with client.stream(
