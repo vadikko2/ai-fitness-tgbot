@@ -41,7 +41,7 @@ class SherpaOnnxSpeechToText(SpeechToText):
         decoder: str = "decoder.int8.onnx",
         joiner: str = "joiner.int8.onnx",
         tokens: str = "tokens.txt",
-        num_threads: int = 2,
+        num_threads: int = 1,
         sample_rate: int = 16_000,
     ) -> None:
         self._model_dir = Path(model_dir)
@@ -49,10 +49,15 @@ class SherpaOnnxSpeechToText(SpeechToText):
         self._decoder = self._model_dir / decoder
         self._joiner = self._model_dir / joiner
         self._tokens = self._model_dir / tokens
-        self._num_threads = num_threads
+        # The Apps env may still request more threads; this process runs on one core.
+        if num_threads != 1:
+            logger.info("clamping sherpa ONNX threads from %s to 1", num_threads)
+        self._num_threads = 1
         self._sample_rate = sample_rate
         self._recognizer = None
-        self._lock = asyncio.Lock()
+        self._load_lock = asyncio.Lock()
+        # One voice at a time. Two concurrent decodes would each take num_threads cores.
+        self._infer_lock = asyncio.Lock()
 
     def _load_recognizer(self):
         missing = [
@@ -80,7 +85,7 @@ class SherpaOnnxSpeechToText(SpeechToText):
     async def _get_recognizer(self):
         if self._recognizer is not None:
             return self._recognizer
-        async with self._lock:
+        async with self._load_lock:
             if self._recognizer is None:
                 self._recognizer = await asyncio.to_thread(self._load_recognizer)
         return self._recognizer
@@ -135,13 +140,14 @@ class SherpaOnnxSpeechToText(SpeechToText):
 
     async def transcribe(self, *, audio: bytes, content_type: str) -> str:
         _ = content_type  # Telegram voice is typically audio/ogg; ffmpeg sniffs the container.
-        samples, rate = await asyncio.to_thread(
-            self._audio_to_float32_mono,
-            audio,
-            sample_rate=self._sample_rate,
-        )
-        recognizer = await self._get_recognizer()
-        return await asyncio.to_thread(self._recognize_sync, recognizer, samples, rate)
+        async with self._infer_lock:
+            samples, rate = await asyncio.to_thread(
+                self._audio_to_float32_mono,
+                audio,
+                sample_rate=self._sample_rate,
+            )
+            recognizer = await self._get_recognizer()
+            return await asyncio.to_thread(self._recognize_sync, recognizer, samples, rate)
 
 
 def build_speech_to_text(
