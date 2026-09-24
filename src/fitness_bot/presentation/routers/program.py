@@ -15,7 +15,13 @@ from fitness_bot.domain.program_catalog import (
     structure_choice_items,
     training_style_label,
 )
-from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument, unresolved_slot_refs
+from fitness_bot.domain.workout.document import (
+    ExerciseSlot,
+    WorkoutDay,
+    WorkoutDocument,
+    is_matchable_custom_request,
+    unresolved_slot_refs,
+)
 from fitness_bot.presentation.keyboards import (
     INTENSITY_LABELS,
     PROGRAM_TYPE_LABELS,
@@ -294,6 +300,8 @@ async def render_proposal(
     if document is None:
         return
     for day_position, slot_position, custom_request, muscle_group in unresolved_slot_refs(document):
+        if not is_matchable_custom_request(custom_request):
+            continue
         matches = await mediator.send(
             MatchExercisesQuery(query=custom_request, muscle=muscle_group, limit=5),
         )

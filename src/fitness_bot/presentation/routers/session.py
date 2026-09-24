@@ -10,7 +10,12 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput, ProgramType, SessionStatus
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDocument, unresolved_slot_refs
+from fitness_bot.domain.workout.document import (
+    ExerciseSlot,
+    WorkoutDocument,
+    is_matchable_custom_request,
+    unresolved_slot_refs,
+)
 from fitness_bot.presentation.keyboards import (
     INTENSITY_LABELS,
     PROGRAM_TYPE_LABELS,
@@ -466,6 +471,8 @@ async def render_workout_edit_proposal(
         return
     for day_position, slot_position, custom_request, muscle_group in unresolved_slot_refs(document):
         _ = day_position
+        if not is_matchable_custom_request(custom_request):
+            continue
         matches = await mediator.send(
             MatchExercisesQuery(query=custom_request, muscle=muscle_group, limit=5),
         )

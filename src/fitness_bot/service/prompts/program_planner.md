@@ -60,6 +60,11 @@ Rules:
   - Ignore `supplements` / `diet_prefs` / `pharma` for programming (nutrition noise). Never recommend drugs or pharma protocols.
 - `reply` follows the system rules. Name the structure with «{{ program_type_label }}» — never write enum codes like `push_pull` or `full_body` in reply.
 
+{% if validation_hint %}
+Correction required:
+{{ validation_hint }}
+{% endif %}
+
 Example shape (types must match the schema above):
 {
   "program_type": "{{ program_type }}",

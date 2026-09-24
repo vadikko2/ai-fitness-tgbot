@@ -334,3 +334,17 @@ def unresolved_slot_refs(document: WorkoutDocument) -> list[tuple[int, int, str,
                 ),
             )
     return refs
+
+
+def is_matchable_custom_request(custom_request: str) -> bool:
+    """Skip placeholder / UUID-junk queries that never match the catalog."""
+    text = custom_request.strip()
+    if not text:
+        return False
+    lowered = text.casefold()
+    if lowered in {"уточнить упражнение", "упражнение", "exercise", "unknown"}:
+        return False
+    compact = "".join(ch for ch in text if ch.isalnum())
+    if len(compact) >= 8 and all(ch in "0123456789abcdefABCDEF" for ch in compact):
+        return False
+    return True

@@ -83,24 +83,25 @@ def test_parse_workout_document_salvages_non_uuid_exercise_id() -> None:
     assert slot.muscle_group == "общее"
 
 
-def test_parse_workout_document_ignores_truncated_uuid() -> None:
-    document = parse_workout_document(
-        {
-            "program_type": "push_pull",
-            "days": [
-                {
-                    "weekday": 1,
-                    "title": "Тяги",
-                    "position": 1,
-                    "slots": [{"exercise_id": "54648257-b93d-4363-9792", "reps": 10}],
-                },
-            ],
-        },
-    )
-    slot = document.days[0].slots[0]
-    assert slot.exercise_id is None
-    assert slot.custom_request == "54648257-b93d-4363-9792"
-    assert slot.muscle_group == "общее"
+def test_parse_workout_document_rejects_truncated_uuid() -> None:
+    import pytest
+
+    from fitness_bot.domain.errors import InvalidWorkoutDocument
+
+    with pytest.raises(InvalidWorkoutDocument, match="catalog exercise_id"):
+        parse_workout_document(
+            {
+                "program_type": "push_pull",
+                "days": [
+                    {
+                        "weekday": 1,
+                        "title": "Тяги",
+                        "position": 1,
+                        "slots": [{"exercise_id": "54648257-b93d-4363-9792", "reps": 10}],
+                    },
+                ],
+            },
+        )
 
 
 def test_with_unknown_ids_unresolved() -> None:
@@ -139,3 +140,11 @@ def test_with_unknown_ids_unresolved() -> None:
     assert cleaned.days[0].slots[1].exercise_id is None
     assert cleaned.days[0].slots[1].custom_request == "уточнить упражнение"
     assert cleaned.days[0].slots[1].muscle_group == "общее"
+
+
+def test_is_matchable_custom_request() -> None:
+    from fitness_bot.domain.workout.document import is_matchable_custom_request
+
+    assert is_matchable_custom_request("Жим лёжа")
+    assert not is_matchable_custom_request("уточнить упражнение")
+    assert not is_matchable_custom_request("54648257-b93d-4363-9792")

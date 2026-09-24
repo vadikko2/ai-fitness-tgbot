@@ -144,6 +144,14 @@ def _nonempty_str(value: object) -> str | None:
     return text
 
 
+def _looks_like_id_token(text: str) -> bool:
+    """True for UUID fragments / hex junk that must not become a match query."""
+    compact = "".join(ch for ch in text if ch.isalnum())
+    if len(compact) < 8:
+        return False
+    return all(ch in "0123456789abcdefABCDEF" for ch in compact)
+
+
 def _parse_slot(raw: dict[str, Any], *, default_position: int = 1) -> ExerciseSlot:
     actual_raw = raw.get("actual")
     actual = _parse_actual(actual_raw) if isinstance(actual_raw, dict) else None
@@ -164,11 +172,15 @@ def _parse_slot(raw: dict[str, Any], *, default_position: int = 1) -> ExerciseSl
     raw_exercise_id = raw.get("exercise_id")
     exercise_id = _parse_uuid(raw_exercise_id)
     if exercise_id is None:
-        # Prefer an explicit custom_request; otherwise salvage a mistaken name/token from exercise_id.
         salvage = (
             _nonempty_str(raw_exercise_id) or _nonempty_str(raw.get("name")) or _nonempty_str(raw.get("exercise_name"))
         )
-        custom = custom or salvage or "уточнить упражнение"
+        if salvage is not None and not _looks_like_id_token(salvage):
+            custom = custom or salvage
+        if custom is None:
+            raise InvalidWorkoutDocument(
+                f"slot needs a catalog exercise_id UUID or custom_request; got exercise_id={raw_exercise_id!r}",
+            )
         muscle = muscle or "общее"
     return ExerciseSlot(
         position=position,

@@ -183,48 +183,61 @@ class ProposeProgramCommandHandler(
                 ensure_ascii=False,
             )
             payload: dict[str, Any] | None = None
-            try:
-                payload = await complete_json(
-                    self._language_model,
-                    prompt_name="program_planner.md",
-                    prompt_context={
-                        "profile_json": profile_json,
-                        "goal": user.goal.value,
-                        "weekdays_json": json.dumps(sorted(user.training_weekdays), ensure_ascii=False),
-                        "days_per_week": user.days_per_week,
-                        "program_type": program_type.value,
-                        "program_type_label": program_type_label(program_type),
-                        "program_type_hint": planner_program_type_hint(program_type),
-                        "training_styles_guide": planner_training_styles_guide(),
-                        "catalog_json": catalog_json(records),
-                        "schema_json": workout_document_schema_json(),
-                    },
-                )
-            except AgentUnavailable:
-                return cmds.ProposeProgramCommandResult(agent_unavailable=True)
-            except InvalidWorkoutDocument as exc:
-                logger.warning("propose_program json failed: %s", exc)
-                return cmds.ProposeProgramCommandResult(schema_failed=True)
+            document: WorkoutDocument | None = None
+            reply = ""
+            validation_hint = ""
+            for attempt in range(2):
+                try:
+                    payload = await complete_json(
+                        self._language_model,
+                        prompt_name="program_planner.md",
+                        prompt_context={
+                            "profile_json": profile_json,
+                            "goal": user.goal.value,
+                            "weekdays_json": json.dumps(sorted(user.training_weekdays), ensure_ascii=False),
+                            "days_per_week": user.days_per_week,
+                            "program_type": program_type.value,
+                            "program_type_label": program_type_label(program_type),
+                            "program_type_hint": planner_program_type_hint(program_type),
+                            "training_styles_guide": planner_training_styles_guide(),
+                            "catalog_json": catalog_json(records),
+                            "schema_json": workout_document_schema_json(),
+                            "validation_hint": validation_hint,
+                        },
+                    )
+                except AgentUnavailable:
+                    return cmds.ProposeProgramCommandResult(agent_unavailable=True)
+                except InvalidWorkoutDocument as exc:
+                    logger.warning("propose_program json failed: %s", exc)
+                    return cmds.ProposeProgramCommandResult(schema_failed=True)
 
-            try:
-                program_raw = payload.get("program")
-                if not isinstance(program_raw, dict):
-                    raise InvalidWorkoutDocument("response.program must be an object")
-                if "program_type" not in program_raw:
-                    program_raw = {**program_raw, "program_type": program_type.value}
-                document = parse_workout_document(program_raw, default_program_type=program_type)
-                document = document.model_copy(update={"program_type": program_type})
-                document = document.with_unknown_ids_unresolved(allowed)
-                document.assert_catalog_ids(allowed)
-                document.assert_schedule_complete(days_per_week=user.days_per_week)
-                reply = clip_reply(payload.get("reply"))
-            except (InvalidWorkoutDocument, ValueError, TypeError, KeyError) as exc:
-                logger.warning("propose_program schema failed: %s", exc)
-                return cmds.ProposeProgramCommandResult(
-                    schema_failed=True,
-                    reply=reply_from_payload(payload),
-                )
+                try:
+                    program_raw = payload.get("program")
+                    if not isinstance(program_raw, dict):
+                        raise InvalidWorkoutDocument("response.program must be an object")
+                    if "program_type" not in program_raw:
+                        program_raw = {**program_raw, "program_type": program_type.value}
+                    document = parse_workout_document(program_raw, default_program_type=program_type)
+                    document = document.model_copy(update={"program_type": program_type})
+                    document.assert_catalog_ids(allowed)
+                    document.assert_schedule_complete(days_per_week=user.days_per_week)
+                    reply = clip_reply(payload.get("reply"))
+                    break
+                except (InvalidWorkoutDocument, ValueError, TypeError, KeyError) as exc:
+                    validation_hint = (
+                        f"Previous response failed validation: {exc}. "
+                        "Copy exercise_id values EXACTLY from catalog_json (full UUID). "
+                        "Never invent or truncate ids. If unmatched, set exercise_id null "
+                        "and fill custom_request + muscle_group with a real Russian exercise name."
+                    )
+                    logger.warning("propose_program schema failed (attempt %s): %s", attempt + 1, exc)
+                    if attempt == 1:
+                        return cmds.ProposeProgramCommandResult(
+                            schema_failed=True,
+                            reply=reply_from_payload(payload),
+                        )
 
+            assert document is not None
             pending.replace_document(document, reply=reply)
             if pending.base_program_id is None and user.active_program_id is not None:
                 pending.base_program_id = user.active_program_id
@@ -316,7 +329,6 @@ class ProposeProgramChangeCommandHandler(
                         },
                     )
                     document = current.replace_day(edited)
-                document = document.with_unknown_ids_unresolved(allowed)
                 document.assert_catalog_ids(allowed)
                 document.assert_schedule_complete()
                 reply = clip_reply(payload.get("reply"))
@@ -518,7 +530,6 @@ class GenerateNextWeekCommandHandler(
                     raise InvalidWorkoutDocument("response.document must be an object")
                 document = parse_workout_document(document_raw, default_program_type=program.program_type)
                 document = document.model_copy(update={"program_type": program.program_type})
-                document = document.with_unknown_ids_unresolved(allowed)
                 document.assert_catalog_ids(allowed)
                 document.assert_schedule_complete(days_per_week=len(program.days) or None)
                 reply = clip_reply(payload.get("reply"))
