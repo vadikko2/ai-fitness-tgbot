@@ -33,7 +33,7 @@ Rules:
 - Every day must include `warmup` and `cooldown` as short Russian text (1–3 sentences each). These are separate session steps: warmup first, then working `slots`, then cooldown last.
 - Do **not** put warm-up or cool-down movements into `slots` and do not invent per-movement buttons for them — only fill the `warmup` / `cooldown` text fields.
 - Keep or improve existing warmup/cooldown text when editing unless the user asked to change them; if missing, invent sensible ones for that day's work.
-- `exercise_id` must be an id from the catalog. If the user names an exercise that is not in the catalog, set `exercise_id` to null, `custom_request` to their words, and `muscle_group` to the muscle they named. Do not invent exercise ids.
+- CRITICAL — `exercise_id`: copy the full UUID verbatim from the catalog. One wrong character, a truncated id, an invented id, or an exercise name in `exercise_id` breaks the edit for the user. If the exercise is not in the catalog, set `exercise_id` to null, `custom_request` to their words, and `muscle_group` to the muscle they named.
 - If the message is off topic, return the document unchanged.
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - Preserve existing `weight_kg` unless the user asks to change load. When adding a new loaded exercise, set a concrete starting `weight_kg`; use `null` only for bodyweight or duration-based slots.

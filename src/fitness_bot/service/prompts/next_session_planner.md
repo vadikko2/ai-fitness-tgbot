@@ -15,7 +15,8 @@ Goal:
 Catalog:
 {{ catalog_json }}
 
-Adjust weight and volume from the history. Keep exercise_id values from the catalog.
+Adjust weight and volume from the history.
+CRITICAL — `exercise_id`: keep or copy full UUIDs verbatim from the catalog. Invented, truncated, or name-as-id values break the session draft. If unsure, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
 Every loaded slot must have a concrete `weight_kg` (kg). Progress or deload from recent actuals when available; if history has no load yet, set a conservative starting weight from body weight, experience, and equipment. Leave `weight_kg` null only for bodyweight or duration-based slots.
 Preserve or set day `intensity` (`recovery` | `light` | `medium` | `heavy`); default `medium` if unsure.
 Keep or refresh `warmup` and `cooldown` as short Russian text steps (not slots) at the start and end of the session.

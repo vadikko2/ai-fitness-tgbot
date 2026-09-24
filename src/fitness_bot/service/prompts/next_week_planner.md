@@ -30,7 +30,7 @@ Rules:
 - Prefer variety: avoid repeating the same `exercise_id` across days when catalog alternatives exist; keep intentional compound repeats only when progression needs them.
 - Every day must include `warmup` and `cooldown` as short Russian text steps (not slots). Keep existing text when still appropriate; otherwise refresh to match the day's work.
 - Do not put warm-up/cool-down into `slots`.
-- Every `exercise_id` must come from the catalog. Prefer catalog ids. If you cannot match an exercise, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
+- CRITICAL — `exercise_id`: every non-null value must be a full UUID copied verbatim from the catalog. Invented, truncated, or name-as-id values reject the whole week. If unsure, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
 - Each day needs ISO `weekday` (1=Mon … 7=Sun), `title`, `position`, `intensity` (`recovery` | `light` | `medium` | `heavy`), `warmup`, `cooldown`, and `slots`.
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - Keep or update `weight_kg` for every loaded exercise (machines, free weights, cables). Progress or deload from history when justified; if a loaded slot still has `null`, fill a conservative starting weight. Leave `null` only for bodyweight or duration-based slots.

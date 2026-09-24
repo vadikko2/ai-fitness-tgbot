@@ -48,7 +48,11 @@ Rules:
 - Prefer variety within the week: do not reuse the same `exercise_id` across days when catalog alternatives exist. For full_body, vary accessories and machine/cable options day to day; only repeat a key compound when progression truly needs it.
 - Every day must include `warmup` and `cooldown` as short Russian text (1–3 sentences). These are separate steps shown before and after working exercises — not exercise slots and not interactive buttons.
 - Do **not** put warm-up or cool-down movements into `slots`; only use the `warmup` / `cooldown` text fields. Match warm-up to that day's main work (e.g. hips/knees before squats).
-- Every `exercise_id` must be a full UUID copied exactly from the catalog. Prefer catalog ids. Never invent ids, never truncate them, never put exercise names in `exercise_id`. If you cannot match an exercise, set `exercise_id` to null and fill `custom_request` plus `muscle_group`.
+- CRITICAL — `exercise_id` (hard failure if wrong):
+  - Every non-null `exercise_id` MUST be a full UUID copied **verbatim** from `catalog_json` above (same characters, same hyphens, no shortening).
+  - NEVER invent a UUID. NEVER truncate. NEVER rearrange digits. NEVER put a Russian/English exercise name in `exercise_id`.
+  - If you are not 100% sure the id is in `catalog_json`, set `exercise_id` to null and fill `custom_request` (real exercise name in Russian) plus `muscle_group`.
+  - A single bad `exercise_id` rejects the whole week: the bot shows a parse error and the user gets no plan. Accuracy here beats creativity.
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - `weight_kg` is the planned working load in kilograms. Set a concrete starting weight for every loaded exercise (machines, free weights, cables, smith). Estimate from body weight, experience, equipment, and goal — conservative for beginners. Use `null` only for true bodyweight work or duration-based slots (plank, cardio intervals) where external load does not apply.
 - Respect limitations and equipment from the profile. Current limitations are hard constraints: never prescribe movements, loads, or styles that conflict with them (e.g. no deadlift loading, no free weights, avoid straining / Valsalva, back hernia → avoid spinal compression and max-effort holds).
