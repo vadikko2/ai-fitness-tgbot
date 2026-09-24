@@ -18,7 +18,8 @@ from fitness_bot.domain.coach.note import CoachNote
 from fitness_bot.domain.coach.profile import CoachProfile
 from fitness_bot.domain.coach.report import CoachReport
 from fitness_bot.domain.coach.review import CoachReview
-from fitness_bot.domain.enums import Goal
+from fitness_bot.domain.enums import FeedbackKind, Goal
+from fitness_bot.domain.feedback.ticket import FeedbackModeratorMessage, FeedbackTicket
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.proposal import Proposal
@@ -387,6 +388,40 @@ class ICoachesRepository(abc.ABC):
         raise NotImplementedError
 
 
+class IFeedbackRepository(abc.ABC):
+    @abc.abstractmethod
+    async def add(self, ticket: FeedbackTicket) -> FeedbackTicket:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get(self, ticket_id: UUID) -> FeedbackTicket | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def save(self, ticket: FeedbackTicket) -> FeedbackTicket:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_for_author(
+        self,
+        author_user_id: UUID,
+        kind: FeedbackKind,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[FeedbackTicket], int]:
+        """Submitted tickets newest first, plus the total count."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def add_moderator_message(self, message: FeedbackModeratorMessage) -> FeedbackModeratorMessage:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_moderator_messages(self, ticket_id: UUID) -> list[FeedbackModeratorMessage]:
+        raise NotImplementedError
+
+
 class IProposalsRepository(abc.ABC):
     @abc.abstractmethod
     async def get_by_id(self, proposal_id: UUID) -> Proposal | None:
@@ -545,6 +580,11 @@ class IUowRepositories(abc.ABC):
     def coaches(self) -> ICoachesRepository:
         raise NotImplementedError
 
+    @property
+    @abc.abstractmethod
+    def feedback(self) -> IFeedbackRepository:
+        raise NotImplementedError
+
 
 class IUow(abc.ABC):
     @contextlib.asynccontextmanager
@@ -573,6 +613,7 @@ class IUow(abc.ABC):
 # Re-export common types used by repository signatures for convenience.
 __all__ = [
     "ICoachesRepository",
+    "IFeedbackRepository",
     "IMeasurementRepository",
     "INutritionRepository",
     "IProgramsRepository",

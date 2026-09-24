@@ -10,6 +10,7 @@ from aiogram.enums import ParseMode
 
 from fitness_bot.presentation.routers.body import create_body_router
 from fitness_bot.presentation.routers.coach import create_coach_router
+from fitness_bot.presentation.routers.feedback import create_feedback_router
 from fitness_bot.presentation.routers.history import create_history_router
 from fitness_bot.presentation.routers.library import create_library_router
 from fitness_bot.presentation.routers.menu import create_menu_router
@@ -47,6 +48,7 @@ async def run() -> None:
     dispatcher.include_router(create_library_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_coach_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_moderator_router(jinja_env=jinja_env, mediator=mediator))
+    dispatcher.include_router(create_feedback_router(mediator=mediator))
     dispatcher.include_router(create_session_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_nutrition_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_menu_router(jinja_env=jinja_env))

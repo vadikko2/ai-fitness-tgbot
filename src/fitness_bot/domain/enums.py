@@ -38,6 +38,9 @@ class ExpectedInput(StrEnum):
     COACH_REPORT = "coach_report"
     COACH_EDIT_CLIENT = "coach_edit_client"
     PROGRESS_PHOTO = "progress_photo"
+    FEEDBACK_TEXT = "feedback_text"
+    FEEDBACK_PHOTO = "feedback_photo"
+    FEEDBACK_CANCEL_REPLY = "feedback_cancel_reply"
 
 
 class ProgressPhotoAngle(StrEnum):
@@ -155,6 +158,19 @@ class CoachNoteVisibility(StrEnum):
 class CoachReportStatus(StrEnum):
     OPEN = "open"
     RESOLVED = "resolved"
+
+
+class FeedbackKind(StrEnum):
+    IDEA = "idea"
+    PROBLEM = "problem"
+
+
+class FeedbackStatus(StrEnum):
+    DRAFT = "draft"
+    NEW = "new"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CANCELLED = "cancelled"
 
 
 class ProposalKind(StrEnum):

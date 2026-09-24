@@ -54,6 +54,14 @@ from fitness_bot.service.handlers.commands.coach import (
     UnlinkCoachClientCommandHandler,
     UpsertCoachReviewCommandHandler,
 )
+from fitness_bot.service.handlers.commands.feedback import (
+    AttachFeedbackPhotoCommandHandler,
+    ChangeFeedbackStatusCommandHandler,
+    RecordFeedbackModeratorMessageCommandHandler,
+    SetFeedbackBodyCommandHandler,
+    StartFeedbackDraftCommandHandler,
+    SubmitFeedbackCommandHandler,
+)
 from fitness_bot.service.handlers.commands.nutrition import GenerateNutritionCommandHandler
 from fitness_bot.service.handlers.commands.program import (
     ApproveProposalCommandHandler,
@@ -111,6 +119,10 @@ from fitness_bot.service.handlers.queries.coach import (
     ListProgramCatalogQueryHandler,
     PrepareCoachApplicationCredentialQueryHandler,
     SearchCoachesQueryHandler,
+)
+from fitness_bot.service.handlers.queries.feedback import (
+    GetMyFeedbackQueryHandler,
+    ListMyFeedbackQueryHandler,
 )
 from fitness_bot.service.handlers.queries.match_exercises import (
     GetExerciseGuideQueryHandler,
@@ -178,6 +190,14 @@ from fitness_bot.service.models.commands.coach import (
     UnlinkCoachClientCommand,
     UpsertCoachReviewCommand,
 )
+from fitness_bot.service.models.commands.feedback import (
+    AttachFeedbackPhotoCommand,
+    ChangeFeedbackStatusCommand,
+    RecordFeedbackModeratorMessageCommand,
+    SetFeedbackBodyCommand,
+    StartFeedbackDraftCommand,
+    SubmitFeedbackCommand,
+)
 from fitness_bot.service.models.commands.nutrition import GenerateNutritionCommand
 from fitness_bot.service.models.commands.program import (
     ApproveProposalCommand,
@@ -236,6 +256,7 @@ from fitness_bot.service.models.queries.coach import (
     PrepareCoachApplicationCredentialQuery,
     SearchCoachesQuery,
 )
+from fitness_bot.service.models.queries.feedback import GetMyFeedbackQuery, ListMyFeedbackQuery
 from fitness_bot.service.models.queries.match_exercises import (
     GetExerciseGuideQuery,
     GetExerciseNamesQuery,
@@ -440,6 +461,21 @@ class Container(containers.DeclarativeContainer):
         RecordModeratorApplicationMessageCommandHandler,
         uow=uow,
     )
+    start_feedback_draft_handler = providers.Factory(StartFeedbackDraftCommandHandler, uow=uow)
+    set_feedback_body_handler = providers.Factory(SetFeedbackBodyCommandHandler, uow=uow)
+    attach_feedback_photo_handler = providers.Factory(
+        AttachFeedbackPhotoCommandHandler,
+        uow=uow,
+        object_storage=object_storage,
+    )
+    submit_feedback_handler = providers.Factory(SubmitFeedbackCommandHandler, uow=uow)
+    record_feedback_moderator_message_handler = providers.Factory(
+        RecordFeedbackModeratorMessageCommandHandler,
+        uow=uow,
+    )
+    change_feedback_status_handler = providers.Factory(ChangeFeedbackStatusCommandHandler, uow=uow)
+    list_my_feedback_handler = providers.Factory(ListMyFeedbackQueryHandler, uow=uow)
+    get_my_feedback_handler = providers.Factory(GetMyFeedbackQueryHandler, uow=uow)
     start_coach_client_program_edit_handler = providers.Factory(
         StartCoachClientProgramEditCommandHandler,
         uow=uow,
@@ -604,6 +640,14 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(ResolveCoachReportCommand, ResolveCoachReportCommandHandler)
     request_map.bind(CreateCoachNoteCommand, CreateCoachNoteCommandHandler)
     request_map.bind(RecordModeratorApplicationMessageCommand, RecordModeratorApplicationMessageCommandHandler)
+    request_map.bind(StartFeedbackDraftCommand, StartFeedbackDraftCommandHandler)
+    request_map.bind(SetFeedbackBodyCommand, SetFeedbackBodyCommandHandler)
+    request_map.bind(AttachFeedbackPhotoCommand, AttachFeedbackPhotoCommandHandler)
+    request_map.bind(SubmitFeedbackCommand, SubmitFeedbackCommandHandler)
+    request_map.bind(RecordFeedbackModeratorMessageCommand, RecordFeedbackModeratorMessageCommandHandler)
+    request_map.bind(ChangeFeedbackStatusCommand, ChangeFeedbackStatusCommandHandler)
+    request_map.bind(ListMyFeedbackQuery, ListMyFeedbackQueryHandler)
+    request_map.bind(GetMyFeedbackQuery, GetMyFeedbackQueryHandler)
     request_map.bind(StartCoachClientProgramEditCommand, StartCoachClientProgramEditCommandHandler)
     request_map.bind(SaveProgramDraftCommand, SaveProgramDraftCommandHandler)
     request_map.bind(PublishProgramCommand, PublishProgramCommandHandler)

@@ -15,6 +15,7 @@ from fitness_bot.domain.enums import Goal
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.technique_video import TechniqueVideo
 from fitness_bot.infrastructure.uow.in_memory_coach import InMemoryCoachesRepository
+from fitness_bot.infrastructure.uow.in_memory_feedback import InMemoryFeedbackRepository
 from fitness_bot.infrastructure.uow.in_memory_program import (
     InMemoryProgramsRepository,
     InMemoryProposalsRepository,
@@ -22,6 +23,7 @@ from fitness_bot.infrastructure.uow.in_memory_program import (
 )
 from fitness_bot.service.interfaces.uow import (
     ICoachesRepository,
+    IFeedbackRepository,
     IMeasurementRepository,
     INutritionRepository,
     IProgramsRepository,
@@ -355,6 +357,7 @@ class InMemoryUowRepositories(IUowRepositories):
         technique_videos: InMemoryTechniqueVideosRepository | None = None,
         nutrition: InMemoryNutritionRepository | None = None,
         coaches: InMemoryCoachesRepository | None = None,
+        feedback: InMemoryFeedbackRepository | None = None,
     ) -> None:
         self._users = users or InMemoryUsersRepository()
         self._weights = weights or InMemoryWeightRepository()
@@ -368,6 +371,7 @@ class InMemoryUowRepositories(IUowRepositories):
         self._technique_videos = technique_videos or InMemoryTechniqueVideosRepository()
         self._nutrition = nutrition or InMemoryNutritionRepository()
         self._coaches = coaches or InMemoryCoachesRepository()
+        self._feedback = feedback or InMemoryFeedbackRepository()
 
     @property
     def users(self) -> InMemoryUsersRepository:
@@ -416,6 +420,10 @@ class InMemoryUowRepositories(IUowRepositories):
     @property
     def coaches(self) -> ICoachesRepository:
         return self._coaches
+
+    @property
+    def feedback(self) -> IFeedbackRepository:
+        return self._feedback
 
 
 class InMemoryUow(IUow):

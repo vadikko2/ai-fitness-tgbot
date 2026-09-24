@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from fitness_bot.domain.enums import ActivityLevel, ExperienceLevel, Goal, ProfileField, Sex, Supplement
+from fitness_bot.domain.enums import (
+    ActivityLevel,
+    ExperienceLevel,
+    FeedbackKind,
+    FeedbackStatus,
+    Goal,
+    ProfileField,
+    Sex,
+    Supplement,
+)
+from fitness_bot.domain.feedback.ticket import FEEDBACK_PAGE_SIZE
 from fitness_bot.domain.program_catalog import (
     PROGRAM_TYPE_COPY,
     PROGRAM_TYPE_FREQUENT,
@@ -142,6 +154,10 @@ def home_keyboard(
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             coach_btn,
+        ],
+        [
+            InlineKeyboardButton(text="💡 Есть идея", callback_data="fb_menu:idea"),
+            InlineKeyboardButton(text="⚠️ Сообщить о проблеме", callback_data="fb_menu:problem"),
         ],
     ]
     if show_coach_badge:
@@ -1123,3 +1139,114 @@ def match_session_exercises_keyboard(
     rows.append([InlineKeyboardButton(text=_EDIT_TEXT, callback_data="sess_edit")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+_FEEDBACK_MARK = {
+    FeedbackStatus.NEW: "⚪️",
+    FeedbackStatus.IN_PROGRESS: "🟡",
+    FeedbackStatus.RESOLVED: "🟢",
+    FeedbackStatus.CANCELLED: "🔴",
+}
+
+_FEEDBACK_WRITE = {
+    FeedbackKind.IDEA: "✍️ Предложить идею",
+    FeedbackKind.PROBLEM: "✍️ Описать проблему",
+}
+_FEEDBACK_MINE = {
+    FeedbackKind.IDEA: "📋 Мои идеи",
+    FeedbackKind.PROBLEM: "📋 Мои сообщения",
+}
+
+
+def feedback_status_mark(status: FeedbackStatus) -> str:
+    return _FEEDBACK_MARK[status]
+
+
+def feedback_list_label(status: FeedbackStatus, body: str) -> str:
+    preview = " ".join(body.split())
+    if len(preview) > 32:
+        preview = preview[:31] + "…"
+    return f"{feedback_status_mark(status)} {preview}"
+
+
+def feedback_menu_keyboard(kind: FeedbackKind) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=_FEEDBACK_WRITE[kind], callback_data=f"fb_new:{kind.value}")],
+            [InlineKeyboardButton(text=_FEEDBACK_MINE[kind], callback_data=f"fb_list:{kind.value}:0")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def feedback_compose_keyboard(ticket_id: UUID) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Отправить", callback_data=f"fb_send:{ticket_id}")],
+            [InlineKeyboardButton(text=_CANCEL, callback_data="fb_abort")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def feedback_list_keyboard(
+    *,
+    kind: FeedbackKind,
+    items: list[tuple[UUID, FeedbackStatus, str]],
+    offset: int,
+    total: int,
+) -> InlineKeyboardMarkup:
+    page = items[:FEEDBACK_PAGE_SIZE]
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=feedback_list_label(status, body),
+                callback_data=f"fb_open:{ticket_id}",
+            ),
+        ]
+        for ticket_id, status, body in page
+    ]
+    nav: list[InlineKeyboardButton] = []
+    if offset > 0:
+        prev = max(0, offset - FEEDBACK_PAGE_SIZE)
+        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"fb_list:{kind.value}:{prev}"))
+    if offset + FEEDBACK_PAGE_SIZE < total:
+        nav.append(
+            InlineKeyboardButton(
+                text="▶️",
+                callback_data=f"fb_list:{kind.value}:{offset + FEEDBACK_PAGE_SIZE}",
+            ),
+        )
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text=_BACK, callback_data=f"fb_menu:{kind.value}")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def feedback_detail_keyboard(kind: FeedbackKind) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К списку", callback_data=f"fb_list:{kind.value}:0")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def feedback_moderator_keyboard(ticket_id: UUID) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Решено", callback_data=f"fb_ok:{ticket_id}")],
+            [InlineKeyboardButton(text="🟡 Взять в работу", callback_data=f"fb_work:{ticket_id}")],
+            [InlineKeyboardButton(text="❌ Отменить", callback_data=f"fb_no:{ticket_id}")],
+        ],
+    )
+
+
+def feedback_author_notice_keyboard(ticket_id: UUID) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть", callback_data=f"fb_open:{ticket_id}")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )

@@ -15,6 +15,7 @@ from fitness_bot.presentation.flow_helpers import (
 )
 from fitness_bot.presentation.keyboards import home_keyboard
 from fitness_bot.presentation.routers.body import apply_weight_reminder_time
+from fitness_bot.presentation.routers.feedback import handle_feedback_utterance
 from fitness_bot.presentation.routers.program import (
     ask_proposal_slot_load,
     handle_proposal_utterance,
@@ -59,6 +60,9 @@ def voice_input_allowed(*, expected_input: ExpectedInput, expected_field: str | 
         ExpectedInput.COACH_APPLICATION,
         ExpectedInput.COACH_EDIT_CLIENT,
         ExpectedInput.MODERATOR_REJECT_COMMENT,
+        ExpectedInput.FEEDBACK_TEXT,
+        ExpectedInput.FEEDBACK_PHOTO,
+        ExpectedInput.FEEDBACK_CANCEL_REPLY,
     }:
         return True
     if expected_input == ExpectedInput.PROFILE_FIELD and expected_field in _VOICE_FREE_TEXT_PROFILE_FIELDS:
@@ -87,6 +91,15 @@ async def handle_user_utterance(
         return
 
     try:
+        if await handle_feedback_utterance(
+            message=message,
+            text=text,
+            mediator=mediator,
+            expected_input=workflow.expected_input,
+            expected_field=workflow.expected_field,
+        ):
+            return
+
         if workflow.expected_input == ExpectedInput.WEIGHT:
             await mediator.send(
                 RecordWeightCommand(

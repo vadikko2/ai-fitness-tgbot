@@ -13,6 +13,7 @@ from fitness_bot.infrastructure.db.repositories.body import (
     SqlAlchemyWeightRepository,
 )
 from fitness_bot.infrastructure.db.repositories.coach import SqlAlchemyCoachesRepository
+from fitness_bot.infrastructure.db.repositories.feedback import SqlAlchemyFeedbackRepository
 from fitness_bot.infrastructure.db.repositories.nutrition import SqlAlchemyNutritionRepository
 from fitness_bot.infrastructure.db.repositories.program import (
     SqlAlchemyProgramsRepository,
@@ -48,6 +49,7 @@ class SqlAlchemyUowRepositories(IUowRepositories):
         self._technique_videos = SqlAlchemyTechniqueVideosRepository(session)
         self._nutrition = SqlAlchemyNutritionRepository(session)
         self._coaches = SqlAlchemyCoachesRepository(session)
+        self._feedback = SqlAlchemyFeedbackRepository(session)
 
     @property
     def users(self) -> SqlAlchemyUsersRepository:
@@ -96,6 +98,10 @@ class SqlAlchemyUowRepositories(IUowRepositories):
     @property
     def coaches(self) -> SqlAlchemyCoachesRepository:
         return self._coaches
+
+    @property
+    def feedback(self) -> SqlAlchemyFeedbackRepository:
+        return self._feedback
 
 
 class SqlAlchemyUow(IUow):

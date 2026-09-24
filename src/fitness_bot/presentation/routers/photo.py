@@ -10,6 +10,7 @@ from jinja2 import Environment
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.keyboards import back_to_menu_keyboard, coach_apply_submitted_keyboard
+from fitness_bot.presentation.routers.feedback import accept_feedback_image
 from fitness_bot.presentation.routers.progress_photo import send_angle_prompt
 from fitness_bot.service.models.commands.body import RecordProgressPhotoCommand
 from fitness_bot.service.models.commands.coach import (
@@ -161,6 +162,21 @@ def create_photo_router(
             return
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
         photo = message.photo[-1]
+        if workflow.expected_input in {ExpectedInput.FEEDBACK_TEXT, ExpectedInput.FEEDBACK_PHOTO}:
+            file = await message.bot.get_file(photo.file_id)
+            assert file.file_path is not None
+            buf = await message.bot.download_file(file.file_path)
+            body = buf.read() if hasattr(buf, "read") else bytes(buf)
+            await accept_feedback_image(
+                message=message,
+                mediator=mediator,
+                file_id=photo.file_id,
+                body=body,
+                content_type="image/jpeg",
+                expected_input=workflow.expected_input,
+                expected_field=workflow.expected_field,
+            )
+            return
         file = await message.bot.get_file(photo.file_id)
         assert file.file_path is not None
         buf = await message.bot.download_file(file.file_path)
@@ -195,6 +211,25 @@ def create_photo_router(
             raise SkipHandler()
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
         mime = (message.document.mime_type or "").lower()
+
+        if workflow.expected_input in {ExpectedInput.FEEDBACK_TEXT, ExpectedInput.FEEDBACK_PHOTO}:
+            if not mime.startswith("image/"):
+                await message.answer("Нужна картинка, не файл.")
+                return
+            file = await message.bot.get_file(message.document.file_id)
+            assert file.file_path is not None
+            buf = await message.bot.download_file(file.file_path)
+            body = buf.read() if hasattr(buf, "read") else bytes(buf)
+            await accept_feedback_image(
+                message=message,
+                mediator=mediator,
+                file_id=message.document.file_id,
+                body=body,
+                content_type=mime or "image/jpeg",
+                expected_input=workflow.expected_input,
+                expected_field=workflow.expected_field,
+            )
+            return
 
         if workflow.expected_input == ExpectedInput.PROGRESS_PHOTO:
             if not mime.startswith("image/"):
