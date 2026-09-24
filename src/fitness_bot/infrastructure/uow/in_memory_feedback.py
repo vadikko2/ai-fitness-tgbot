@@ -40,9 +40,7 @@ class InMemoryFeedbackRepository(IFeedbackRepository):
         matched = [
             ticket
             for ticket in self._tickets.values()
-            if ticket.author_user_id == author_user_id
-            and ticket.kind == kind
-            and ticket.status != FeedbackStatus.DRAFT
+            if ticket.author_user_id == author_user_id and ticket.kind == kind and ticket.status != FeedbackStatus.DRAFT
         ]
         matched.sort(key=lambda item: item.created_at, reverse=True)
         page = matched[offset : offset + limit]

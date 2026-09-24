@@ -165,9 +165,7 @@ class ChangeFeedbackStatusCommandHandler(
                 moderator_reply=saved.moderator_reply,
                 author_chat_id=author.chat_id if author else None,
                 author_display_name=(author.display_name or author.telegram_username) if author else None,
-                moderator_message_refs=[
-                    {"chat_id": item.chat_id, "message_id": item.message_id} for item in refs
-                ],
+                moderator_message_refs=[{"chat_id": item.chat_id, "message_id": item.message_id} for item in refs],
             )
 
 
