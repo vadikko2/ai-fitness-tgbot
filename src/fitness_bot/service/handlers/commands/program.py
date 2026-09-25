@@ -66,6 +66,7 @@ def _profile_payload(
         "days_per_week": user.days_per_week,
         "training_weekdays": sorted(user.training_weekdays),
         "equipment": user.equipment,
+        "training_place": user.training_place.value if user.training_place else None,
         "limitations": user.limitations,
         "activity_level": user.activity_level.value if user.activity_level else None,
         "session_minutes": user.session_minutes,
@@ -74,6 +75,7 @@ def _profile_payload(
         "supplements": sorted(user.supplements) if user.supplements is not None else None,
         "supplements_other": user.supplements_other,
         "diet_prefs": user.diet_prefs,
+        "nutrition_constraints": user.nutrition_constraints,
         "goal": user.goal.value if user.goal else None,
         "circumferences_cm": circumferences_cm or {},
     }
@@ -303,6 +305,7 @@ class ProposeProgramChangeCommandHandler(
                         "document_json": document_json(editor_document),
                         "utterance": request.utterance,
                         "limitations": user.limitations or "",
+                        "training_place": user.training_place.value if user.training_place else "",
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
                         "focus_day_position": focus_day_position,
@@ -623,6 +626,11 @@ class ApproveProposalCommandHandler(
                 session = Session.from_document(user_id=user.id, document=document)
                 saved_session = await repos.sessions.add(session)
                 await repos.proposals.save(pending)
+                from fitness_bot.service.handlers.commands.wellbeing_adapt import pop_wellbeing_adapt
+
+                wellbeing_ids = pop_wellbeing_adapt(pending.id)
+                if wellbeing_ids:
+                    await repos.wellbeing.mark_applied(wellbeing_ids)
                 user.active_session_id = saved_session.id
                 user.pending_proposal_id = None
                 user.clear_expectation()

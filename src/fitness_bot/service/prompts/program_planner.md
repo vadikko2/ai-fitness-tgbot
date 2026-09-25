@@ -56,12 +56,17 @@ Rules:
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - `weight_kg` is the planned working load in kilograms. Set a concrete starting weight for every loaded exercise (machines, free weights, cables, smith). Estimate from body weight, experience, equipment, and goal — conservative for beginners. Use `null` only for true bodyweight work or duration-based slots (plank, cardio intervals) where external load does not apply.
 - Respect limitations and equipment from the profile. Current limitations are hard constraints: never prescribe movements, loads, or styles that conflict with them (e.g. no deadlift loading, no free weights, avoid straining / Valsalva, back hernia → avoid spinal compression and max-effort holds).
+- `training_place` and `limitations` have **maximum priority** over variety and progression:
+  - `home` → only equipment the user listed in `equipment`; never prescribe gym machines, cable stacks, smith, or other facility-only gear.
+  - `outdoor` → bodyweight / portable gear only; no gym machines or indoor-only equipment.
+  - `gym` → full gym equipment is fine when it matches `equipment` / common gym access.
+  - `mixed` → prefer options that work across the places they named; never require unavailable gear.
 - Profile fields Rules (null / unknown = do **not** invent):
   - `session_minutes`: hard time budget for each training day — fit slot count, rest, and density to it (prefer `circuit` / fewer accessories when short).
   - `experience` (`beginner` | `intermediate` | `advanced`): beginner → fewer complex patterns, lower RPE/volume; advanced → more variety and intensity when appropriate.
   - `activity_level` (outside the gym): `high` → bias the week toward more `light` / `recovery` days; `sedentary` → volume may be slightly higher for the same goal if recovery allows.
   - `body_fat_pct` / `body_fat_unknown` / `circumferences_cm`: when goal is `fat_loss`, use known composition cues for emphasis only (not medicine). If missing or unknown — do not invent a body-fat %.
-  - Ignore `supplements` / `diet_prefs` / `pharma` for programming (nutrition noise). Never recommend drugs or pharma protocols.
+  - Ignore `supplements` / `diet_prefs` / `nutrition_constraints` / `pharma` for programming (nutrition noise). Never recommend drugs or pharma protocols.
 - `reply` follows the system rules. Name the structure with «{{ program_type_label }}» — never write enum codes like `push_pull` or `full_body` in reply.
 
 {% if validation_hint %}

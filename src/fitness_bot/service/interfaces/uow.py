@@ -11,6 +11,7 @@ from fitness_bot.domain.body.nutrition import NutritionRecommendation
 from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
 from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
+from fitness_bot.domain.body.wellbeing import WellbeingEntry
 from fitness_bot.domain.coach.application import CoachApplication, CoachApplicationModeratorMessage
 from fitness_bot.domain.coach.invite import CoachInvite
 from fitness_bot.domain.coach.link import CoachClientLink
@@ -519,6 +520,24 @@ class INutritionRepository(abc.ABC):
         raise NotImplementedError
 
 
+class IWellbeingRepository(abc.ABC):
+    @abc.abstractmethod
+    async def add(self, entry: WellbeingEntry) -> WellbeingEntry:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_recent(self, user_id: UUID, *, limit: int = 20) -> list[WellbeingEntry]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_unapplied(self, user_id: UUID, *, limit: int = 20) -> list[WellbeingEntry]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def mark_applied(self, entry_ids: list[UUID], *, applied_at: datetime | None = None) -> None:
+        raise NotImplementedError
+
+
 class IUowRepositories(abc.ABC):
     @property
     @abc.abstractmethod
@@ -577,6 +596,11 @@ class IUowRepositories(abc.ABC):
 
     @property
     @abc.abstractmethod
+    def wellbeing(self) -> IWellbeingRepository:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def coaches(self) -> ICoachesRepository:
         raise NotImplementedError
 
@@ -627,6 +651,7 @@ __all__ = [
     "IUsersRepository",
     "IWeightReminderRepository",
     "IWeightRepository",
+    "IWellbeingRepository",
     "MeasurementEntry",
     "MeasurementGuide",
     "MeasurementSite",
@@ -640,6 +665,7 @@ __all__ = [
     "User",
     "WeightEntry",
     "WeightReminder",
+    "WellbeingEntry",
     "UUID",
     "date",
     "datetime",

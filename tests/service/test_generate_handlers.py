@@ -243,6 +243,9 @@ async def _seed_profile(uow: InMemoryUow, telegram_user_id: int = 7) -> None:
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.EQUIPMENT, value="зал"),
     )
     await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.TRAINING_PLACE, value="gym"),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.LIMITATIONS, value=""),
     )
 
@@ -260,6 +263,9 @@ async def _seed_profile(uow: InMemoryUow, telegram_user_id: int = 7) -> None:
     )
     await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.DIET_PREFS, value=""),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.NUTRITION_CONSTRAINTS, value=""),
     )
     await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.TIMEZONE, value="+03:00"),
@@ -376,6 +382,43 @@ async def test_nutrition_generate_once_then_reuse_and_stale_on_goal(uow: InMemor
     status = await GetNutritionQueryHandler(uow).handle(GetNutritionQuery(telegram_user_id=7))
     assert status.status == "current"
     assert status.kcal == 2000
+
+
+async def test_nutrition_force_regenerates_when_current(uow: InMemoryUow) -> None:
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    lm = ScriptedLanguageModel([_nutrition_json()])
+    first = await GenerateNutritionCommandHandler(uow, lm).handle(GenerateNutritionCommand(telegram_user_id=7))
+    assert first.already_current is False
+    assert lm.calls == 1
+
+    reused = await GenerateNutritionCommandHandler(uow, lm).handle(GenerateNutritionCommand(telegram_user_id=7))
+    assert reused.already_current is True
+    assert lm.calls == 1
+
+    lm_force = ScriptedLanguageModel(
+        [
+            json.dumps(
+                {
+                    "kcal": 2500,
+                    "protein_g": 160,
+                    "fat_g": 70,
+                    "carb_g": 250,
+                    "calculation": "Форс обновление.",
+                    "meal_regularity": "Четыре приёма.",
+                    "sports_nutrition": "Креатин ежедневно.",
+                    "reply": "Обновил план.",
+                },
+                ensure_ascii=False,
+            ),
+        ],
+    )
+    forced = await GenerateNutritionCommandHandler(uow, lm_force).handle(
+        GenerateNutritionCommand(telegram_user_id=7, force=True),
+    )
+    assert forced.already_current is False
+    assert forced.kcal == 2500
+    assert lm_force.calls == 1
 
 
 async def test_nutrition_without_program(uow: InMemoryUow) -> None:
@@ -644,3 +687,50 @@ async def test_after_next_week_approve_next_session_and_template_still_work(uow:
     today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
     assert today.screen == "session"
     assert today.session_status == SessionStatus.IN_PROGRESS
+
+
+async def test_wellbeing_record_flag_and_adapt_marks_applied(uow: InMemoryUow) -> None:
+    from fitness_bot.service.handlers.commands.body import RecordWellbeingCommandHandler
+    from fitness_bot.service.handlers.commands.wellbeing_adapt import clear_wellbeing_adapt
+    from fitness_bot.service.models.commands.body import RecordWellbeingCommand
+
+    clear_wellbeing_adapt()
+    await _seed_profile(uow)
+    await _activate_program(uow)
+
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.screen == "template"
+    assert today.has_unapplied_wellbeing is False
+
+    recorded = await RecordWellbeingCommandHandler(uow).handle(
+        RecordWellbeingCommand(telegram_user_id=7, text="болит колено"),
+    )
+    assert recorded.entry_id is not None
+
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.has_unapplied_wellbeing is True
+
+    lm = ScriptedLanguageModel([_next_session_json(weight_kg=55)])
+    draft = await GenerateNextSessionCommandHandler(uow, lm, _catalog()).handle(
+        GenerateNextSessionCommand(telegram_user_id=7, adapt_for_wellbeing=True),
+    )
+    assert draft.proposal_id is not None
+    assert draft.wellbeing_entry_ids == [recorded.entry_id]
+    assert lm.calls == 1
+
+    async with uow.transaction() as repos:
+        user = await repos.users.get_by_telegram_id(7)
+        assert user is not None
+        unapplied = await repos.wellbeing.list_unapplied(user.id)
+        assert len(unapplied) == 1
+
+    approved = await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
+    assert approved.session_id is not None
+
+    async with uow.transaction() as repos:
+        user = await repos.users.get_by_telegram_id(7)
+        assert user is not None
+        assert await repos.wellbeing.list_unapplied(user.id) == []
+        recent = await repos.wellbeing.list_recent(user.id, limit=5)
+        assert recent[0].id == recorded.entry_id
+        assert recent[0].applied_at is not None

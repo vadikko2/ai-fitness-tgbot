@@ -17,6 +17,7 @@ from fitness_bot.domain.body.measurement import (
 from fitness_bot.domain.body.progress_photo import MAX_PROGRESS_PHOTO_BYTES, ProgressPhotoSet
 from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
+from fitness_bot.domain.body.wellbeing import WellbeingEntry
 from fitness_bot.domain.enums import ExpectedInput, ProgressPhotoAngle
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User, local_calendar_date, local_day_bounds
@@ -500,3 +501,20 @@ class MarkProgressPhotoReminderSentCommandHandler(
                 user_id=saved.user_id,
                 last_sent_on=saved.last_sent_on,
             )
+
+
+class RecordWellbeingCommandHandler(
+    cqrs.RequestHandler[cmds.RecordWellbeingCommand, cmds.RecordWellbeingCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: cmds.RecordWellbeingCommand) -> cmds.RecordWellbeingCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            entry = WellbeingEntry.create(user_id=user.id, text=request.text)
+            saved = await repos.wellbeing.add(entry)
+            if user.expected_input == ExpectedInput.WELLBEING:
+                user.clear_expectation()
+                await repos.users.save(user)
+            return cmds.RecordWellbeingCommandResult(entry_id=saved.id, text=saved.text)

@@ -13,6 +13,7 @@ from fitness_bot.domain.enums import (
     ProfileField,
     Sex,
     Supplement,
+    TrainingPlace,
 )
 from fitness_bot.domain.feedback.ticket import FEEDBACK_PAGE_SIZE
 from fitness_bot.domain.program_catalog import (
@@ -61,6 +62,13 @@ EXPERIENCE_LEVEL_LABELS = {
     ExperienceLevel.ADVANCED: "🏆 Продвинутый",
 }
 
+TRAINING_PLACE_LABELS = {
+    TrainingPlace.GYM: "🏋️ Зал",
+    TrainingPlace.HOME: "🏠 Дом",
+    TrainingPlace.OUTDOOR: "🌳 Улица",
+    TrainingPlace.MIXED: "🔀 Смешанно",
+}
+
 SUPPLEMENT_LABELS = {
     Supplement.NONE: "Нет",
     Supplement.PROTEIN: "Протеин",
@@ -79,13 +87,15 @@ PROFILE_FIELD_LABELS = {
     ProfileField.EXPERIENCE_DETAILS: "📝 Детали опыта",
     ProfileField.DAYS_PER_WEEK: "🔢 Дней в неделю",
     ProfileField.TRAINING_WEEKDAYS: "📅 Дни тренировок",
-    ProfileField.EQUIPMENT: "🏋️ Место и оборудование",
+    ProfileField.EQUIPMENT: "🛠️ Оборудование",
+    ProfileField.TRAINING_PLACE: "📍 Место занятий",
     ProfileField.LIMITATIONS: "⚠️ Ограничения",
     ProfileField.ACTIVITY_LEVEL: "🚶 Активность вне зала",
     ProfileField.SESSION_MINUTES: "⏱ Длительность тренировки",
     ProfileField.BODY_FAT: "🧪 % жира",
     ProfileField.SUPPLEMENTS: "💊 Спортпит",
     ProfileField.DIET_PREFS: "🥗 Пищевые предпочтения",
+    ProfileField.NUTRITION_CONSTRAINTS: "🚫 Пищевые ограничения",
     ProfileField.PHARMA: "💉 Фарма / ПЭД",
 }
 
@@ -99,12 +109,14 @@ _PROFILE_EDIT_FIELDS: tuple[ProfileField, ...] = (
     ProfileField.DAYS_PER_WEEK,
     ProfileField.TRAINING_WEEKDAYS,
     ProfileField.EQUIPMENT,
+    ProfileField.TRAINING_PLACE,
     ProfileField.LIMITATIONS,
     ProfileField.ACTIVITY_LEVEL,
     ProfileField.SESSION_MINUTES,
     ProfileField.BODY_FAT,
     ProfileField.SUPPLEMENTS,
     ProfileField.DIET_PREFS,
+    ProfileField.NUTRITION_CONSTRAINTS,
     ProfileField.PHARMA,
 )
 
@@ -148,6 +160,7 @@ def home_keyboard(
         ],
         [
             InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
+            InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
             InlineKeyboardButton(text="📜 История", callback_data="hist"),
         ],
         [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
@@ -211,6 +224,15 @@ def experience_keyboard(*, prefix: str = "onb_exp") -> InlineKeyboardMarkup:
     )
 
 
+def training_place_keyboard(*, prefix: str = "onb_place") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, callback_data=f"{prefix}:{place.value}")]
+            for place, label in TRAINING_PLACE_LABELS.items()
+        ],
+    )
+
+
 def activity_level_keyboard(*, prefix: str = "onb_act") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -235,7 +257,22 @@ def body_fat_unknown_keyboard(*, prefix: str = "onb_bf") -> InlineKeyboardMarkup
 
 def diet_prefs_none_keyboard(*, prefix: str = "onb_diet") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="👌 Без ограничений", callback_data=f"{prefix}:none")]],
+        inline_keyboard=[[InlineKeyboardButton(text="👌 Без предпочтений", callback_data=f"{prefix}:none")]],
+    )
+
+
+def nutrition_constraints_none_keyboard(*, prefix: str = "onb_nconst") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="👌 Нет ограничений", callback_data=f"{prefix}:none")]],
+    )
+
+
+def nutrition_current_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить план", callback_data="nutr_refresh")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
     )
 
 
@@ -936,11 +973,24 @@ def exercise_guide_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def session_template_keyboard(*, week_finished: bool = False) -> InlineKeyboardMarkup:
+def session_template_keyboard(
+    *,
+    week_finished: bool = False,
+    has_unapplied_wellbeing: bool = False,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="▶️ Начать как в плане", callback_data="sess_plan")],
         [InlineKeyboardButton(text="✏️ Изменить тренировку", callback_data="sess_tmpl_edit")],
     ]
+    if has_unapplied_wellbeing:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🙂 Обновить план с учётом самочувствия",
+                    callback_data="sess_feel_adapt",
+                ),
+            ],
+        )
     new_week_label = "🆕 Начать новую тренировочную неделю"
     if week_finished:
         rows.insert(0, [InlineKeyboardButton(text=new_week_label, callback_data="sess_new_week")])

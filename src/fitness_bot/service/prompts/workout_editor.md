@@ -9,6 +9,14 @@ User message:
 User limitations (hard constraints — never violate):
 {{ limitations }}
 
+{% if training_place %}
+Training place (hard constraint — never violate):
+{{ training_place }}
+- home → only home/listed equipment; no gym machines.
+- outdoor → no gym equipment.
+- gym / mixed → match place and available gear.
+{% endif %}
+
 Catalog ids allowed:
 {{ catalog_json }}
 
@@ -38,6 +46,7 @@ Rules:
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - Preserve existing `weight_kg` unless the user asks to change load. When adding a new loaded exercise, set a concrete starting `weight_kg`; use `null` only for bodyweight or duration-based slots.
 - Strictly respect user limitations: never add contraindicated movements, loads, or styles (e.g. no deadlift loading / free weights / Valsalva when limited).
+- Honor `training_place` the same way: home/outdoor must not introduce gym-only machines.
 - If profile context is present in the utterance or known limitations text: honor `session_minutes` as a soft time budget for density; honor experience level (beginner = simpler / lower RPE). Do not invent missing profile fields. Never recommend pharma / drugs.
 
 Return JSON with keys `document` and `reply`.

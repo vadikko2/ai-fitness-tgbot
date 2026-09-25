@@ -38,6 +38,7 @@ class ExpectedInput(StrEnum):
     COACH_REPORT = "coach_report"
     COACH_EDIT_CLIENT = "coach_edit_client"
     PROGRESS_PHOTO = "progress_photo"
+    WELLBEING = "wellbeing"
     FEEDBACK_TEXT = "feedback_text"
     FEEDBACK_PHOTO = "feedback_photo"
     FEEDBACK_CANCEL_REPLY = "feedback_cancel_reply"
@@ -68,6 +69,13 @@ class ExperienceLevel(StrEnum):
     ADVANCED = "advanced"
 
 
+class TrainingPlace(StrEnum):
+    GYM = "gym"
+    HOME = "home"
+    OUTDOOR = "outdoor"
+    MIXED = "mixed"
+
+
 class Supplement(StrEnum):
     NONE = "none"
     PROTEIN = "protein"
@@ -87,12 +95,14 @@ class ProfileField(StrEnum):
     DAYS_PER_WEEK = "days_per_week"
     TRAINING_WEEKDAYS = "training_weekdays"
     EQUIPMENT = "equipment"
+    TRAINING_PLACE = "training_place"
     LIMITATIONS = "limitations"
     ACTIVITY_LEVEL = "activity_level"
     SESSION_MINUTES = "session_minutes"
     BODY_FAT = "body_fat"
     SUPPLEMENTS = "supplements"
     DIET_PREFS = "diet_prefs"
+    NUTRITION_CONSTRAINTS = "nutrition_constraints"
     PHARMA = "pharma"
     TIMEZONE = "timezone"
 

@@ -601,7 +601,10 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             if callback.message:
                 await callback.message.answer(
                     text,
-                    reply_markup=session_template_keyboard(week_finished=bool(today.week_finished)),
+                    reply_markup=session_template_keyboard(
+                        week_finished=bool(today.week_finished),
+                        has_unapplied_wellbeing=bool(today.has_unapplied_wellbeing),
+                    ),
                 )
             await callback.answer()
         elif today.screen == "rest":
@@ -750,6 +753,48 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 draft_preview = draft.preview_text
         except DomainError as exc:
             await callback.message.answer(f"Не удалось сгенерировать: {exc}")
+            return
+        if result.agent_unavailable:
+            await callback.message.answer(
+                jinja_env.get_template("agent_unavailable.j2").render(),
+                reply_markup=home_keyboard(),
+            )
+            return
+        if result.schema_failed or result.document is None:
+            await callback.message.answer(
+                assistant_parse_failure_text(
+                    result.reply or draft_preview,
+                    hint="Не удалось разобрать ответ помощника. Попробуй ещё раз.",
+                ),
+            )
+            return
+        await render_next_session_proposal(
+            jinja_env=jinja_env,
+            message=callback.message,
+            reply=result.reply,
+            document=result.document,
+            telegram_user_id=callback.from_user.id,
+        )
+
+    @router.callback_query(F.data == "sess_feel_adapt")
+    async def handle_sess_feel_adapt(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        if callback.message is None:
+            await callback.answer()
+            return
+        await callback.answer()
+        draft_preview = ""
+        try:
+            async with message_draft_scope(callback.bot, callback.message.chat.id) as draft:
+                result = await mediator.send(
+                    GenerateNextSessionCommand(
+                        telegram_user_id=callback.from_user.id,
+                        adapt_for_wellbeing=True,
+                    ),
+                )
+                draft_preview = draft.preview_text
+        except DomainError as exc:
+            await callback.message.answer(f"Не удалось обновить план: {exc}")
             return
         if result.agent_unavailable:
             await callback.message.answer(

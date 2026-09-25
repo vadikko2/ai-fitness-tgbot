@@ -5,7 +5,16 @@ from aiogram.types import CallbackQuery, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
-from fitness_bot.domain.enums import ActivityLevel, ExpectedInput, ExperienceLevel, Goal, ProfileField, Sex, Supplement
+from fitness_bot.domain.enums import (
+    ActivityLevel,
+    ExpectedInput,
+    ExperienceLevel,
+    Goal,
+    ProfileField,
+    Sex,
+    Supplement,
+    TrainingPlace,
+)
 from fitness_bot.presentation.flow_helpers import (
     begin_profile_edit,
     clear_profile_edit,
@@ -22,11 +31,13 @@ from fitness_bot.presentation.keyboards import (
     diet_prefs_none_keyboard,
     experience_keyboard,
     goal_keyboard,
+    nutrition_constraints_none_keyboard,
     pharma_keyboard,
     profile_edit_keyboard,
     session_minutes_keyboard,
     sex_keyboard,
     supplements_keyboard,
+    training_place_keyboard,
     weekdays_keyboard,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand, SetGoalCommand, UpdateProfileCommand
@@ -87,6 +98,19 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 telegram_user_id=callback.from_user.id,
                 field=ProfileField.EXPERIENCE,
                 value=level.value,
+            ),
+        )
+        await _continue_onboarding(callback)
+
+    @router.callback_query(F.data.startswith("onb_place:"))
+    async def handle_onb_place(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None and callback.data is not None
+        place = TrainingPlace(callback.data.split(":", 1)[1])
+        await mediator.send(
+            UpdateProfileCommand(
+                telegram_user_id=callback.from_user.id,
+                field=ProfileField.TRAINING_PLACE,
+                value=place.value,
             ),
         )
         await _continue_onboarding(callback)
@@ -193,6 +217,21 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
             UpdateProfileCommand(
                 telegram_user_id=callback.from_user.id,
                 field=ProfileField.DIET_PREFS,
+                value="",
+            ),
+        )
+        await _continue_onboarding(callback)
+
+    @router.callback_query(F.data.startswith("onb_nconst:"))
+    async def handle_onb_nconst(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None and callback.data is not None
+        if callback.data.split(":", 1)[1] != "none":
+            await callback.answer()
+            return
+        await mediator.send(
+            UpdateProfileCommand(
+                telegram_user_id=callback.from_user.id,
+                field=ProfileField.NUTRITION_CONSTRAINTS,
                 value="",
             ),
         )
@@ -353,6 +392,8 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
             markup = weekdays_keyboard(set(profile.training_weekdays), days_needed=profile.days_per_week)
         elif field == ProfileField.EXPERIENCE:
             markup = experience_keyboard()
+        elif field == ProfileField.TRAINING_PLACE:
+            markup = training_place_keyboard()
         elif field == ProfileField.ACTIVITY_LEVEL:
             markup = activity_level_keyboard()
         elif field == ProfileField.SESSION_MINUTES:
@@ -364,6 +405,8 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
             markup = supplements_keyboard(set(profile.supplements or ()))
         elif field == ProfileField.DIET_PREFS:
             markup = diet_prefs_none_keyboard()
+        elif field == ProfileField.NUTRITION_CONSTRAINTS:
+            markup = nutrition_constraints_none_keyboard()
         elif field == ProfileField.LIMITATIONS:
             from fitness_bot.presentation.keyboards import limitations_none_keyboard
 

@@ -22,6 +22,7 @@ from fitness_bot.infrastructure.db.repositories.program import (
 from fitness_bot.infrastructure.db.repositories.session import SqlAlchemySessionsRepository
 from fitness_bot.infrastructure.db.repositories.technique_video import SqlAlchemyTechniqueVideosRepository
 from fitness_bot.infrastructure.db.repositories.users import SqlAlchemyUsersRepository
+from fitness_bot.infrastructure.db.repositories.wellbeing import SqlAlchemyWellbeingRepository
 from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
 
 
@@ -48,6 +49,7 @@ class SqlAlchemyUowRepositories(IUowRepositories):
         self._sessions = SqlAlchemySessionsRepository(session)
         self._technique_videos = SqlAlchemyTechniqueVideosRepository(session)
         self._nutrition = SqlAlchemyNutritionRepository(session)
+        self._wellbeing = SqlAlchemyWellbeingRepository(session)
         self._coaches = SqlAlchemyCoachesRepository(session)
         self._feedback = SqlAlchemyFeedbackRepository(session)
 
@@ -94,6 +96,10 @@ class SqlAlchemyUowRepositories(IUowRepositories):
     @property
     def nutrition(self) -> SqlAlchemyNutritionRepository:
         return self._nutrition
+
+    @property
+    def wellbeing(self) -> SqlAlchemyWellbeingRepository:
+        return self._wellbeing
 
     @property
     def coaches(self) -> SqlAlchemyCoachesRepository:

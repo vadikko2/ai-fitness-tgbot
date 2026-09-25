@@ -21,6 +21,7 @@ from fitness_bot.service.handlers.commands.body import (
     RecordMeasurementCommandHandler,
     RecordProgressPhotoCommandHandler,
     RecordWeightCommandHandler,
+    RecordWellbeingCommandHandler,
     RememberProgressPhotoFileIdCommandHandler,
     SeedMeasurementGuidesCommandHandler,
     SetProgressPhotoReminderCommandHandler,
@@ -157,6 +158,7 @@ from fitness_bot.service.models.commands.body import (
     RecordMeasurementCommand,
     RecordProgressPhotoCommand,
     RecordWeightCommand,
+    RecordWellbeingCommand,
     RememberProgressPhotoFileIdCommand,
     SeedMeasurementGuidesCommand,
     SetProgressPhotoReminderCommand,
@@ -322,6 +324,7 @@ class Container(containers.DeclarativeContainer):
     set_goal_handler = providers.Factory(SetGoalCommandHandler, uow=uow)
     expect_input_handler = providers.Factory(ExpectInputCommandHandler, uow=uow)
     record_weight_handler = providers.Factory(RecordWeightCommandHandler, uow=uow)
+    record_wellbeing_handler = providers.Factory(RecordWellbeingCommandHandler, uow=uow)
     set_weight_reminder_handler = providers.Factory(SetWeightReminderCommandHandler, uow=uow)
     ensure_default_weight_reminder_handler = providers.Factory(
         EnsureDefaultWeightReminderCommandHandler,
@@ -567,6 +570,7 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(SetGoalCommand, SetGoalCommandHandler)
     request_map.bind(ExpectInputCommand, ExpectInputCommandHandler)
     request_map.bind(RecordWeightCommand, RecordWeightCommandHandler)
+    request_map.bind(RecordWellbeingCommand, RecordWellbeingCommandHandler)
     request_map.bind(SetWeightReminderCommand, SetWeightReminderCommandHandler)
     request_map.bind(EnsureDefaultWeightReminderCommand, EnsureDefaultWeightReminderCommandHandler)
     request_map.bind(MarkWeightReminderSentCommand, MarkWeightReminderSentCommandHandler)

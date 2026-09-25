@@ -13,6 +13,7 @@ from fitness_bot.domain.enums import (
     Goal,
     ProgressPhotoAngle,
     Sex,
+    TrainingPlace,
     WeightSource,
 )
 from fitness_bot.domain.users.user import User
@@ -69,6 +70,7 @@ def user_to_domain(row: UserRow) -> User:
         days_per_week=row.days_per_week,
         training_weekdays=frozenset(item.weekday for item in row.training_weekdays),
         equipment=row.equipment,
+        training_place=TrainingPlace(row.training_place) if row.training_place else None,
         limitations=row.limitations,
         activity_level=ActivityLevel(row.activity_level) if row.activity_level else None,
         session_minutes=row.session_minutes,
@@ -77,6 +79,7 @@ def user_to_domain(row: UserRow) -> User:
         supplements=_supplements_to_domain(row.supplements),
         supplements_other=row.supplements_other,
         diet_prefs=row.diet_prefs,
+        nutrition_constraints=row.nutrition_constraints,
         pharma=row.pharma,
         timezone_offset=row.timezone_offset,
         goal=Goal(row.goal) if row.goal else None,
@@ -105,6 +108,7 @@ def apply_user_to_row(row: UserRow, user: User) -> None:
     row.experience_details = user.experience_details
     row.days_per_week = user.days_per_week
     row.equipment = user.equipment
+    row.training_place = user.training_place.value if user.training_place else None
     row.limitations = user.limitations
     row.activity_level = user.activity_level.value if user.activity_level else None
     row.session_minutes = user.session_minutes
@@ -113,6 +117,7 @@ def apply_user_to_row(row: UserRow, user: User) -> None:
     row.supplements = _supplements_to_row(user.supplements)
     row.supplements_other = user.supplements_other
     row.diet_prefs = user.diet_prefs
+    row.nutrition_constraints = user.nutrition_constraints
     row.pharma = user.pharma
     row.timezone_offset = user.timezone_offset
     row.goal = user.goal.value if user.goal else None

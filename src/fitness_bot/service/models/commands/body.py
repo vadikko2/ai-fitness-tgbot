@@ -178,3 +178,13 @@ class MarkProgressPhotoReminderSentCommand(Command):
 class MarkProgressPhotoReminderSentCommandResult(CommandResult):
     user_id: UUID
     last_sent_on: date
+
+
+class RecordWellbeingCommand(Command):
+    telegram_user_id: int
+    text: str
+
+
+class RecordWellbeingCommandResult(CommandResult):
+    entry_id: UUID
+    text: str

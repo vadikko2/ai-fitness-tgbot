@@ -11,6 +11,7 @@ from fitness_bot.domain.enums import (
     Goal,
     ProfileField,
     Sex,
+    TrainingPlace,
 )
 from fitness_bot.service.models.queries.base import Query, QueryResult
 
@@ -34,6 +35,7 @@ class GetProfileQueryResult(QueryResult):
     days_per_week: int | None
     training_weekdays: list[int]
     equipment: str | None
+    training_place: TrainingPlace | None
     limitations: str | None
     activity_level: ActivityLevel | None
     session_minutes: int | None
@@ -42,6 +44,7 @@ class GetProfileQueryResult(QueryResult):
     supplements: list[str] | None
     supplements_other: str | None
     diet_prefs: str | None
+    nutrition_constraints: str | None
     pharma: str | None
     timezone_offset: str | None
     goal: Goal | None

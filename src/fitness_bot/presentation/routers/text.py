@@ -34,6 +34,7 @@ from fitness_bot.service.models.commands.body import (
     AddCustomMeasurementSiteCommand,
     RecordMeasurementCommand,
     RecordWeightCommand,
+    RecordWellbeingCommand,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand, UpdateProfileCommand
 from fitness_bot.service.models.queries.program import GetPendingProposalQuery
@@ -44,6 +45,7 @@ _VOICE_FREE_TEXT_PROFILE_FIELDS = frozenset(
         ProfileField.EQUIPMENT.value,
         ProfileField.LIMITATIONS.value,
         ProfileField.DIET_PREFS.value,
+        ProfileField.NUTRITION_CONSTRAINTS.value,
         ProfileField.EXPERIENCE_DETAILS.value,
         ProfileField.PHARMA.value,
         "custom_measurement_name",
@@ -63,6 +65,7 @@ def voice_input_allowed(*, expected_input: ExpectedInput, expected_field: str | 
         ExpectedInput.FEEDBACK_TEXT,
         ExpectedInput.FEEDBACK_PHOTO,
         ExpectedInput.FEEDBACK_CANCEL_REPLY,
+        ExpectedInput.WELLBEING,
     }:
         return True
     if expected_input == ExpectedInput.PROFILE_FIELD and expected_field in _VOICE_FREE_TEXT_PROFILE_FIELDS:
@@ -109,6 +112,16 @@ async def handle_user_utterance(
                 ),
             )
             await message.answer("Вес сохранён.", reply_markup=home_keyboard())
+            return
+
+        if workflow.expected_input == ExpectedInput.WELLBEING:
+            await mediator.send(
+                RecordWellbeingCommand(
+                    telegram_user_id=message.from_user.id,
+                    text=text,
+                ),
+            )
+            await message.answer("Самочувствие записано.", reply_markup=home_keyboard())
             return
 
         if workflow.expected_input == ExpectedInput.MEASUREMENT_VALUE:

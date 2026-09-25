@@ -11,6 +11,7 @@ from fitness_bot.domain.body.nutrition import NutritionRecommendation
 from fitness_bot.domain.body.progress_photo import ProgressPhotoSet
 from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightReminder
 from fitness_bot.domain.body.weight import WeightEntry
+from fitness_bot.domain.body.wellbeing import WellbeingEntry
 from fitness_bot.domain.enums import Goal
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.technique_video import TechniqueVideo
@@ -37,6 +38,7 @@ from fitness_bot.service.interfaces.uow import (
     IUsersRepository,
     IWeightReminderRepository,
     IWeightRepository,
+    IWellbeingRepository,
 )
 
 
@@ -320,6 +322,34 @@ class InMemoryNutritionRepository(INutritionRepository):
         return deepcopy(stored)
 
 
+class InMemoryWellbeingRepository(IWellbeingRepository):
+    def __init__(self) -> None:
+        self._by_id: dict[UUID, WellbeingEntry] = {}
+
+    async def add(self, entry: WellbeingEntry) -> WellbeingEntry:
+        stored = deepcopy(entry)
+        self._by_id[stored.id] = stored
+        return deepcopy(stored)
+
+    async def list_recent(self, user_id: UUID, *, limit: int = 20) -> list[WellbeingEntry]:
+        items = [item for item in self._by_id.values() if item.user_id == user_id]
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        return [deepcopy(item) for item in items[:limit]]
+
+    async def list_unapplied(self, user_id: UUID, *, limit: int = 20) -> list[WellbeingEntry]:
+        items = [item for item in self._by_id.values() if item.user_id == user_id and item.applied_at is None]
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        return [deepcopy(item) for item in items[:limit]]
+
+    async def mark_applied(self, entry_ids: list[UUID], *, applied_at: datetime | None = None) -> None:
+        moment = applied_at or datetime.now(UTC)
+        for entry_id in entry_ids:
+            entry = self._by_id.get(entry_id)
+            if entry is None:
+                continue
+            entry.applied_at = moment
+
+
 class InMemoryTechniqueVideosRepository(ITechniqueVideosRepository):
     def __init__(self) -> None:
         self._by_slot: dict[UUID, TechniqueVideo] = {}
@@ -356,6 +386,7 @@ class InMemoryUowRepositories(IUowRepositories):
         sessions: InMemorySessionsRepository | None = None,
         technique_videos: InMemoryTechniqueVideosRepository | None = None,
         nutrition: InMemoryNutritionRepository | None = None,
+        wellbeing: InMemoryWellbeingRepository | None = None,
         coaches: InMemoryCoachesRepository | None = None,
         feedback: InMemoryFeedbackRepository | None = None,
     ) -> None:
@@ -370,6 +401,7 @@ class InMemoryUowRepositories(IUowRepositories):
         self._sessions = sessions or InMemorySessionsRepository()
         self._technique_videos = technique_videos or InMemoryTechniqueVideosRepository()
         self._nutrition = nutrition or InMemoryNutritionRepository()
+        self._wellbeing = wellbeing or InMemoryWellbeingRepository()
         self._coaches = coaches or InMemoryCoachesRepository()
         self._feedback = feedback or InMemoryFeedbackRepository()
 
@@ -416,6 +448,10 @@ class InMemoryUowRepositories(IUowRepositories):
     @property
     def nutrition(self) -> INutritionRepository:
         return self._nutrition
+
+    @property
+    def wellbeing(self) -> IWellbeingRepository:
+        return self._wellbeing
 
     @property
     def coaches(self) -> ICoachesRepository:

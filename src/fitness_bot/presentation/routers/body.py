@@ -108,6 +108,18 @@ def create_body_router(*, jinja_env: Environment, mediator: RequestMediator) -> 
         text = jinja_env.get_template("weight_prompt.j2").render()
         await _answer(callback, text)
 
+    @router.callback_query(F.data == "feel")
+    async def handle_feel(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.WELLBEING,
+            ),
+        )
+        text = jinja_env.get_template("onboarding_prompt.j2").render(field="wellbeing")
+        await _answer(callback, text)
+
     @router.callback_query(F.data == "wt_hist")
     async def handle_wt_hist(callback: CallbackQuery) -> None:
         assert callback.from_user is not None

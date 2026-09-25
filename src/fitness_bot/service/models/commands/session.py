@@ -119,6 +119,7 @@ class FinalizeSessionCommandResult(CommandResult):
 
 class GenerateNextSessionCommand(Command):
     telegram_user_id: int
+    adapt_for_wellbeing: bool = False
 
 
 class GenerateNextSessionCommandResult(CommandResult):
@@ -127,6 +128,7 @@ class GenerateNextSessionCommandResult(CommandResult):
     schema_failed: bool = False
     reply: str = ""
     document: WorkoutDocument | None = None
+    wellbeing_entry_ids: list[UUID] = []
 
 
 class SaveTechniqueVideoCommand(Command):

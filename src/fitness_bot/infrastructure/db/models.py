@@ -42,6 +42,7 @@ class UserRow(Base):
     experience_details: Mapped[str | None] = mapped_column(Text)
     days_per_week: Mapped[int | None] = mapped_column(SmallInteger)
     equipment: Mapped[str | None] = mapped_column(Text)
+    training_place: Mapped[str | None] = mapped_column(Text)
     limitations: Mapped[str | None] = mapped_column(Text)
     activity_level: Mapped[str | None] = mapped_column(Text)
     session_minutes: Mapped[int | None] = mapped_column(SmallInteger)
@@ -50,6 +51,7 @@ class UserRow(Base):
     supplements: Mapped[str | None] = mapped_column(Text)
     supplements_other: Mapped[str | None] = mapped_column(Text)
     diet_prefs: Mapped[str | None] = mapped_column(Text)
+    nutrition_constraints: Mapped[str | None] = mapped_column(Text)
     pharma: Mapped[str | None] = mapped_column(Text)
     timezone_offset: Mapped[str | None] = mapped_column(Text)
     goal: Mapped[str | None] = mapped_column(Text)
@@ -710,6 +712,20 @@ class FeedbackModeratorMessageRow(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class WellbeingEntryRow(Base):
+    __tablename__ = "wellbeing_entries"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # Satisfy UniqueConstraint import used via table args in future migrations if needed.

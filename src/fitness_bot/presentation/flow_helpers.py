@@ -10,6 +10,7 @@ from fitness_bot.presentation.keyboards import (
     GOAL_LABELS,
     SEX_LABELS,
     SUPPLEMENT_LABELS,
+    TRAINING_PLACE_LABELS,
     WEEKDAY_LABELS,
     activity_level_keyboard,
     body_fat_unknown_keyboard,
@@ -18,10 +19,12 @@ from fitness_bot.presentation.keyboards import (
     goal_keyboard,
     home_keyboard,
     limitations_none_keyboard,
+    nutrition_constraints_none_keyboard,
     profile_edit_keyboard,
     session_minutes_keyboard,
     sex_keyboard,
     supplements_keyboard,
+    training_place_keyboard,
     weekdays_keyboard,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
@@ -84,12 +87,14 @@ def profile_text(*, jinja_env: Environment, profile: GetProfileQueryResult) -> s
         days_per_week=profile.days_per_week,
         weekdays_label=weekdays_label(profile.training_weekdays),
         equipment=profile.equipment,
+        training_place_label=training_place_label(profile.training_place),
         limitations_label=limitations_label(profile.limitations),
         activity_label=activity_label(profile.activity_level),
         session_minutes=profile.session_minutes,
         body_fat_label=body_fat_label(pct=profile.body_fat_pct, body_fat_set=profile.body_fat_set),
         supplements_label=supplements_label(profile.supplements, other=profile.supplements_other),
         diet_prefs_label=diet_prefs_label(profile.diet_prefs),
+        nutrition_constraints_label=nutrition_constraints_label(profile.nutrition_constraints),
         pharma_label=pharma_label(profile.pharma),
         goal_label=goal_label(profile.goal),
     )
@@ -144,6 +149,17 @@ def experience_label(value: object) -> str | None:
         return str(value)
 
 
+def training_place_label(value: object) -> str | None:
+    if value is None:
+        return None
+    from fitness_bot.domain.enums import TrainingPlace
+
+    try:
+        return TRAINING_PLACE_LABELS.get(TrainingPlace(str(value)), str(value))
+    except ValueError:
+        return str(value)
+
+
 def activity_label(value: object) -> str | None:
     if value is None:
         return None
@@ -170,6 +186,14 @@ def limitations_label(value: str | None) -> str:
 
 
 def diet_prefs_label(value: str | None) -> str:
+    if value is None:
+        return "—"
+    if value == "":
+        return "нет"
+    return value
+
+
+def nutrition_constraints_label(value: str | None) -> str:
     if value is None:
         return "—"
     if value == "":
@@ -221,6 +245,8 @@ def markup_for_profile_field(
         return sex_keyboard()
     if field == ProfileField.EXPERIENCE:
         return experience_keyboard()
+    if field == ProfileField.TRAINING_PLACE:
+        return training_place_keyboard()
     if field == ProfileField.TRAINING_WEEKDAYS:
         assert days_per_week is not None
         return weekdays_keyboard(selected_weekdays or set(), days_needed=days_per_week)
@@ -236,6 +262,8 @@ def markup_for_profile_field(
         return supplements_keyboard(selected_supplements or set())
     if field == ProfileField.DIET_PREFS:
         return diet_prefs_none_keyboard()
+    if field == ProfileField.NUTRITION_CONSTRAINTS:
+        return nutrition_constraints_none_keyboard()
     return None
 
 

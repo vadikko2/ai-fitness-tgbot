@@ -108,7 +108,7 @@ class GenerateNutritionCommandHandler(
                 program_id=program.id,
                 goal=user.goal,
             )
-            if current is not None and not user.nutrition_stale:
+            if current is not None and not user.nutrition_stale and not request.force:
                 return cmds.GenerateNutritionCommandResult(
                     recommendation_id=current.id,
                     already_current=True,

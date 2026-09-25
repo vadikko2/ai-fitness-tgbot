@@ -213,6 +213,9 @@ async def _seed_profile(uow: InMemoryUow, telegram_user_id: int = 7) -> None:
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.EQUIPMENT, value="зал"),
     )
     await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.TRAINING_PLACE, value="gym"),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.LIMITATIONS, value=""),
     )
     await UpdateProfileCommandHandler(uow).handle(
@@ -229,6 +232,9 @@ async def _seed_profile(uow: InMemoryUow, telegram_user_id: int = 7) -> None:
     )
     await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.DIET_PREFS, value=""),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.NUTRITION_CONSTRAINTS, value=""),
     )
     await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=telegram_user_id, field=ProfileField.TIMEZONE, value="+03:00"),

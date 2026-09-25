@@ -157,6 +157,9 @@ async def test_onboarding_weight_and_goal(uow: InMemoryUow) -> None:
         UpdateProfileCommand(telegram_user_id=42, field=ProfileField.EQUIPMENT, value="гантели"),
     )
     await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=42, field=ProfileField.TRAINING_PLACE, value="home"),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=42, field=ProfileField.LIMITATIONS, value=""),
     )
     await UpdateProfileCommandHandler(uow).handle(
@@ -173,6 +176,9 @@ async def test_onboarding_weight_and_goal(uow: InMemoryUow) -> None:
     )
     await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=42, field=ProfileField.DIET_PREFS, value=""),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=42, field=ProfileField.NUTRITION_CONSTRAINTS, value=""),
     )
     profile = await GetProfileQueryHandler(uow).handle(GetProfileQuery(telegram_user_id=42))
     assert profile.next_field is None
@@ -359,6 +365,12 @@ async def test_profile_payload_includes_new_fields_and_circumferences(uow: InMem
         UpdateProfileCommand(telegram_user_id=42, field=ProfileField.DIET_PREFS, value="без лактозы"),
     )
     await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=42, field=ProfileField.NUTRITION_CONSTRAINTS, value="аллергия"),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
+        UpdateProfileCommand(telegram_user_id=42, field=ProfileField.TRAINING_PLACE, value="gym"),
+    )
+    await UpdateProfileCommandHandler(uow).handle(
         UpdateProfileCommand(telegram_user_id=42, field=ProfileField.PHARMA, value=""),
     )
     site = MeasurementSite.fixed("neck", "Шея")
@@ -385,8 +397,12 @@ async def test_profile_payload_includes_new_fields_and_circumferences(uow: InMem
     assert payload["supplements"] == ["other", "protein"]
     assert payload["supplements_other"] == "HMB"
     assert payload["diet_prefs"] == "без лактозы"
+    assert payload["nutrition_constraints"] == "аллергия"
+    assert payload["training_place"] == "gym"
     assert payload["pharma"] == ""
     assert payload["circumferences_cm"]["neck"] == "38"
     from fitness_bot.domain.users.user import PROFILE_FIELD_ORDER
 
     assert ProfileField.PHARMA not in PROFILE_FIELD_ORDER
+    assert ProfileField.TRAINING_PLACE in PROFILE_FIELD_ORDER
+    assert ProfileField.NUTRITION_CONSTRAINTS in PROFILE_FIELD_ORDER

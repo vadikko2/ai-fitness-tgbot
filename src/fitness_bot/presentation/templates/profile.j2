@@ -10,12 +10,14 @@
 {% endif %}
 • Дней в неделю: <b>{{ days_per_week or "—" }}</b>
 • Дни: <b>{{ weekdays_label or "—" }}</b>
-• Место: {{ equipment or "—" }}
+• Место занятий: <b>{{ training_place_label or "—" }}</b>
+• Оборудование: {{ equipment or "—" }}
 • Ограничения: {{ limitations_label }}
 • Активность вне зала: <b>{{ activity_label or "—" }}</b>
 • Длительность тренировки: <b>{% if session_minutes %}{{ session_minutes }} мин{% else %}—{% endif %}</b>
 • % жира: <b>{{ body_fat_label }}</b>
 • Спортпит: {{ supplements_label }}
-• Питание: {{ diet_prefs_label }}
+• Пищевые предпочтения: {{ diet_prefs_label }}
+• Пищевые ограничения: {{ nutrition_constraints_label }}
 • Фарма / ПЭД: {{ pharma_label }}
 • Цель: <b>{{ goal_label or "—" }}</b>

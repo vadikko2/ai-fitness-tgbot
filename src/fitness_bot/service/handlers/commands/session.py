@@ -176,6 +176,7 @@ class ProposeWorkoutChangeCommandHandler(
                         "document_json": document_json(current),
                         "utterance": request.utterance,
                         "limitations": user.limitations or "",
+                        "training_place": user.training_place.value if user.training_place else "",
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
                         "focus_day_position": current.days[0].position if current.days else 1,
@@ -496,6 +497,7 @@ class ProposeSessionDeviationCommandHandler(
                         "document_json": document_json(current),
                         "utterance": request.utterance,
                         "limitations": user.limitations or "",
+                        "training_place": user.training_place.value if user.training_place else "",
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
                         "focus_day_position": current.days[0].position if current.days else 1,
@@ -630,6 +632,25 @@ class GenerateNextSessionCommandHandler(
                 for session in history
             ]
 
+            wellbeing_entry_ids: list = []
+            wellbeing_json = ""
+            if request.adapt_for_wellbeing:
+                entries = await repos.wellbeing.list_unapplied(user.id, limit=20)
+                if not entries:
+                    raise DomainError("no unapplied wellbeing entries")
+                wellbeing_entry_ids = [entry.id for entry in entries]
+                wellbeing_json = json.dumps(
+                    [
+                        {
+                            "id": str(entry.id),
+                            "text": entry.text,
+                            "created_at": entry.created_at.isoformat(),
+                        }
+                        for entry in entries
+                    ],
+                    ensure_ascii=False,
+                )
+
             try:
                 payload = await complete_json(
                     self._language_model,
@@ -647,6 +668,7 @@ class GenerateNextSessionCommandHandler(
                         ),
                         "goal": user.goal.value,
                         "catalog_json": catalog_json(records),
+                        "wellbeing_json": wellbeing_json,
                     },
                 )
             except AgentUnavailable:
@@ -693,10 +715,15 @@ class GenerateNextSessionCommandHandler(
             user.clear_expectation()
             user.pending_proposal_id = saved.id
             await repos.users.save(user)
+            if wellbeing_entry_ids:
+                from fitness_bot.service.handlers.commands.wellbeing_adapt import remember_wellbeing_adapt
+
+                remember_wellbeing_adapt(proposal_id=saved.id, entry_ids=wellbeing_entry_ids)
             return cmds.GenerateNextSessionCommandResult(
                 proposal_id=saved.id,
                 reply=reply,
                 document=document,
+                wellbeing_entry_ids=wellbeing_entry_ids,
             )
 
 

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from fitness_bot.domain.enums import ActivityLevel, ExperienceLevel, Goal, ProfileField, Sex
+from fitness_bot.domain.enums import ActivityLevel, ExperienceLevel, Goal, ProfileField, Sex, TrainingPlace
 from fitness_bot.domain.errors import InvalidProfileValue
 from fitness_bot.domain.users.user import User, local_calendar_date, local_day_bounds
 
@@ -70,18 +70,32 @@ def test_profile_complete_requires_goal_and_weight() -> None:
     user.days_per_week = 3
     user.training_weekdays = frozenset({1, 3, 5})
     user.equipment = "зал"
+    user.training_place = TrainingPlace.GYM
     user.limitations = ""
     user.activity_level = ActivityLevel.MODERATE
     user.session_minutes = 60
     user.body_fat_set = True
     user.supplements = frozenset({"none"})
     user.diet_prefs = ""
+    user.nutrition_constraints = ""
     assert user.next_missing_field(has_weight=False) == ProfileField.WEIGHT
     assert user.next_missing_field(has_weight=True) is None
     assert not user.is_profile_complete(has_weight=True)
     user.set_goal(Goal.FAT_LOSS)
     assert user.is_profile_complete(has_weight=True)
     assert user.nutrition_stale is True
+
+
+def test_training_place_and_nutrition_constraints_stale() -> None:
+    user = User(telegram_user_id=1, chat_id=1)
+    user.apply_profile_field(ProfileField.TRAINING_PLACE, TrainingPlace.HOME.value)
+    assert user.training_place == TrainingPlace.HOME
+    assert user.nutrition_stale is False
+    user.apply_profile_field(ProfileField.NUTRITION_CONSTRAINTS, "аллергия на орехи")
+    assert user.nutrition_constraints == "аллергия на орехи"
+    assert user.nutrition_stale is True
+    with pytest.raises(InvalidProfileValue):
+        user.apply_profile_field(ProfileField.TRAINING_PLACE, "garage")
 
 
 def test_experience_must_be_enum() -> None:

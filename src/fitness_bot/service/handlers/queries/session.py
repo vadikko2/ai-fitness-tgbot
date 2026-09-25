@@ -89,12 +89,15 @@ class GetTodayWorkoutQueryHandler(
 
             progress = await _week_progress_for_program(repos, user=user, program=program)
             template = next((day for day in program.days if day.weekday == weekday), None)
+            unapplied = await repos.wellbeing.list_unapplied(user.id, limit=1)
+            has_unapplied = bool(unapplied)
             if template is None:
                 return queries.GetTodayWorkoutQueryResult(
                     screen="rest",
                     program_id=program.id,
                     program_type=program.program_type,
                     weekday=weekday,
+                    has_unapplied_wellbeing=has_unapplied,
                     **_progress_fields(progress),
                 )
 
@@ -105,6 +108,7 @@ class GetTodayWorkoutQueryHandler(
                 program_type=program.program_type,
                 document=document,
                 weekday=weekday,
+                has_unapplied_wellbeing=has_unapplied,
                 **_progress_fields(progress),
             )
 

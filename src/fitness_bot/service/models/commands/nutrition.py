@@ -11,6 +11,7 @@ class GenerateNutritionCommand(Command):
     telegram_user_id: int
     subject_telegram_user_id: int | None = None
     subject_user_id: UUID | None = None
+    force: bool = False
 
 
 class GenerateNutritionCommandResult(CommandResult):

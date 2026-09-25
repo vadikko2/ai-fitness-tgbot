@@ -25,6 +25,7 @@ class GetTodayWorkoutQueryResult(QueryResult):
     completed_weekdays: list[int] = []
     week_finished: bool = False
     technique_video_positions: list[int] = []
+    has_unapplied_wellbeing: bool = False
 
 
 class GetSessionHistoryQuery(Query):

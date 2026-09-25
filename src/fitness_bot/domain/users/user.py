@@ -17,6 +17,7 @@ from fitness_bot.domain.enums import (
     ProfileField,
     Sex,
     Supplement,
+    TrainingPlace,
 )
 from fitness_bot.domain.errors import InvalidProfileValue
 
@@ -31,12 +32,14 @@ PROFILE_FIELD_ORDER: tuple[ProfileField, ...] = (
     ProfileField.DAYS_PER_WEEK,
     ProfileField.TRAINING_WEEKDAYS,
     ProfileField.EQUIPMENT,
+    ProfileField.TRAINING_PLACE,
     ProfileField.LIMITATIONS,
     ProfileField.ACTIVITY_LEVEL,
     ProfileField.SESSION_MINUTES,
     ProfileField.BODY_FAT,
     ProfileField.SUPPLEMENTS,
     ProfileField.DIET_PREFS,
+    ProfileField.NUTRITION_CONSTRAINTS,
 )
 
 # Edit-only / optional fields — not part of onboarding completeness.
@@ -85,6 +88,7 @@ class User(BaseModel):
     days_per_week: int | None = None
     training_weekdays: frozenset[int] = Field(default_factory=frozenset)
     equipment: str | None = None
+    training_place: TrainingPlace | None = None
     limitations: str | None = None
     activity_level: ActivityLevel | None = None
     session_minutes: int | None = None
@@ -93,6 +97,7 @@ class User(BaseModel):
     supplements: frozenset[str] | None = None
     supplements_other: str | None = None
     diet_prefs: str | None = None
+    nutrition_constraints: str | None = None
     pharma: str | None = None
     timezone_offset: str | None = None
     goal: Goal | None = None
@@ -137,6 +142,8 @@ class User(BaseModel):
                     return field
             if field == ProfileField.EQUIPMENT and self.equipment is None:
                 return field
+            if field == ProfileField.TRAINING_PLACE and self.training_place is None:
+                return field
             if field == ProfileField.LIMITATIONS and self.limitations is None:
                 return field
             if field == ProfileField.ACTIVITY_LEVEL and self.activity_level is None:
@@ -148,6 +155,8 @@ class User(BaseModel):
             if field == ProfileField.SUPPLEMENTS and self.supplements is None:
                 return field
             if field == ProfileField.DIET_PREFS and self.diet_prefs is None:
+                return field
+            if field == ProfileField.NUTRITION_CONSTRAINTS and self.nutrition_constraints is None:
                 return field
         return None
 
@@ -235,6 +244,11 @@ class User(BaseModel):
             if not text:
                 raise InvalidProfileValue("equipment must not be empty")
             self.equipment = text
+        elif field == ProfileField.TRAINING_PLACE:
+            try:
+                self.training_place = TrainingPlace(str(value).strip())
+            except ValueError as exc:
+                raise InvalidProfileValue("training_place must be gym, home, outdoor, or mixed") from exc
         elif field == ProfileField.LIMITATIONS:
             self.limitations = str(value).strip()
         elif field == ProfileField.ACTIVITY_LEVEL:
@@ -253,6 +267,8 @@ class User(BaseModel):
             self._apply_supplements(value)
         elif field == ProfileField.DIET_PREFS:
             self.diet_prefs = str(value).strip()
+        elif field == ProfileField.NUTRITION_CONSTRAINTS:
+            self.nutrition_constraints = str(value).strip()
         elif field == ProfileField.PHARMA:
             self.pharma = str(value).strip()
         elif field == ProfileField.TIMEZONE:
@@ -266,6 +282,7 @@ class User(BaseModel):
             ProfileField.BODY_FAT,
             ProfileField.SUPPLEMENTS,
             ProfileField.DIET_PREFS,
+            ProfileField.NUTRITION_CONSTRAINTS,
             ProfileField.PHARMA,
         }:
             self.nutrition_stale = True
