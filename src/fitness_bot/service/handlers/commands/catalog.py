@@ -189,7 +189,7 @@ class ApplyCatalogProgramCommandHandler(
                     "document_json": document_json(document),
                     "utterance": request.utterance or "адаптируй программу под мой профиль: нагрузки и объём",
                     "limitations": user.limitations or "",
-                        "training_place": user.training_place.value if user.training_place else "",
+                    "training_place": user.training_place.value if user.training_place else "",
                     "catalog_json": catalog_json(records),
                     "schema_json": workout_document_schema_json(),
                     "focus_day_position": None,

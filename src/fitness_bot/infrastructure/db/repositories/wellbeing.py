@@ -63,7 +63,5 @@ class SqlAlchemyWellbeingRepository(IWellbeingRepository):
             return
         moment = applied_at or datetime.now(UTC)
         await self._session.execute(
-            update(WellbeingEntryRow)
-            .where(WellbeingEntryRow.id.in_(entry_ids))
-            .values(applied_at=moment),
+            update(WellbeingEntryRow).where(WellbeingEntryRow.id.in_(entry_ids)).values(applied_at=moment),
         )
