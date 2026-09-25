@@ -1,6 +1,6 @@
 """Add training_place, nutrition_constraints, and wellbeing_entries.
 
-Revision ID: 0014_training_place_nutrition_wellbeing
+Revision ID: 0014_training_place_wellbeing
 Revises: 0013_nutrition_sports_nutrition
 Create Date: 2026-09-25
 """
@@ -9,7 +9,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0014_training_place_nutrition_wellbeing"
+revision: str = "0014_training_place_wellbeing"
 down_revision: str | None = "0013_nutrition_sports_nutrition"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
