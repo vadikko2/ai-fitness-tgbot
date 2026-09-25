@@ -99,6 +99,10 @@ def test_proposal_template_explains_draft_actions() -> None:
     assert "Черновик программы" in text
     assert "Сделать активной" in text
     assert "Отменить черновик" in text
+    assert "1 тренировка" in text
+    assert "Вт — день 1" in text
+    assert "Средняя тренировка, 2 упражнения." in text
+    assert " · средняя · " not in text
 
 
 def test_proposal_day_keyboard_lists_slots() -> None:

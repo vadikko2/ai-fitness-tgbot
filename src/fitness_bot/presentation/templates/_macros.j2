@@ -1,4 +1,16 @@
 {# Shared helpers for workout / proposal lists. Keep lines after {{ }} so trim_blocks keeps newlines. #}
+{% macro count_words(n, one, few, many) -%}
+{%- set n = n|int -%}
+{%- set n10 = n % 10 -%}
+{%- set n100 = n % 100 -%}
+{%- if n10 == 1 and n100 != 11 -%}
+{{- n }} {{ one -}}
+{%- elif n10 >= 2 and n10 <= 4 and (n100 < 10 or n100 >= 20) -%}
+{{- n }} {{ few -}}
+{%- else -%}
+{{- n }} {{ many -}}
+{%- endif -%}
+{%- endmacro %}
 {% macro load(slot) -%}
 {{ slot.sets }}×{% if slot.reps %}{{ slot.reps }}{% else %}{{ slot.duration_seconds }}с{% endif %}{% if slot.weight_kg %} · {{ slot.weight_kg }} кг{% endif %}
 {%- endmacro %}

@@ -1,11 +1,14 @@
 {% import "_macros.j2" as m %}
 <b>📋 Программа</b>
-Структура: <b>{{ program_type_label }}</b>
-Дней: <b>{{ document.days|length }}</b> · открой день, чтобы увидеть упражнения
+{% if program_type_label %}<b>{{ program_type_label }}</b>
+{% endif %}{% if program_type_blurb %}{{ program_type_blurb }}
+{% endif %}
+{{ m.count_words(document.days|length, "тренировка", "тренировки", "тренировок") }}. Открой день, чтобы увидеть упражнения.
 {% for day in document.days %}
-• {% if day.weekday_label %}{{ day.weekday_label }} · {% endif %}{{ day.title }} · {{ day.intensity_label }} · {{ day.training_style_label }} — {{ day.slots|length }} упр.
+<b>{% if day.weekday_label %}{{ day.weekday_label }} — {% endif %}{{ day.title }}</b>
+{{ day.intensity_label|capitalize }} тренировка, {{ m.count_words(day.slots|length, "упражнение", "упражнения", "упражнений") }}.{% if day.training_style_summary %} {{ day.training_style_summary }}{% endif %}
+{{ '\n' }}
 {% endfor %}
 {% if has_pending %}
-
 📝 Есть черновик изменений — открой его из меню «Изменить программу».
 {% endif %}

@@ -77,7 +77,7 @@ def test_proposal_and_session_templates_render_with_session_document_view() -> N
         missing_weekdays=False,
     )
     assert "Ср" in proposal
-    assert "легкая" in proposal
+    assert "Легкая тренировка" in proposal
     template = env.get_template("session_template.j2").render(
         document=view,
         weekday_label="Ср",
@@ -93,7 +93,7 @@ def test_proposal_and_session_templates_render_with_session_document_view() -> N
     assert "Присед" in card
     assert "\n1. Присед" in card or card.count("\n") >= 3
     day = env.get_template("proposal_day.j2").render(day=view["days"][0], reply="")
-    assert "легкая" in day
+    assert "Легкая тренировка" in day
 
     warm_view = view["days"][0] | {"warmup": "5 мин кардио", "cooldown": "растяжка"}
     warm_day = env.get_template("proposal_day.j2").render(day=warm_view, reply="готово")

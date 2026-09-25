@@ -223,6 +223,10 @@ __marimo__/
 # graphify
 graphify-out/
 
+# macOS
+.DS_Store/
+.DS_Store
+
 # sherpa-onnx ASR model packs (large binaries; see `make download-stt-model`)
 /models/
 

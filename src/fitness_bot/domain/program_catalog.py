@@ -10,6 +10,7 @@ class ProgramKindCopy:
     label: str
     blurb: str
     detail: str
+    summary: str = ""
 
 
 PROGRAM_STATUS_LABELS: dict[ProgramStatus, str] = {
@@ -67,7 +68,7 @@ PROGRAM_TYPE_COPY: dict[ProgramType, ProgramKindCopy] = {
     ),
     ProgramType.KETTLEBELL: ProgramKindCopy(
         label="🫖 Гиря",
-        blurb="Сила и мощность с гирей: махи, толчки, goblet, турецкие подъёмы.",
+        blurb="Неделя на силу и мощность с гирей: махи, толчки, приседания с гирей у груди и турецкие подъёмы.",
         detail=(
             "Неделя строится вокруг гири: махи, cleans/press, goblet-приседания, прогулки, турецкий подъём. "
             "Подходит для дома и улицы при наличии гири; 2–4 дня в неделю с акцентом на технику и плотность."
@@ -75,7 +76,7 @@ PROGRAM_TYPE_COPY: dict[ProgramType, ProgramKindCopy] = {
     ),
     ProgramType.CARDIO: ProgramKindCopy(
         label="❤️ Кардио",
-        blurb="Выносливость и пульс: интервалы, скакалка, бег, плиометрика.",
+        blurb="Неделя на выносливость и пульс: интервалы, скакалка, бег и лёгкие прыжки.",
         detail=(
             "Сессии на выносливость и пульсовые зоны: интервалы, скакалка, беговые/шаговые паттерны, "
             "лёгкая плиометрика. Выбирай упражнения по месту (зал / дом / улица); 3–5 дней в неделю."
@@ -91,7 +92,7 @@ PROGRAM_TYPE_COPY: dict[ProgramType, ProgramKindCopy] = {
     ),
     ProgramType.STRETCHING: ProgramKindCopy(
         label="🤸 Растяжка",
-        blurb="Гибкость и мобилити: статика, динамика, суставные круги.",
+        blurb="Неделя на гибкость: удержание поз, движения в суставах и круги.",
         detail=(
             "Дни на растяжку и мобилити: статические и динамические растяжки, CARs, раскрытие таза/грудного. "
             "Мало силовых слотов; duration_seconds уместны. 2–4 дня или как отдельные лёгкие дни в неделе."
@@ -103,6 +104,7 @@ TRAINING_STYLE_COPY: dict[TrainingStyle, ProgramKindCopy] = {
     TrainingStyle.CLASSIC: ProgramKindCopy(
         label="🏋️ Классика",
         blurb="Обычные подходы и отдых — баланс роста мышц и восстановления.",
+        summary="Обычные подходы и отдых между ними.",
         detail=(
             "Классическая схема: несколько подходов, умеренный отдых, RPE около 7–8. "
             "Универсальный вариант для гипертрофии и поддержания формы."
@@ -111,6 +113,7 @@ TRAINING_STYLE_COPY: dict[TrainingStyle, ProgramKindCopy] = {
     TrainingStyle.STRENGTH: ProgramKindCopy(
         label="💪 Сила 5×5",
         blurb="Фокус на силу в базах: мало повторов, длинный отдых (в духе 5×5).",
+        summary="Мало повторов и длинный отдых, упор на силу.",
         detail=(
             "Базовые движения с низкими повторами и длинным отдыхом. "
             "Подходит, когда цель — прибавить силу в приседе, жиме и тяге."
@@ -119,6 +122,7 @@ TRAINING_STYLE_COPY: dict[TrainingStyle, ProgramKindCopy] = {
     TrainingStyle.CIRCUIT: ProgramKindCopy(
         label="🔄 Круговая",
         blurb="Упражнения цепочкой почти без паузы — выносливость и расход энергии.",
+        summary="Упражнения идут одно за другим, почти без паузы.",
         detail=(
             "Упражнения идут одно за другим с коротким отдыхом. "
             "Больше кардионагрузки и расхода калорий при том же времени."
@@ -127,6 +131,7 @@ TRAINING_STYLE_COPY: dict[TrainingStyle, ProgramKindCopy] = {
     TrainingStyle.HIT: ProgramKindCopy(
         label="⚡ HIT",
         blurb="Коротко и жёстко: 1–2 рабочих подхода до отказа, редкие тренировки.",
+        summary="Коротко и тяжело: один-два подхода до отказа.",
         detail=(
             "Мало рабочих подходов до высокого RPE или отказа. "
             "Сессии короче, но интенсивнее — важно не перетренироваться."

@@ -137,6 +137,7 @@ def _day_style_view(day: WorkoutDay) -> dict[str, str]:
     return {
         "training_style_label": label,
         "training_style_blurb": copy.blurb if copy else "",
+        "training_style_summary": copy.summary if copy else "",
     }
 
 

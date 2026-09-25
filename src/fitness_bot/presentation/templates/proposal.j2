@@ -2,19 +2,23 @@
 {% if reply %}{{ reply }}
 
 {% endif %}{% if document %}<b>📝 Черновик программы</b>
-Структура: <b>{{ program_type_label }}</b> — {{ program_type_blurb }}
-Дней: <b>{{ document.days|length }}</b> · открой день, чтобы проверить упражнения
+{% if program_type_label %}<b>{{ program_type_label }}</b>
+{% if program_type_blurb %}{{ program_type_blurb }}
+{% endif %}{% endif %}
+{{ m.count_words(document.days|length, "тренировка", "тренировки", "тренировок") }}. Открой день, чтобы проверить упражнения.
 {% for day in document.days %}
-• {% if day.weekday_label %}{{ day.weekday_label }} · {% endif %}{{ day.title }} · {{ day.intensity_label }} · {{ day.training_style_label }} — {{ day.slots|length }} упр.
+<b>{% if day.weekday_label %}{{ day.weekday_label }} — {% endif %}{{ day.title }}</b>
+{{ day.intensity_label|capitalize }} тренировка, {{ m.count_words(day.slots|length, "упражнение", "упражнения", "упражнений") }}.{% if day.training_style_summary %} {{ day.training_style_summary }}{% endif %}
+{{ '\n' }}
 {% endfor %}{% if missing_weekdays %}
-
 ⚠️ Укажи дни недели (пн–вс) для каждого дня — иначе сделать активной нельзя.
 {% endif %}
-
 📚 <b>Сохранить в библиотеку</b> — оставить копию у себя (черновик не пропадает).
 ✅ <b>Сделать активной</b> — заменить текущую программу этим черновиком.
 ❌ <b>Отменить черновик</b> — выбросить правки и вернуться.
 {% else %}<b>📋 Программа</b>
-Структура: <b>{{ program_type_label }}</b> — {{ program_type_blurb }}
+{% if program_type_label %}<b>{{ program_type_label }}</b>
+{% if program_type_blurb %}{{ program_type_blurb }}
+{% endif %}{% endif %}
 Нажми «Описать текстом или голосом» или «Пусть предложит».
 {% endif %}

@@ -36,6 +36,7 @@ Rules:
 - `program.program_type` must be `{{ program_type }}`. Do not set a program-level `training_style`.
 - Day count in `program.days` must equal days per week.
 - Every day must have ISO `weekday` (1=Mon … 7=Sun), `title`, `position`, `intensity`, `training_style`, `warmup`, `cooldown`, and `slots`. Weekdays must be unique and should match the training weekdays from the profile when provided.
+- `title` is one short Russian phrase of what that session works (for example «Ноги и махи»). Do not repeat the program type, do not list tags, and do not use a colon.
 - Split days according to the structure guide above (muscle splits, kettlebell, cardio, bodyweight_recovery, or stretching).
 - **CRITICAL — choose exercises by place:** every catalog row has `places` (`gym` | `home` | `outdoor`, can be several). The catalog already filtered to the user's `training_place` when possible — still only pick rows whose `places` fit where the session will be done. Never prescribe a gym-machine / cable / smith exercise for `home` or `outdoor`. Prefer multi-place options for `mixed`.
 - For `kettlebell`: predominantly kettlebell patterns; for `cardio`: pulse work / intervals / jump rope / runs; for `bodyweight_recovery`: light bodyweight activation only; for `stretching`: prefer catalog names starting with «Растяжка:» / «Мобилити:» (duration_seconds OK; recovery/light intensity).
@@ -83,7 +84,7 @@ Example shape (types must match the schema above):
   "days": [
     {
       "weekday": 1,
-      "title": "день 1",
+      "title": "Ноги и махи",
       "position": 1,
       "intensity": "medium",
       "training_style": "classic",
