@@ -225,6 +225,7 @@ class GetCatalogProgramQueryResult(QueryResult):
     author_label: str | None
     document: WorkoutDocument
     is_author_template: bool
+    source_program_id: UUID | None = None
 
 
 class GetMyCoachQuery(Query):

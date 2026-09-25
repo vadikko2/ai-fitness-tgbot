@@ -418,6 +418,7 @@ class GetCatalogProgramQueryHandler(
                 author_label=program.author_label,
                 document=program.to_document(),
                 is_author_template=program.source_program_id is None and program.status.value in {"draft", "published"},
+                source_program_id=program.source_program_id,
             )
 
 
