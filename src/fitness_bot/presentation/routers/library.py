@@ -139,7 +139,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
         ]
         if result.status == "draft" and result.is_author_template:
             rows.append(
-                [InlineKeyboardButton(text="Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")]
+                [InlineKeyboardButton(text="Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")],
             )
         if result.status == "published" and result.distribution_code:
             rows.append(
