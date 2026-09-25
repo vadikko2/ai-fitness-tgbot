@@ -237,26 +237,8 @@ async def test_invite_accept_unlink_and_home_badge() -> None:
 @pytest.mark.asyncio
 async def test_publish_claim_no_duplicate() -> None:
     uow = InMemoryUow()
-    await _user(uow, 20, moderator=True)
     await _user(uow, 21)
     await _user(uow, 22)
-
-    await SubmitCoachApplicationCommandHandler(uow).handle(
-        SubmitCoachApplicationCommand(
-            telegram_user_id=21,
-            display_name="Author",
-            bio="bio",
-            portfolio_url="https://example.com",
-            credential_object_key="k",
-            credential_content_type="image/png",
-            credential_byte_size=1,
-        ),
-    )
-    async with uow.transaction() as repos:
-        app_id = (await repos.coaches.list_pending_applications())[0].id
-    await ApproveCoachApplicationCommandHandler(uow).handle(
-        ApproveCoachApplicationCommand(telegram_user_id=20, application_id=app_id),
-    )
 
     draft = await SaveProgramDraftCommandHandler(uow).handle(
         SaveProgramDraftCommand(telegram_user_id=21, document=_doc(), title="Авторский"),
@@ -278,6 +260,28 @@ async def test_publish_claim_no_duplicate() -> None:
         card = await repos.programs.get_by_id(first.program_id)
         assert card is not None
         assert card.status == ProgramStatus.DRAFT
+
+
+@pytest.mark.asyncio
+async def test_non_coach_can_publish_and_claim() -> None:
+    uow = InMemoryUow()
+    await _user(uow, 61)
+    await _user(uow, 62)
+
+    draft = await SaveProgramDraftCommandHandler(uow).handle(
+        SaveProgramDraftCommand(telegram_user_id=61, document=_doc(), title="Друзьям"),
+    )
+    published = await PublishProgramCommandHandler(uow).handle(
+        PublishProgramCommand(telegram_user_id=61, program_id=draft.program_id),
+    )
+    assert published.distribution_code
+
+    claimed = await ClaimProgramByCodeCommandHandler(uow).handle(
+        ClaimProgramByCodeCommand(telegram_user_id=62, code=published.distribution_code),
+    )
+    assert claimed.program_id != draft.program_id
+    assert claimed.already_claimed is False
+    assert claimed.title == "Друзьям"
 
 
 @pytest.mark.asyncio

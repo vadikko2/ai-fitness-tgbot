@@ -9,7 +9,7 @@ from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.proposal import Proposal
-from fitness_bot.service.authz import require_coach_of, require_verified_coach
+from fitness_bot.service.authz import require_coach_of
 from fitness_bot.service.handlers.commands.agent_json import clip_reply, complete_json, parse_workout_document
 from fitness_bot.service.handlers.commands.program import _replace_pending, build_profile_payload
 from fitness_bot.service.interfaces.uow import IUow
@@ -59,7 +59,6 @@ class PublishProgramCommandHandler(
     async def handle(self, request: cmds.PublishProgramCommand) -> cmds.PublishProgramCommandResult:
         async with self._uow.transaction() as repos:
             user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
-            await require_verified_coach(repos, user)
             program = await repos.programs.get_by_id(request.program_id)
             if program is None or program.user_id != user.id:
                 raise DomainError("program not found")

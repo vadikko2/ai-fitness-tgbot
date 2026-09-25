@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
@@ -12,6 +12,7 @@ from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.program_catalog import (
     PROGRAM_TYPE_COPY,
     TRAINING_STYLE_COPY,
+    program_type_label,
     structure_choice_items,
     training_style_label,
 )
@@ -44,6 +45,7 @@ from fitness_bot.presentation.keyboards import (
 )
 from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
 from fitness_bot.presentation.muscle_emoji import build_slot_nav_items
+from fitness_bot.service.models.commands.catalog import SaveProgramDraftCommand
 from fitness_bot.service.models.commands.program import (
     ApproveProposalCommand,
     ChooseProgramTypeCommand,
@@ -294,6 +296,7 @@ async def render_proposal(
         markup = proposal_actions_keyboard(
             can_approve=can_approve,
             days=_day_buttons(document) if document is not None else None,
+            can_save_to_library=document is not None,
         )
     await message.answer(text, reply_markup=markup)
 
@@ -1172,6 +1175,90 @@ def create_program_router(*, jinja_env: Environment, mediator: RequestMediator) 
         text = jinja_env.get_template("program_active.j2").render()
         if callback.message:
             await callback.message.answer(text, reply_markup=home_keyboard())
+        await callback.answer()
+
+    @router.callback_query(F.data == "prog_lib_save")
+    async def handle_prog_lib_save(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        pending = await mediator.send(GetPendingProposalQuery(telegram_user_id=callback.from_user.id))
+        if (
+            pending.document is None
+            or pending.kind != ProposalKind.PROGRAM
+            or callback.message is None
+        ):
+            if callback.message:
+                await callback.message.answer("Нет черновика программы для сохранения.")
+            await callback.answer()
+            return
+        try:
+            saved = await mediator.send(
+                SaveProgramDraftCommand(
+                    telegram_user_id=callback.from_user.id,
+                    document=pending.document,
+                    title=program_type_label(pending.document.program_type),
+                ),
+            )
+        except DomainError as exc:
+            await callback.message.answer(str(exc))
+            await callback.answer()
+            return
+        await callback.message.answer(
+            "Сохранено в библиотеку как черновик.\n"
+            "Черновик правки не сброшен — можно ещё сделать активной или отменить.\n\n"
+            "Поделиться: открой карточку → «Опубликовать» "
+            "и отправь код/ссылку. Своему клиенту — из Кабинета → Назначить.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Открыть в библиотеке",
+                            callback_data=f"lib_card:{saved.program_id}",
+                        ),
+                    ],
+                    [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+                    [InlineKeyboardButton(text="📝 К черновику", callback_data="prog_draft")],
+                ],
+            ),
+        )
+        await callback.answer()
+
+    @router.callback_query(F.data == "prog_lib_save_active")
+    async def handle_prog_lib_save_active(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        active = await mediator.send(GetActiveProgramQuery(telegram_user_id=callback.from_user.id))
+        if active.document is None or callback.message is None:
+            if callback.message:
+                await callback.message.answer("Нет активной программы для сохранения.")
+            await callback.answer()
+            return
+        try:
+            saved = await mediator.send(
+                SaveProgramDraftCommand(
+                    telegram_user_id=callback.from_user.id,
+                    document=active.document,
+                    title=program_type_label(active.document.program_type),
+                ),
+            )
+        except DomainError as exc:
+            await callback.message.answer(str(exc))
+            await callback.answer()
+            return
+        await callback.message.answer(
+            "Копия активной программы сохранена в библиотеку.\n\n"
+            "Поделиться: карточка → «Опубликовать» → код/ссылка. "
+            "Клиенту — Кабинет → Назначить.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Открыть в библиотеке",
+                            callback_data=f"lib_card:{saved.program_id}",
+                        ),
+                    ],
+                    [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+                ],
+            ),
+        )
         await callback.answer()
 
     @router.callback_query(F.data == "draft_cancel")

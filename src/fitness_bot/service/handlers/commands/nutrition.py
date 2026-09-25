@@ -11,11 +11,15 @@ from fitness_bot.domain.enums import ProgramType
 from fitness_bot.domain.errors import AgentUnavailable, DomainError, InvalidWorkoutDocument
 from fitness_bot.domain.users.user import User
 from fitness_bot.service.authz import require_coach_of
-from fitness_bot.service.handlers.commands.agent_json import clip_reply, complete_json, reply_from_payload
+from fitness_bot.service.handlers.commands.agent_json import clip_reply, complete_json
 from fitness_bot.service.handlers.commands.program import build_profile_payload
 from fitness_bot.service.interfaces.uow import IUow
 from fitness_bot.service.models.commands import nutrition as cmds
 from fitness_bot.service.ports.language_model import LanguageModel
+
+# Align with nutrition_advisor.md limits (above the global 500-char coach reply default).
+_NUTRITION_REPLY_MAX = 1200
+_NUTRITION_PROSE_MAX = 800
 
 
 def _require_user(user: User | None) -> User:
@@ -25,7 +29,7 @@ def _require_user(user: User | None) -> User:
 
 
 def _clip_stored(text: object) -> str:
-    return clip_reply(text)
+    return clip_reply(text, max_chars=_NUTRITION_PROSE_MAX)
 
 
 def _parse_decimal(value: object, *, name: str) -> Decimal:
@@ -63,7 +67,7 @@ def _nutrition_from_payload(
         snapshot_days_per_week=user.days_per_week,
         snapshot_program_type=program_type,
     )
-    return recommendation, clip_reply(payload.get("reply"))
+    return recommendation, clip_reply(payload.get("reply"), max_chars=_NUTRITION_REPLY_MAX)
 
 
 class GenerateNutritionCommandHandler(
@@ -193,7 +197,10 @@ class GenerateNutritionCommandHandler(
             except (InvalidWorkoutDocument, DomainError, ValueError, TypeError, KeyError):
                 return cmds.GenerateNutritionCommandResult(
                     schema_failed=True,
-                    reply=reply_from_payload(payload),
+                    reply=clip_reply(
+                        payload.get("reply") if isinstance(payload, dict) else None,
+                        max_chars=_NUTRITION_REPLY_MAX,
+                    ),
                 )
 
             await repos.nutrition.mark_all_stale_for_user(user.id)

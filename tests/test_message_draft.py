@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from fitness_bot.presentation.message_draft import (
+    NUTRITION_WAITING_PHRASES,
     MessageDraftStream,
     assistant_parse_failure_text,
     draft_preview_from_partial,
@@ -36,6 +37,13 @@ def test_assistant_parse_failure_merges_reply_into_one_screen() -> None:
 def test_assistant_parse_failure_without_reply_is_hint_only() -> None:
     assert assistant_parse_failure_text("") == "Не удалось разобрать ответ помощника. Скажи иначе."
     assert assistant_parse_failure_text(None) == "Не удалось разобрать ответ помощника. Скажи иначе."
+
+
+def test_nutrition_waiting_phrases_are_food_themed() -> None:
+    assert NUTRITION_WAITING_PHRASES
+    joined = " ".join(NUTRITION_WAITING_PHRASES).lower()
+    assert "упражнен" not in joined
+    assert any(token in joined for token in ("калор", "бжу", "режим", "норм"))
 
 
 @pytest.mark.asyncio

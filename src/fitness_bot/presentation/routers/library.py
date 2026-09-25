@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from urllib.parse import quote
 from uuid import UUID
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from cqrs import RequestMediator
 from jinja2 import Environment
@@ -17,9 +18,54 @@ from fitness_bot.service.models.commands.catalog import (
 )
 from fitness_bot.service.models.queries.coach import GetCatalogProgramQuery, ListProgramCatalogQuery
 
+_bot_username_cache: str | None = None
+
 
 def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _resolve_bot_username(bot: Bot) -> str | None:
+    global _bot_username_cache
+    if _bot_username_cache:
+        return _bot_username_cache
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if me.username:
+        _bot_username_cache = me.username
+        return _bot_username_cache
+    return None
+
+
+def _program_deep_link(bot_username: str | None, code: str) -> str | None:
+    if not bot_username:
+        return None
+    return f"https://t.me/{bot_username.lstrip('@')}?start=p_{code}"
+
+
+def _program_share_text(*, title: str, code: str, bot_username: str | None) -> str:
+    link = _program_deep_link(bot_username, code)
+    lines = [
+        f"Программа «{title}» в AI Fitness.",
+        "",
+    ]
+    if link:
+        lines.extend([f"Открой в боте:\n{link}", ""])
+    lines.extend(
+        [
+            "Или Библиотека → «Ввести код или ссылку»:",
+            f"`{code}`",
+        ],
+    )
+    return "\n".join(lines)
+
+
+def _program_share_url(*, title: str, code: str, bot_username: str | None) -> str:
+    share_text = _program_share_text(title=title, code=code, bot_username=bot_username)
+    preview = f"https://t.me/{bot_username.lstrip('@')}" if bot_username else "https://t.me"
+    return f"https://t.me/share/url?url={quote(preview, safe='')}&text={quote(share_text, safe='')}"
 
 
 def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) -> Router:
@@ -33,9 +79,18 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
             [InlineKeyboardButton(text="➕ Создать через AI", callback_data="prog_setup")],
         ]
         if not result.items:
-            text = "Библиотека программ пуста."
+            text = (
+                "Библиотека программ пуста.\n\n"
+                "Сюда попадают шаблоны: после генерации нажми «Сохранить в библиотеку», "
+                "либо введи чужой код/ссылку.\n"
+                "Поделиться своей: сохрани → открой карточку → «Опубликовать» "
+                "→ отправь код."
+            )
         else:
-            text = "Библиотека программ:"
+            text = (
+                "Библиотека программ:\n"
+                "Карточка → применить себе, опубликовать (код/ссылка) или назначить клиенту."
+            )
             for item in result.items:
                 badge = f" · {program_status_label(item.status)}"
                 if item.author_label:
@@ -66,20 +121,38 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.message.answer(str(exc))
             await callback.answer()
             return
+        bot_username = await _resolve_bot_username(callback.bot) if callback.bot else None
         claim_note = ""
         if result.source_program_id is not None:
             claim_note = "\nЭто шаблон. Автор вас не видит, пока не подключитесь."
         code_line = ""
         if result.distribution_code:
-            code_line = f"\nКод: {result.distribution_code}\nСсылка: start=p_{result.distribution_code}"
+            link = _program_deep_link(bot_username, result.distribution_code)
+            code_line = f"\nКод: `{result.distribution_code}`"
+            if link:
+                code_line += f"\nСсылка: {link}"
+            else:
+                code_line += f"\nСсылка: start=p_{result.distribution_code}"
         text = f"{result.title}\nСтатус: {program_status_label(result.status)}{code_line}{claim_note}"
         rows = [
             [InlineKeyboardButton(text="Применить сейчас", callback_data=f"lib_apply:{program_id}:adapt")],
             [InlineKeyboardButton(text="Как у автора", callback_data=f"lib_apply:{program_id}:as_is")],
         ]
         if result.status == "draft" and result.is_author_template:
-            rows.append([InlineKeyboardButton(text="Опубликовать", callback_data=f"lib_pub:{program_id}")])
-        if result.status == "published":
+            rows.append([InlineKeyboardButton(text="Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")])
+        if result.status == "published" and result.distribution_code:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="📤 Отправить код другу",
+                        url=_program_share_url(
+                            title=result.title,
+                            code=result.distribution_code,
+                            bot_username=bot_username,
+                        ),
+                    ),
+                ],
+            )
             rows.append([InlineKeyboardButton(text="Снять с публикации", callback_data=f"lib_unpub:{program_id}")])
         rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="library")])
         if callback.message:
@@ -93,16 +166,44 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
             result = await mediator.send(
                 PublishProgramCommand(telegram_user_id=callback.from_user.id, program_id=program_id),
             )
+            bot_username = await _resolve_bot_username(callback.bot) if callback.bot else None
+            link = _program_deep_link(bot_username, result.distribution_code)
             text = (
                 f"Опубликовано «{result.title}».\n"
-                f"Код: {result.distribution_code}\n"
-                f"Ссылка для всех: start=p_{result.distribution_code}\n"
+                f"Код: `{result.distribution_code}`\n"
+            )
+            if link:
+                text += f"Ссылка: {link}\n"
+            else:
+                text += f"Ссылка: start=p_{result.distribution_code}\n"
+            text += (
+                "Друг вставляет код в Библиотеке или открывает ссылку.\n"
                 "Своему клиенту: Кабинет → клиент → Назначить."
             )
+            rows = [
+                [
+                    InlineKeyboardButton(
+                        text="📤 Отправить код другу",
+                        url=_program_share_url(
+                            title=result.title,
+                            code=result.distribution_code,
+                            bot_username=bot_username,
+                        ),
+                    ),
+                ],
+                [InlineKeyboardButton(text="Открыть карточку", callback_data=f"lib_card:{program_id}")],
+                [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+            ]
+            kb = _kb(rows)
         except DomainError as exc:
             text = str(exc)
+            kb = _kb(
+                [
+                    [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+                ],
+            )
         if callback.message:
-            await callback.message.answer(text)
+            await callback.message.answer(text, reply_markup=kb)
         await callback.answer()
 
     @router.callback_query(F.data.startswith("lib_unpub:"))

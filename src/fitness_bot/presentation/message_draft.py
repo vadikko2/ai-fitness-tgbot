@@ -26,6 +26,12 @@ _WAITING_PHRASES: tuple[str, ...] = (
     "Сверяю нагрузку...",
     "Думаю над неделей...",
 )
+NUTRITION_WAITING_PHRASES: tuple[str, ...] = (
+    "Считаю калории...",
+    "Подбираю БЖУ...",
+    "Сверяю норму...",
+    "Думаю над режимом...",
+)
 
 
 def draft_preview_from_partial(raw: str) -> str:
@@ -177,8 +183,13 @@ class MessageDraftStream:
 
 
 @asynccontextmanager
-async def message_draft_scope(bot: Bot, chat_id: int) -> AsyncIterator[MessageDraftStream]:
-    draft = MessageDraftStream(bot, chat_id)
+async def message_draft_scope(
+    bot: Bot,
+    chat_id: int,
+    *,
+    waiting_phrases: Sequence[str] | None = None,
+) -> AsyncIterator[MessageDraftStream]:
+    draft = MessageDraftStream(bot, chat_id, waiting_phrases=waiting_phrases)
     await draft.start()
     async with generation_delta_scope(draft.publish_accumulated):
         try:

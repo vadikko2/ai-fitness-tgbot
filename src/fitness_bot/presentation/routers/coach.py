@@ -19,7 +19,11 @@ from fitness_bot.presentation.keyboards import (
     coach_recent_videos_keyboard,
     coach_session_history_keyboard,
 )
-from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
+from fitness_bot.presentation.message_draft import (
+    NUTRITION_WAITING_PHRASES,
+    assistant_parse_failure_text,
+    message_draft_scope,
+)
 from fitness_bot.presentation.routers.program import _can_approve_program, render_proposal
 from fitness_bot.service.models.commands.coach import (
     AcceptCoachInviteCommand,
@@ -602,7 +606,11 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         await callback.answer()
         draft_preview = ""
         try:
-            async with message_draft_scope(callback.bot, callback.message.chat.id) as draft:
+            async with message_draft_scope(
+                callback.bot,
+                callback.message.chat.id,
+                waiting_phrases=NUTRITION_WAITING_PHRASES,
+            ) as draft:
                 result = await mediator.send(
                     GenerateNutritionCommand(
                         telegram_user_id=callback.from_user.id,

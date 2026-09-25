@@ -243,10 +243,10 @@ def parse_workout_document(raw: dict[str, Any], *, default_program_type: Program
     return WorkoutDocument(program_type=program_type, days=days)
 
 
-def clip_reply(reply: object) -> str:
+def clip_reply(reply: object, *, max_chars: int = _REPLY_MAX) -> str:
     text = str(reply or "").strip()
-    if len(text) > _REPLY_MAX:
-        return text[:_REPLY_MAX]
+    if len(text) > max_chars:
+        return text[:max_chars]
     return text
 
 

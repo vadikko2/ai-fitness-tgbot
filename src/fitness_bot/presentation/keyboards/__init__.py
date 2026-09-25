@@ -681,6 +681,7 @@ def proposal_actions_keyboard(
     *,
     can_approve: bool,
     days: list[tuple[int, str]] | None = None,
+    can_save_to_library: bool = False,
 ) -> InlineKeyboardMarkup:
     """days: list of (day_position, button_label)."""
     rows: list[list[InlineKeyboardButton]] = []
@@ -689,6 +690,10 @@ def proposal_actions_keyboard(
             [InlineKeyboardButton(text=f"📅 {label}"[:64], callback_data=f"prog_day:{position}")],
         )
     rows.append([InlineKeyboardButton(text="✏️ Изменить текстом или голосом", callback_data="prog_edit")])
+    if can_save_to_library:
+        rows.append(
+            [InlineKeyboardButton(text="📚 Сохранить в библиотеку", callback_data="prog_lib_save")],
+        )
     if can_approve:
         rows.append([InlineKeyboardButton(text="✅ Сделать активной", callback_data="prog_ok")])
     rows.append([InlineKeyboardButton(text="❌ Отменить черновик", callback_data="draft_cancel")])
@@ -847,10 +852,18 @@ def program_screen_keyboard(
             [InlineKeyboardButton(text=f"📅 {label}"[:64], callback_data=f"prog_view_day:{position}")],
         )
     rows.append([InlineKeyboardButton(text="✏️ Изменить программу", callback_data="prog_edit_menu")])
+    if has_active:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📚 Сохранить в библиотеку",
+                    callback_data="prog_lib_save_active",
+                ),
+            ],
+        )
     if has_pending:
         rows.append([InlineKeyboardButton(text="📝 Есть черновик — открыть", callback_data="prog_draft")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
-    _ = has_active
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
