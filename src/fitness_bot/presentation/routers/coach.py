@@ -593,6 +593,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 carb_g=status.carb_g,
                 calculation=status.calculation,
                 meal_regularity=status.meal_regularity,
+                sports_nutrition=status.sports_nutrition,
             )
             if callback.message:
                 await callback.message.answer(text, reply_markup=back_kb)
@@ -646,6 +647,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             carb_g=result.carb_g,
             calculation=result.calculation,
             meal_regularity=result.meal_regularity,
+            sports_nutrition=result.sports_nutrition,
         )
         await callback.message.answer(text, reply_markup=back_kb)
         if result.client_chat_id and callback.bot:

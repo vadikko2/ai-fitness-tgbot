@@ -37,6 +37,7 @@ def _result(
         carb_g=recommendation.carb_g if recommendation is not None else None,
         calculation=recommendation.calculation if recommendation is not None else "",
         meal_regularity=recommendation.meal_regularity if recommendation is not None else "",
+        sports_nutrition=recommendation.sports_nutrition if recommendation is not None else "",
         snapshot_sex=recommendation.snapshot_sex if recommendation is not None else None,
         snapshot_birth_year=recommendation.snapshot_birth_year if recommendation is not None else None,
         snapshot_height_cm=recommendation.snapshot_height_cm if recommendation is not None else None,

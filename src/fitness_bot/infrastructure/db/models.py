@@ -421,6 +421,7 @@ class NutritionRecommendationRow(Base):
     carb_g: Mapped[Decimal] = mapped_column(Numeric(6, 1), nullable=False)
     calculation: Mapped[str] = mapped_column(Text, nullable=False)
     meal_regularity: Mapped[str] = mapped_column(Text, nullable=False)
+    sports_nutrition: Mapped[str] = mapped_column(Text, nullable=False)
     snapshot_sex: Mapped[str] = mapped_column(Text, nullable=False)
     snapshot_birth_year: Mapped[int] = mapped_column(Integer, nullable=False)
     snapshot_height_cm: Mapped[Decimal] = mapped_column(Numeric(5, 1), nullable=False)

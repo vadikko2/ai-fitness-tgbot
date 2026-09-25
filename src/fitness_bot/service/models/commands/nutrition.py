@@ -25,6 +25,7 @@ class GenerateNutritionCommandResult(CommandResult):
     carb_g: Decimal | None = None
     calculation: str = ""
     meal_regularity: str = ""
+    sports_nutrition: str = ""
     goal: Goal | None = None
     program_type: ProgramType | None = None
     snapshot_sex: Sex | None = None

@@ -24,6 +24,7 @@ def _to_domain(row: NutritionRecommendationRow) -> NutritionRecommendation:
         carb_g=row.carb_g,
         calculation=row.calculation,
         meal_regularity=row.meal_regularity,
+        sports_nutrition=row.sports_nutrition,
         snapshot_sex=Sex(row.snapshot_sex),
         snapshot_birth_year=row.snapshot_birth_year,
         snapshot_height_cm=row.snapshot_height_cm,
@@ -87,6 +88,7 @@ class SqlAlchemyNutritionRepository(INutritionRepository):
             carb_g=recommendation.carb_g,
             calculation=recommendation.calculation,
             meal_regularity=recommendation.meal_regularity,
+            sports_nutrition=recommendation.sports_nutrition,
             snapshot_sex=recommendation.snapshot_sex.value,
             snapshot_birth_year=recommendation.snapshot_birth_year,
             snapshot_height_cm=recommendation.snapshot_height_cm,
@@ -111,5 +113,6 @@ class SqlAlchemyNutritionRepository(INutritionRepository):
         row.carb_g = recommendation.carb_g
         row.calculation = recommendation.calculation
         row.meal_regularity = recommendation.meal_regularity
+        row.sports_nutrition = recommendation.sports_nutrition
         await self._session.flush()
         return _to_domain(row)

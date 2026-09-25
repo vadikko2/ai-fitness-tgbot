@@ -26,6 +26,7 @@ class GetNutritionQueryResult(QueryResult):
     carb_g: Decimal | None = None
     calculation: str = ""
     meal_regularity: str = ""
+    sports_nutrition: str = ""
     snapshot_sex: Sex | None = None
     snapshot_birth_year: int | None = None
     snapshot_height_cm: Decimal | None = None

@@ -43,6 +43,7 @@ def create_nutrition_router(*, jinja_env: Environment, mediator: RequestMediator
                 carb_g=status.carb_g,
                 calculation=status.calculation,
                 meal_regularity=status.meal_regularity,
+                sports_nutrition=status.sports_nutrition,
             )
             if callback.message:
                 await callback.message.answer(text, reply_markup=back_to_menu_keyboard())
@@ -94,6 +95,7 @@ def create_nutrition_router(*, jinja_env: Environment, mediator: RequestMediator
             carb_g=result.carb_g,
             calculation=result.calculation,
             meal_regularity=result.meal_regularity,
+            sports_nutrition=result.sports_nutrition,
         )
         if callback.message:
             await callback.message.answer(text, reply_markup=back_to_menu_keyboard())

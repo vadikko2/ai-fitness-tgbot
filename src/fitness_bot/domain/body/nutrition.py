@@ -24,6 +24,7 @@ class NutritionRecommendation(BaseModel):
     carb_g: Decimal
     calculation: str
     meal_regularity: str
+    sports_nutrition: str
     snapshot_sex: Sex
     snapshot_birth_year: int
     snapshot_height_cm: Decimal
@@ -48,6 +49,8 @@ class NutritionRecommendation(BaseModel):
             raise DomainError("calculation must not be empty")
         if not self.meal_regularity.strip():
             raise DomainError("meal_regularity must not be empty")
+        if not self.sports_nutrition.strip():
+            raise DomainError("sports_nutrition must not be empty")
         return self
 
     def mark_stale(self) -> None:
@@ -66,6 +69,7 @@ class NutritionRecommendation(BaseModel):
         carb_g: Decimal,
         calculation: str,
         meal_regularity: str,
+        sports_nutrition: str,
         snapshot_sex: Sex,
         snapshot_birth_year: int,
         snapshot_height_cm: Decimal,
@@ -84,6 +88,7 @@ class NutritionRecommendation(BaseModel):
             carb_g=carb_g,
             calculation=calculation.strip(),
             meal_regularity=meal_regularity.strip(),
+            sports_nutrition=sports_nutrition.strip(),
             snapshot_sex=snapshot_sex,
             snapshot_birth_year=snapshot_birth_year,
             snapshot_height_cm=snapshot_height_cm,

@@ -199,6 +199,7 @@ def _nutrition_json() -> str:
         "carb_g": 250,
         "calculation": "Базовый обмен и активность под цель.",
         "meal_regularity": "Три приёма пищи и один перекус.",
+        "sports_nutrition": "Если белка с едой мало — протеин после тренировки. Креатин — каждый день с едой.",
         "reply": "Питание посчитано.",
     }
     return json.dumps(payload, ensure_ascii=False)
@@ -362,6 +363,7 @@ async def test_nutrition_generate_once_then_reuse_and_stale_on_goal(uow: InMemor
                     "carb_g": 180,
                     "calculation": "Дефицит под похудение.",
                     "meal_regularity": "Три приёма пищи.",
+                    "sports_nutrition": "Протеин, если неудобно набирать белок едой.",
                     "reply": "Пересчитал.",
                 },
                 ensure_ascii=False,
