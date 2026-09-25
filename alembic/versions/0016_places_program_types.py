@@ -1,6 +1,6 @@
 """Add exercise places and expand program_type taxonomy.
 
-Revision ID: 0016_exercise_places_program_types
+Revision ID: 0016_places_program_types
 Revises: 0015_expected_input_wellbeing
 Create Date: 2026-09-25
 """
@@ -9,7 +9,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0016_exercise_places_program_types"
+revision: str = "0016_places_program_types"
 down_revision: str | None = "0015_expected_input_wellbeing"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
