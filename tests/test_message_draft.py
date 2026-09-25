@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.exceptions import TelegramRetryAfter
 
 from fitness_bot.presentation.message_draft import (
     NUTRITION_WAITING_PHRASES,
@@ -57,6 +58,7 @@ async def test_waiting_loop_types_then_clears_before_next_phrase() -> None:
         waiting_phrases=("Аб...", "Вг..."),
         waiting_char_delay_s=0.0,
         waiting_phrase_interval_s=0.0,
+        min_update_interval_s=0.0,
     )
     await draft.start()
     await asyncio.sleep(0.05)
@@ -81,6 +83,7 @@ async def test_model_preview_stops_waiting_and_sets_preview_text() -> None:
         waiting_phrases=("Ждём...",),
         waiting_char_delay_s=0.0,
         waiting_phrase_interval_s=10.0,
+        min_update_interval_s=0.0,
     )
     await draft.start()
     await draft.publish_accumulated('{"reply":"Готово"}')
@@ -88,3 +91,46 @@ async def test_model_preview_stops_waiting_and_sets_preview_text() -> None:
     assert draft.preview_text == "Готово"
     texts = [call.kwargs["text"] for call in bot.send_message_draft.await_args_list]
     assert texts[-1] == "Готово"
+
+
+@pytest.mark.asyncio
+async def test_retry_after_sets_cooldown_and_skips_waiting_frames() -> None:
+    bot = AsyncMock()
+    flood = TelegramRetryAfter(method=MagicMock(), message="retry", retry_after=30)
+    bot.send_message_draft = AsyncMock(side_effect=[None, flood, None])
+    draft = MessageDraftStream(
+        bot,
+        chat_id=1,
+        draft_id=7,
+        waiting_phrases=(),
+        min_update_interval_s=0.0,
+    )
+    await draft.start()
+    await draft._send("a", throttle=False)
+    assert bot.send_message_draft.await_count == 2
+    # Waiting frames must not hammer Telegram during flood cooldown.
+    await draft._send("b", throttle=True, waiting=True)
+    assert bot.send_message_draft.await_count == 2
+    draft._cooldown_until = 0.0
+    await draft._send("c", throttle=False)
+    assert bot.send_message_draft.await_count == 3
+    assert bot.send_message_draft.await_args_list[-1].kwargs["text"] == "c"
+
+
+@pytest.mark.asyncio
+async def test_throttled_updates_drop_frames_inside_min_interval() -> None:
+    bot = AsyncMock()
+    bot.send_message_draft = AsyncMock()
+    draft = MessageDraftStream(
+        bot,
+        chat_id=1,
+        draft_id=7,
+        waiting_phrases=(),
+        min_update_interval_s=10.0,
+    )
+    await draft.start()
+    draft._last_sent_at = 0.0
+    await draft._send("one", throttle=False)
+    await draft._send("two", throttle=True)
+    texts = [call.kwargs["text"] for call in bot.send_message_draft.await_args_list]
+    assert texts == ["", "one"]

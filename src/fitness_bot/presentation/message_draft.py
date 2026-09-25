@@ -10,13 +10,16 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramRetryAfter
 
 from fitness_bot.service.ports.generation_stream import generation_delta_scope
 
 logger = logging.getLogger(__name__)
 
 _REPLY_PARTIAL_RE = re.compile(r'"reply"\s*:\s*"((?:\\.|[^"\\])*)', re.DOTALL)
-_MIN_UPDATE_INTERVAL_S = 0.35
+# sendMessageDraft shares typing-style limits: max 20/5s and 40/30s per chat
+# (https://core.telegram.org/api/bots/ai). Stay under the sustained tier with headroom.
+_MIN_UPDATE_INTERVAL_S = 2.0
 _DRAFT_TEXT_MAX = 3900
 _WAITING_CHAR_DELAY_S = 0.045
 _WAITING_PHRASE_INTERVAL_S = 5.0
@@ -78,12 +81,14 @@ class MessageDraftStream:
         waiting_phrases: Sequence[str] | None = None,
         waiting_char_delay_s: float = _WAITING_CHAR_DELAY_S,
         waiting_phrase_interval_s: float = _WAITING_PHRASE_INTERVAL_S,
+        min_update_interval_s: float = _MIN_UPDATE_INTERVAL_S,
     ) -> None:
         self._bot = bot
         self._chat_id = chat_id
         self._draft_id = draft_id if draft_id not in (None, 0) else random.randint(1, 2_147_483_647)
         self._last_text: str | None = None
         self._last_sent_at = 0.0
+        self._cooldown_until = 0.0
         self._pending: str | None = None
         self._lock = asyncio.Lock()
         self._has_model_preview = False
@@ -91,6 +96,7 @@ class MessageDraftStream:
         self._waiting_phrases = tuple(waiting_phrases) if waiting_phrases else _WAITING_PHRASES
         self._waiting_char_delay_s = waiting_char_delay_s
         self._waiting_phrase_interval_s = waiting_phrase_interval_s
+        self._min_update_interval_s = min_update_interval_s
 
     @property
     def draft_id(self) -> int:
@@ -146,8 +152,12 @@ class MessageDraftStream:
                 for end in range(1, len(phrase) + 1):
                     if self._has_model_preview:
                         return
-                    await self._send(phrase[:end], throttle=False, waiting=True)
+                    # Intermediate frames may be dropped under rate limits; full phrase below is forced.
+                    await self._send(phrase[:end], throttle=True, waiting=True)
                     await asyncio.sleep(self._waiting_char_delay_s)
+                if self._has_model_preview:
+                    return
+                await self._send(phrase, throttle=False, waiting=True)
                 elapsed = time.monotonic() - started
                 remaining = self._waiting_phrase_interval_s - elapsed
                 if remaining > 0:
@@ -155,7 +165,7 @@ class MessageDraftStream:
                 if self._has_model_preview:
                     return
                 # Clear the ephemeral draft so the next line feels like a fresh bubble.
-                await self._send("", waiting=True)
+                await self._send("", throttle=False, waiting=True)
                 index += 1
         except asyncio.CancelledError:
             raise
@@ -167,19 +177,37 @@ class MessageDraftStream:
             if text == self._last_text:
                 return
             now = time.monotonic()
-            if throttle and self._last_text is not None and (now - self._last_sent_at) < _MIN_UPDATE_INTERVAL_S:
-                return
+            if now < self._cooldown_until:
+                if throttle or waiting:
+                    return
+                await asyncio.sleep(self._cooldown_until - now)
+                now = time.monotonic()
+            elapsed = now - self._last_sent_at
+            if self._last_text is not None and elapsed < self._min_update_interval_s:
+                if throttle:
+                    return
+                await asyncio.sleep(self._min_update_interval_s - elapsed)
+                now = time.monotonic()
+                if waiting and self._has_model_preview:
+                    return
             try:
                 await self._bot.send_message_draft(
                     chat_id=self._chat_id,
                     draft_id=self._draft_id,
                     text=text,
                 )
+            except TelegramRetryAfter as exc:
+                self._cooldown_until = time.monotonic() + float(exc.retry_after)
+                logger.warning(
+                    "send_message_draft flood control; cooling down %.0fs",
+                    float(exc.retry_after),
+                )
+                return
             except Exception:
                 logger.warning("send_message_draft failed", exc_info=True)
                 return
             self._last_text = text
-            self._last_sent_at = now
+            self._last_sent_at = time.monotonic()
 
 
 @asynccontextmanager
