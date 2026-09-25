@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from fitness_bot.presentation.health import start_health_server
 from fitness_bot.presentation.routers.body import create_body_router
 from fitness_bot.presentation.routers.coach import create_coach_router
 from fitness_bot.presentation.routers.feedback import create_feedback_router
@@ -69,12 +70,14 @@ async def run() -> None:
     scheduler_task = asyncio.create_task(
         run_weight_reminder_scheduler(bot=bot, mediator=mediator, jinja_env=jinja_env),
     )
-    try:
-        await dispatcher.start_polling(bot)
-    finally:
-        scheduler_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await scheduler_task
+    async with start_health_server(settings.health_host, settings.health_port):
+        try:
+            await dispatcher.start_polling(bot)
+        finally:
+            scheduler_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await scheduler_task
+            await bot.session.close()
 
 
 def main() -> None:

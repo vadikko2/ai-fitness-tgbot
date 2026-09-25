@@ -43,6 +43,7 @@ RUN mkdir -p /app/models \
 RUN test -d /app/data/progress_poses/male \
     && test -d /app/data/progress_poses/female
 
-# Long-polling Telegram bot: no HTTP listener. Do not add HEALTHCHECK —
-# App Platform would probe a port the process never opens.
+# Long-polling bot + GET /health on 8080 (after alembic in entrypoint).
+# Do not add HEALTHCHECK — Timeweb Apps panel probe would be overridden.
+EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]

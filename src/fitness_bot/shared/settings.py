@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     sherpa_sample_rate: int = Field(default=16_000, validation_alias="SHERPA_SAMPLE_RATE")
     # Optional one-shot seed of first moderators (numeric telegram ids), not the runtime ACL.
     bootstrap_moderator_telegram_ids: str = Field(default="", validation_alias="BOOTSTRAP_MODERATOR_TELEGRAM_IDS")
+    health_host: str = Field(default="0.0.0.0", validation_alias="HEALTH_HOST")
+    health_port: int = Field(default=8080, validation_alias="HEALTH_PORT")
 
     def bootstrap_moderator_ids(self) -> frozenset[int]:
         raw = self.bootstrap_moderator_telegram_ids.strip()
@@ -71,6 +73,8 @@ _ENV_NAMES = {
     "sherpa_num_threads": "SHERPA_NUM_THREADS",
     "sherpa_sample_rate": "SHERPA_SAMPLE_RATE",
     "bootstrap_moderator_telegram_ids": "BOOTSTRAP_MODERATOR_TELEGRAM_IDS",
+    "health_host": "HEALTH_HOST",
+    "health_port": "HEALTH_PORT",
 }
 
 
