@@ -88,8 +88,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
             )
         else:
             text = (
-                "Библиотека программ:\n"
-                "Карточка → применить себе, опубликовать (код/ссылка) или назначить клиенту."
+                "Библиотека программ:\n" "Карточка → применить себе, опубликовать (код/ссылка) или назначить клиенту."
             )
             for item in result.items:
                 badge = f" · {program_status_label(item.status)}"
@@ -139,7 +138,9 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
             [InlineKeyboardButton(text="Как у автора", callback_data=f"lib_apply:{program_id}:as_is")],
         ]
         if result.status == "draft" and result.is_author_template:
-            rows.append([InlineKeyboardButton(text="Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")])
+            rows.append(
+                [InlineKeyboardButton(text="Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")]
+            )
         if result.status == "published" and result.distribution_code:
             rows.append(
                 [
@@ -168,10 +169,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
             )
             bot_username = await _resolve_bot_username(callback.bot) if callback.bot else None
             link = _program_deep_link(bot_username, result.distribution_code)
-            text = (
-                f"Опубликовано «{result.title}».\n"
-                f"Код: `{result.distribution_code}`\n"
-            )
+            text = f"Опубликовано «{result.title}».\n" f"Код: `{result.distribution_code}`\n"
             if link:
                 text += f"Ссылка: {link}\n"
             else:

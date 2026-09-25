@@ -1181,11 +1181,7 @@ def create_program_router(*, jinja_env: Environment, mediator: RequestMediator) 
     async def handle_prog_lib_save(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         pending = await mediator.send(GetPendingProposalQuery(telegram_user_id=callback.from_user.id))
-        if (
-            pending.document is None
-            or pending.kind != ProposalKind.PROGRAM
-            or callback.message is None
-        ):
+        if pending.document is None or pending.kind != ProposalKind.PROGRAM or callback.message is None:
             if callback.message:
                 await callback.message.answer("Нет черновика программы для сохранения.")
             await callback.answer()
