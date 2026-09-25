@@ -166,7 +166,10 @@ class ProposeWorkoutChangeCommandHandler(
             else:
                 current = session.to_document()
 
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             payload = None
             try:
                 payload = await complete_json(
@@ -487,7 +490,10 @@ class ProposeSessionDeviationCommandHandler(
             else:
                 current = session.to_document()
 
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             payload = None
             try:
                 payload = await complete_json(
@@ -612,7 +618,10 @@ class GenerateNextSessionCommandHandler(
 
             weight = await repos.weights.latest_for_user(user.id)
             history = await repos.sessions.list_completed_for_user(user.id, limit=10)
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             if not records:
                 raise DomainError("exercise catalog is empty")
 

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from fitness_bot.presentation.health import start_health_server
+from fitness_bot.presentation.route_log import configure_logging, install_update_route_logging
 from fitness_bot.presentation.routers.body import create_body_router
 from fitness_bot.presentation.routers.coach import create_coach_router
 from fitness_bot.presentation.routers.feedback import create_feedback_router
@@ -32,7 +32,7 @@ from fitness_bot.presentation.wiring.container import build_container, build_med
 
 
 async def run() -> None:
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
     container = build_container()
     mediator = build_mediator(container)
     jinja_env = container.jinja_env()
@@ -40,6 +40,7 @@ async def run() -> None:
     speech_to_text = container.speech_to_text()
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dispatcher = Dispatcher()
+    install_update_route_logging(dispatcher)
     dispatcher.include_router(create_start_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_profile_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_body_router(jinja_env=jinja_env, mediator=mediator))

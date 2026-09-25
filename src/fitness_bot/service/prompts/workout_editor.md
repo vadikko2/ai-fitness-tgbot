@@ -12,12 +12,12 @@ User limitations (hard constraints — never violate):
 {% if training_place %}
 Training place (hard constraint — never violate):
 {{ training_place }}
-- home → only home/listed equipment; no gym machines.
-- outdoor → no gym equipment.
-- gym / mixed → match place and available gear.
+- home → only exercises with `home` in catalog `places` and listed equipment; no gym machines.
+- outdoor → only exercises with `outdoor` in `places`; no gym equipment.
+- gym / mixed → match place and available gear; prefer multi-place tags for mixed.
 {% endif %}
 
-Catalog ids allowed:
+Catalog ids allowed (each row has `places`):
 {{ catalog_json }}
 
 JSON Schema for WorkoutDocument (follow field types and nesting):
@@ -45,8 +45,8 @@ Rules:
 - If the message is off topic, return the document unchanged.
 - Each slot needs `position`, `sets`, `rest_seconds`, `rpe`, either `reps` or `duration_seconds`, and `weight_kg`.
 - Preserve existing `weight_kg` unless the user asks to change load. When adding a new loaded exercise, set a concrete starting `weight_kg`; use `null` only for bodyweight or duration-based slots.
-- Strictly respect user limitations: never add contraindicated movements, loads, or styles (e.g. no deadlift loading / free weights / Valsalva when limited).
-- Honor `training_place` the same way: home/outdoor must not introduce gym-only machines.
+- Strictly respect user limitations: never add contraindicated movements, loads, or styles (e.g. no deadlift loading / free weights / Valsalva when limited). Prefer «ЛФК:» / «Беременность:» / «Для пожилых:» / «Для детей:» when limitations imply rehab, pregnancy, older age, or kids.
+- Honor `training_place` the same way: only pick catalog rows whose `places` fit the place; home/outdoor must not introduce gym-only machines.
 - If profile context is present in the utterance or known limitations text: honor `session_minutes` as a soft time budget for density; honor experience level (beginner = simpler / lower RPE). Do not invent missing profile fields. Never recommend pharma / drugs.
 
 Return JSON with keys `document` and `reply`.

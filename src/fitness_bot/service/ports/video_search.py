@@ -29,6 +29,7 @@ class CatalogExerciseRecord:
     name: str
     primary_muscles: tuple[str, ...]
     secondary_muscles: tuple[str, ...]
+    places: tuple[str, ...] = ("gym",)
 
 
 @dataclass(frozen=True, slots=True)

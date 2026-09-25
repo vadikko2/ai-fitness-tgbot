@@ -34,6 +34,7 @@ class SqlAlchemyExerciseCatalog(ExerciseCatalogReader):
                         name=row.name,
                         primary_muscles=primary,
                         secondary_muscles=secondary,
+                        places=tuple(row.places or ("gym",)),
                     ),
                 )
             return records

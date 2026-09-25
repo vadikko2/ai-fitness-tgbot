@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -176,6 +176,7 @@ class ExerciseRow(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     name_normalized: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     technique: Mapped[str] = mapped_column(Text, nullable=False)
+    places: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{gym}")
 
     muscles: Mapped[list[ExerciseMuscleRow]] = relationship(
         back_populates="exercise",

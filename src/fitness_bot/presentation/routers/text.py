@@ -9,8 +9,7 @@ from fitness_bot.domain.enums import ExpectedInput, ProfileField, Supplement, We
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.flow_helpers import (
     finish_profile_edit_if_active,
-    home_keyboard_from,
-    render_home_text,
+    show_info_offer,
     show_next_onboarding_step,
 )
 from fitness_bot.presentation.keyboards import home_keyboard
@@ -38,7 +37,7 @@ from fitness_bot.service.models.commands.body import (
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand, UpdateProfileCommand
 from fitness_bot.service.models.queries.program import GetPendingProposalQuery
-from fitness_bot.service.models.queries.users import GetHomeQuery, GetProfileQuery, GetWorkflowQuery
+from fitness_bot.service.models.queries.users import GetProfileQuery, GetWorkflowQuery
 
 _VOICE_FREE_TEXT_PROFILE_FIELDS = frozenset(
     {
@@ -203,9 +202,7 @@ async def handle_user_utterance(
                     return
                 profile = await mediator.send(GetProfileQuery(telegram_user_id=message.from_user.id))
                 if profile.profile_complete:
-                    home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
-                    home_text = render_home_text(jinja_env=jinja_env, home=home)
-                    await message.answer(home_text, reply_markup=home_keyboard_from(home))
+                    await show_info_offer(message=message, jinja_env=jinja_env)
                     return
                 await show_next_onboarding_step(
                     message=message,
@@ -260,9 +257,7 @@ async def handle_user_utterance(
                 return
             profile = await mediator.send(GetProfileQuery(telegram_user_id=message.from_user.id))
             if profile.profile_complete:
-                home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
-                home_text = render_home_text(jinja_env=jinja_env, home=home)
-                await message.answer(home_text, reply_markup=home_keyboard_from(home))
+                await show_info_offer(message=message, jinja_env=jinja_env)
                 return
             await show_next_onboarding_step(
                 message=message,

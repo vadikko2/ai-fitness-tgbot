@@ -65,6 +65,38 @@ PROGRAM_TYPE_COPY: dict[ProgramType, ProgramKindCopy] = {
         blurb="В день одна крупная группа, большой объём раз в неделю.",
         detail=("Каждый день — одна крупная группа мышц с большим объёмом. Рассчитано на 5–6 тренировок в неделю."),
     ),
+    ProgramType.KETTLEBELL: ProgramKindCopy(
+        label="🫖 Гиря",
+        blurb="Сила и мощность с гирей: махи, толчки, goblet, турецкие подъёмы.",
+        detail=(
+            "Неделя строится вокруг гири: махи, cleans/press, goblet-приседания, прогулки, турецкий подъём. "
+            "Подходит для дома и улицы при наличии гири; 2–4 дня в неделю с акцентом на технику и плотность."
+        ),
+    ),
+    ProgramType.CARDIO: ProgramKindCopy(
+        label="❤️ Кардио",
+        blurb="Выносливость и пульс: интервалы, скакалка, бег, плиометрика.",
+        detail=(
+            "Сессии на выносливость и пульсовые зоны: интервалы, скакалка, беговые/шаговые паттерны, "
+            "лёгкая плиометрика. Выбирай упражнения по месту (зал / дом / улица); 3–5 дней в неделю."
+        ),
+    ),
+    ProgramType.BODYWEIGHT_RECOVERY: ProgramKindCopy(
+        label="🧘 Восстановление",
+        blurb="Лёгкая работа со своим весом: мобилити, кор, мягкая активация.",
+        detail=(
+            "Лёгкие восстановительные сессии со своим весом: активация ягодиц/кора, лёгкие отжимания/приседания, "
+            "дыхание и мобилити. Intensity mostly recovery/light; без тяжёлых внешних нагрузок."
+        ),
+    ),
+    ProgramType.STRETCHING: ProgramKindCopy(
+        label="🤸 Растяжка",
+        blurb="Гибкость и мобилити: статика, динамика, суставные круги.",
+        detail=(
+            "Дни на растяжку и мобилити: статические и динамические растяжки, CARs, раскрытие таза/грудного. "
+            "Мало силовых слотов; duration_seconds уместны. 2–4 дня или как отдельные лёгкие дни в неделе."
+        ),
+    ),
 }
 
 TRAINING_STYLE_COPY: dict[TrainingStyle, ProgramKindCopy] = {
@@ -112,6 +144,12 @@ PROGRAM_TYPE_SPLITS: tuple[ProgramType, ...] = (
     ProgramType.SYNERGIST,
     ProgramType.SPLIT,
 )
+PROGRAM_TYPE_SPECIAL: tuple[ProgramType, ...] = (
+    ProgramType.KETTLEBELL,
+    ProgramType.CARDIO,
+    ProgramType.BODYWEIGHT_RECOVERY,
+    ProgramType.STRETCHING,
+)
 TRAINING_STYLE_ORDER: tuple[TrainingStyle, ...] = (
     TrainingStyle.CLASSIC,
     TrainingStyle.STRENGTH,
@@ -140,7 +178,10 @@ def training_style_label(style: TrainingStyle | str) -> str:
 
 def structure_choice_items() -> list[ProgramKindCopy]:
     """Ordered catalog rows for the structure-of-week setup step."""
-    return [PROGRAM_TYPE_COPY[program_type] for program_type in (*PROGRAM_TYPE_FREQUENT, *PROGRAM_TYPE_SPLITS)]
+    return [
+        PROGRAM_TYPE_COPY[program_type]
+        for program_type in (*PROGRAM_TYPE_FREQUENT, *PROGRAM_TYPE_SPLITS, *PROGRAM_TYPE_SPECIAL)
+    ]
 
 
 def planner_program_type_hint(program_type: ProgramType) -> str:

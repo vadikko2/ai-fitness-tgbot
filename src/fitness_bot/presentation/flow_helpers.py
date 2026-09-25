@@ -18,6 +18,7 @@ from fitness_bot.presentation.keyboards import (
     experience_keyboard,
     goal_keyboard,
     home_keyboard,
+    info_offer_keyboard,
     limitations_none_keyboard,
     nutrition_constraints_none_keyboard,
     profile_edit_keyboard,
@@ -29,7 +30,6 @@ from fitness_bot.presentation.keyboards import (
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.users import (
-    GetHomeQuery,
     GetHomeQueryResult,
     GetProfileQuery,
     GetProfileQueryResult,
@@ -267,6 +267,11 @@ def markup_for_profile_field(
     return None
 
 
+async def show_info_offer(*, message: Message, jinja_env: Environment) -> None:
+    text = jinja_env.get_template("info.j2").render(topic="offer")
+    await message.answer(text, reply_markup=info_offer_keyboard())
+
+
 async def show_next_onboarding_step(
     *,
     message: Message,
@@ -277,9 +282,7 @@ async def show_next_onboarding_step(
     selected_supplements: set[str] | None = None,
 ) -> None:
     if profile.profile_complete:
-        home = await mediator.send(GetHomeQuery(telegram_user_id=profile.telegram_user_id))
-        text = render_home_text(jinja_env=jinja_env, home=home)
-        await message.answer(text, reply_markup=home_keyboard_from(home))
+        await show_info_offer(message=message, jinja_env=jinja_env)
         return
     if profile.next_field is None and profile.goal is None:
         text = jinja_env.get_template("onboarding_prompt.j2").render(field="goal", days_per_week=profile.days_per_week)

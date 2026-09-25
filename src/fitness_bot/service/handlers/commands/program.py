@@ -7,7 +7,8 @@ from uuid import UUID
 
 import cqrs
 
-from fitness_bot.domain.enums import ExpectedInput, ProfileField, ProgramStatus, ProposalKind
+from fitness_bot.domain.catalog.places import exercise_matches_training_place
+from fitness_bot.domain.enums import ExpectedInput, ProfileField, ProgramStatus, ProposalKind, TrainingPlace
 from fitness_bot.domain.errors import (
     AgentUnavailable,
     DomainError,
@@ -128,8 +129,18 @@ async def _replace_pending(
     return saved
 
 
-async def _load_catalog_ids(catalog: ExerciseCatalogReader) -> tuple[list[CatalogExerciseRecord], set[UUID]]:
+async def _load_catalog_ids(
+    catalog: ExerciseCatalogReader,
+    *,
+    training_place: TrainingPlace | str | None = None,
+) -> tuple[list[CatalogExerciseRecord], set[UUID]]:
     records = list(await catalog.list_exercises())
+    if training_place is not None:
+        records = [
+            record
+            for record in records
+            if exercise_matches_training_place(record.places, training_place)
+        ]
     return records, {record.id for record in records}
 
 
@@ -170,7 +181,10 @@ class ProposeProgramCommandHandler(
                 raise DomainError("profile must include days_per_week and goal")
             program_type = pending.program_type
             weight = await repos.weights.latest_for_user(user.id)
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             if not records:
                 raise DomainError("exercise catalog is empty")
 
@@ -285,7 +299,10 @@ class ProposeProgramChangeCommandHandler(
                     program_type=program_type,
                     days=[],
                 )
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
 
             focus_day_position = request.day_position
             focus_day: WorkoutDay | None = None
@@ -482,7 +499,10 @@ class GenerateNextWeekCommandHandler(
                 timezone_offset=user.timezone_offset,
                 now=datetime.now(UTC),
             )
-            records, allowed = await _load_catalog_ids(self._catalog)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             if not records:
                 raise DomainError("exercise catalog is empty")
 

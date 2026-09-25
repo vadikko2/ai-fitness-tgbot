@@ -35,6 +35,9 @@ def seed_exercise_catalog(conn: Connection, jsonl_path: Path) -> int:
         name = str(raw["name"]).strip()
         name_normalized = normalize_exercise_name(name)
         technique = str(raw.get("technique") or "")
+        places = [str(p).strip() for p in (raw.get("places") or ["gym"]) if str(p).strip()]
+        if not places:
+            places = ["gym"]
         primary = [str(m).strip() for m in (raw.get("primary_muscles") or []) if str(m).strip()]
         secondary = [str(m).strip() for m in (raw.get("secondary_muscles") or []) if str(m).strip()]
         videos = raw.get("videos") or []
@@ -42,15 +45,21 @@ def seed_exercise_catalog(conn: Connection, jsonl_path: Path) -> int:
         row = conn.execute(
             text(
                 """
-                insert into exercises (name, name_normalized, technique)
-                values (:name, :name_normalized, :technique)
+                insert into exercises (name, name_normalized, technique, places)
+                values (:name, :name_normalized, :technique, :places)
                 on conflict (name_normalized) do update
                 set name = excluded.name,
-                    technique = excluded.technique
+                    technique = excluded.technique,
+                    places = excluded.places
                 returning id
                 """,
             ),
-            {"name": name, "name_normalized": name_normalized, "technique": technique},
+            {
+                "name": name,
+                "name_normalized": name_normalized,
+                "technique": technique,
+                "places": places,
+            },
         ).one()
         exercise_id = row[0]
 

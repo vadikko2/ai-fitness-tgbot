@@ -181,7 +181,10 @@ class ApplyCatalogProgramCommandHandler(
             )
             from fitness_bot.service.handlers.commands.program import _load_catalog_ids
 
-            records, _ = await _load_catalog_ids(self._catalog)
+            records, _ = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
             payload = await complete_json(
                 self._language_model,
                 prompt_name="workout_editor.md",
@@ -255,7 +258,10 @@ class AssignProgramToClientCommandHandler(
                 from fitness_bot.service.handlers.commands.program import _load_catalog_ids
 
                 profile = await build_profile_payload(repos, client)
-                records, _ = await _load_catalog_ids(self._catalog)
+                records, _ = await _load_catalog_ids(
+                    self._catalog,
+                    training_place=client.training_place,
+                )
                 payload = await complete_json(
                     self._language_model,
                     prompt_name="workout_editor.md",

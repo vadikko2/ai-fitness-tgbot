@@ -23,6 +23,7 @@ from fitness_bot.presentation.flow_helpers import (
     markup_for_profile_field,
     profile_text,
     render_home_text,
+    show_info_offer,
     show_next_onboarding_step,
 )
 from fitness_bot.presentation.keyboards import (
@@ -288,9 +289,9 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
         assert callback.from_user is not None and callback.data is not None
         goal = Goal(callback.data.split(":", 1)[1])
         await mediator.send(SetGoalCommand(telegram_user_id=callback.from_user.id, goal=goal))
-        home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
-        text = render_home_text(jinja_env=jinja_env, home=home)
-        await _answer(callback, text, reply_markup=home_keyboard_from(home))
+        assert isinstance(callback.message, Message)
+        await show_info_offer(message=callback.message, jinja_env=jinja_env)
+        await callback.answer()
 
     @router.callback_query(F.data == "home")
     async def handle_home(callback: CallbackQuery) -> None:

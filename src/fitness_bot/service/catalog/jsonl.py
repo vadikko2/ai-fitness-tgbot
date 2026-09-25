@@ -7,8 +7,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fitness_bot.domain.catalog.normalize import normalize_exercise_name
+from fitness_bot.domain.catalog.places import normalize_exercise_places
+from fitness_bot.domain.enums import ExercisePlace
 
 Platform = Literal["youtube", "rutube"]
+Place = Literal["gym", "home", "outdoor"]
 
 
 @dataclass(slots=True)
@@ -27,6 +30,7 @@ class ExerciseJsonlRecord:
     primary_muscles: list[str]
     secondary_muscles: list[str]
     technique: str
+    places: list[str] = field(default_factory=lambda: [ExercisePlace.GYM.value])
     videos: list[ExerciseVideoLine] = field(default_factory=list)
 
     @property
@@ -39,6 +43,7 @@ class ExerciseJsonlRecord:
             "primary_muscles": list(self.primary_muscles),
             "secondary_muscles": list(self.secondary_muscles),
             "technique": self.technique,
+            "places": list(self.places),
             "videos": [video.to_dict() for video in self.videos],
         }
 
@@ -56,11 +61,13 @@ class ExerciseJsonlRecord:
                     title=str(item.get("title") or ""),
                 ),
             )
+        places = list(normalize_exercise_places(raw.get("places")))
         return cls(
             name=str(raw["name"]),
             primary_muscles=[str(m) for m in raw.get("primary_muscles") or []],
             secondary_muscles=[str(m) for m in raw.get("secondary_muscles") or []],
             technique=str(raw.get("technique") or ""),
+            places=places,
             videos=videos,
         )
 

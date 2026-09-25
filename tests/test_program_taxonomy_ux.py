@@ -28,6 +28,20 @@ def test_program_type_keyboard_callback_prefixes() -> None:
     assert "prog_type:full_body" in callbacks
     assert "prog_type:upper_lower" in callbacks
     assert "prog_type:antagonist" in callbacks
+    assert "prog_type:kettlebell" in callbacks
+    assert "prog_type:cardio" in callbacks
+    assert "prog_type:bodyweight_recovery" in callbacks
+    assert "prog_type:stretching" in callbacks
+
+
+def test_exercise_place_filter_excludes_gym_only_for_home() -> None:
+    from fitness_bot.domain.catalog.places import exercise_matches_training_place
+    from fitness_bot.domain.enums import TrainingPlace
+
+    assert exercise_matches_training_place(["home", "outdoor"], TrainingPlace.HOME)
+    assert not exercise_matches_training_place(["gym"], TrainingPlace.HOME)
+    assert exercise_matches_training_place(["gym"], TrainingPlace.GYM)
+    assert exercise_matches_training_place(["gym", "home"], TrainingPlace.MIXED)
 
 
 def test_program_display_title_and_status_are_russian() -> None:

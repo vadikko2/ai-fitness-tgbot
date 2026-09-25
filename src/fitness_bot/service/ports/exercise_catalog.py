@@ -54,12 +54,14 @@ def record(
     name: str,
     primary_muscles: Sequence[str],
     secondary_muscles: Sequence[str] = (),
+    places: Sequence[str] = ("gym",),
 ) -> CatalogExerciseRecord:
     return CatalogExerciseRecord(
         id=exercise_id,
         name=name,
         primary_muscles=tuple(primary_muscles),
         secondary_muscles=tuple(secondary_muscles),
+        places=tuple(places),
     )
 
 

@@ -185,6 +185,7 @@ class EnrichExerciseCatalogCommandHandler(
                     primary_muscles=list(record.primary_muscles),
                     secondary_muscles=list(record.secondary_muscles),
                     technique=technique,
+                    places=list(record.places),
                     videos=videos,
                 )
 

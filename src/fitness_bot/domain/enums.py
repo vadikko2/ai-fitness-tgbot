@@ -117,6 +117,17 @@ class ProgramType(StrEnum):
     ANTAGONIST = "antagonist"
     SYNERGIST = "synergist"
     SPLIT = "split"
+    KETTLEBELL = "kettlebell"
+    CARDIO = "cardio"
+    BODYWEIGHT_RECOVERY = "bodyweight_recovery"
+    STRETCHING = "stretching"
+
+
+# Places an exercise can be performed (subset of TrainingPlace; not `mixed`).
+class ExercisePlace(StrEnum):
+    GYM = "gym"
+    HOME = "home"
+    OUTDOOR = "outdoor"
 
 
 class TrainingStyle(StrEnum):

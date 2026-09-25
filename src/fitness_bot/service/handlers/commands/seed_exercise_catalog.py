@@ -34,12 +34,17 @@ def _parse_author_items(raw_items: list[Any]) -> list[dict[str, Any]]:
         if len(technique) > 500:
             technique = technique[:500]
         video_queries = [str(q).strip() for q in (item.get("video_queries") or []) if str(q).strip()]
+        places_raw = item.get("places") or ["gym"]
+        places = [str(p).strip() for p in places_raw if str(p).strip() in {"gym", "home", "outdoor"}]
+        if not places:
+            places = ["gym"]
         parsed.append(
             {
                 "name": name,
                 "primary_muscles": [str(m).strip() for m in (item.get("primary_muscles") or []) if str(m).strip()],
                 "secondary_muscles": [str(m).strip() for m in (item.get("secondary_muscles") or []) if str(m).strip()],
                 "technique": technique,
+                "places": places,
                 "video_queries": video_queries,
             },
         )
@@ -94,6 +99,7 @@ class SeedExerciseCatalogCommandHandler(
                     primary_muscles=item["primary_muscles"],
                     secondary_muscles=item["secondary_muscles"],
                     technique=item["technique"],
+                    places=item["places"],
                     videos=videos,
                 )
                 upsert_exercise(store, record)

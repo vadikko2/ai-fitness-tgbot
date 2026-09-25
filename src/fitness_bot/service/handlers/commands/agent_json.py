@@ -38,6 +38,7 @@ def catalog_json(records: list[CatalogExerciseRecord]) -> str:
             "name": record.name,
             "primary_muscles": list(record.primary_muscles),
             "secondary_muscles": list(record.secondary_muscles),
+            "places": list(record.places),
         }
         for record in records
     ]

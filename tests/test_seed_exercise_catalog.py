@@ -26,6 +26,10 @@ def test_committed_muscle_groups_and_jsonl_exist() -> None:
     store = load_exercises_jsonl(EXERCISES_JSONL_PATH)
     assert len(store) >= 300
     assert all(record.name and record.technique and record.primary_muscles for record in store.values())
+    assert all(record.places for record in store.values())
+    assert all(set(record.places) <= {"gym", "home", "outdoor"} for record in store.values())
+    assert any("home" in record.places for record in store.values())
+    assert any("outdoor" in record.places for record in store.values())
     assert all(
         video.platform in ("youtube", "rutube") and video.url for record in store.values() for video in record.videos
     )

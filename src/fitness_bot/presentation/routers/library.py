@@ -10,6 +10,7 @@ from jinja2 import Environment
 
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.program_catalog import program_status_label
+from fitness_bot.presentation.keyboards import how_it_works_button
 from fitness_bot.service.models.commands.catalog import (
     ApplyCatalogProgramCommand,
     ClaimProgramByCodeCommand,
@@ -103,6 +104,7 @@ def create_library_router(*, jinja_env: Environment, mediator: RequestMediator) 
                         ),
                     ],
                 )
+        rows.append([how_it_works_button("library")])
         rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="home")])
         if callback.message:
             await callback.message.answer(text, reply_markup=_kb(rows))

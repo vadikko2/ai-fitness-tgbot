@@ -18,6 +18,7 @@ from fitness_bot.presentation.keyboards import (
     coach_mine_keyboard,
     coach_recent_videos_keyboard,
     coach_session_history_keyboard,
+    how_it_works_button,
 )
 from fitness_bot.presentation.message_draft import (
     NUTRITION_WAITING_PHRASES,
@@ -326,6 +327,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                     ),
                 ],
                 [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+                [how_it_works_button("coach_cab")],
                 [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
             ],
         )
@@ -1021,7 +1023,13 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         result = await mediator.send(SearchCoachesQuery(telegram_user_id=callback.from_user.id))
         if not result.items:
             text = "Пока нет тренеров — вставь код, если есть."
-            kb = _kb([[InlineKeyboardButton(text="Ввести код", callback_data="code_link")]])
+            kb = _kb(
+                [
+                    [InlineKeyboardButton(text="Ввести код", callback_data="code_link")],
+                    [how_it_works_button("coach_search")],
+                    [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
+                ],
+            )
         else:
             text = "Тренеры:"
             rows = []
@@ -1035,6 +1043,8 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                         ),
                     ],
                 )
+            rows.append([how_it_works_button("coach_search")])
+            rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="home")])
             kb = _kb(rows)
         if callback.message:
             await callback.message.answer(text, reply_markup=kb)
