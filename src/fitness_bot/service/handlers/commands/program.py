@@ -136,11 +136,7 @@ async def _load_catalog_ids(
 ) -> tuple[list[CatalogExerciseRecord], set[UUID]]:
     records = list(await catalog.list_exercises())
     if training_place is not None:
-        records = [
-            record
-            for record in records
-            if exercise_matches_training_place(record.places, training_place)
-        ]
+        records = [record for record in records if exercise_matches_training_place(record.places, training_place)]
     return records, {record.id for record in records}
 
 

@@ -19,8 +19,8 @@ from fitness_bot.domain.feedback.ticket import FEEDBACK_PAGE_SIZE
 from fitness_bot.domain.program_catalog import (
     PROGRAM_TYPE_COPY,
     PROGRAM_TYPE_FREQUENT,
-    PROGRAM_TYPE_SPLITS,
     PROGRAM_TYPE_SPECIAL,
+    PROGRAM_TYPE_SPLITS,
     TRAINING_STYLE_COPY,
 )
 from fitness_bot.presentation.muscle_emoji import slot_nav_button_text
