@@ -4,7 +4,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-RUN apt-get update \
+# python:3.13-slim is Debian trixie. deb.debian.org crawls from Timeweb
+# builders (~20 KB/s) and the apt step is killed at 1680s. mirror.yandex.ru
+# serves the same trixie and trixie-security suites.
+RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg bzip2 \
     && rm -rf /var/lib/apt/lists/*
 
