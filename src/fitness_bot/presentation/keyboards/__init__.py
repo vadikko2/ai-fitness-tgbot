@@ -1224,15 +1224,52 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def session_exercise_actions_keyboard(*, position: int) -> InlineKeyboardMarkup:
+EXERCISE_DO_LABEL = "✅ Выполнить"
+EXERCISE_DONE_LABEL = "✅ Выполнено"
+
+
+def exercise_confirm_button(*, position: int, confirmed: bool) -> InlineKeyboardButton:
+    if confirmed:
+        return InlineKeyboardButton(text=EXERCISE_DONE_LABEL, callback_data=f"slot_undo:{position}")
+    return InlineKeyboardButton(text=EXERCISE_DO_LABEL, callback_data=f"slot_plan:{position}")
+
+
+def session_exercise_actions_keyboard(*, position: int, confirmed: bool = False) -> InlineKeyboardMarkup:
     """Actions on one exercise message. The guide button is omitted: technique is in the text."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Как в плане → дальше", callback_data=f"slot_plan:{position}")],
+            [exercise_confirm_button(position=position, confirmed=confirmed)],
             [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
             [InlineKeyboardButton(text=SIMILAR_EXERCISE_LABEL, callback_data=f"slot_alt:{position}")],
         ],
     )
+
+
+def with_exercise_confirmation(
+    markup: InlineKeyboardMarkup | None,
+    *,
+    position: int,
+    confirmed: bool,
+) -> InlineKeyboardMarkup:
+    """Keep the other buttons; flip only the confirm control."""
+    if markup is None:
+        return session_exercise_actions_keyboard(position=position, confirmed=confirmed)
+    replacement = exercise_confirm_button(position=position, confirmed=confirmed)
+    found = False
+    rows: list[list[InlineKeyboardButton]] = []
+    for row in markup.inline_keyboard:
+        buttons: list[InlineKeyboardButton] = []
+        for button in row:
+            callback = button.callback_data or ""
+            if callback.startswith(("slot_plan:", "slot_undo:")):
+                buttons.append(replacement)
+                found = True
+            else:
+                buttons.append(button)
+        rows.append(buttons)
+    if not found:
+        return session_exercise_actions_keyboard(position=position, confirmed=confirmed)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def session_pack_closer_keyboard() -> InlineKeyboardMarkup:
@@ -1311,7 +1348,7 @@ def slot_actions_keyboard(
 ) -> InlineKeyboardMarkup:
     """swapped_from: (exercise_id, name) of the exercise replaced just now — offers «Вернуть»."""
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="✅ Как в плане → дальше", callback_data=f"slot_plan:{position}")],
+        [exercise_confirm_button(position=position, confirmed=has_actual)],
         [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
     ]
     if can_swap:

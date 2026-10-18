@@ -434,7 +434,6 @@ async def handle_user_utterance(
                 )
                 return
             await handle_slot_load_utterance(
-                jinja_env=jinja_env,
                 mediator=mediator,
                 message=message,
                 text=text,

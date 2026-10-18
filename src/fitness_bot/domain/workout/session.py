@@ -91,6 +91,17 @@ class Session(BaseModel):
         self._replace_slot(updated)
         return updated
 
+    def clear_slot_actual(self, position: int) -> ExerciseSlot:
+        """Drop a logged set so the exercise is no longer confirmed."""
+        if self.status != SessionStatus.IN_PROGRESS:
+            raise DomainError("slot confirmation can be undone only while session is in_progress")
+        slot = self.slot_at(position)
+        if slot.actual is None:
+            raise DomainError("slot is not confirmed")
+        updated = slot.model_copy(update={"actual": None})
+        self._replace_slot(updated)
+        return updated
+
     def apply_slot_actual(self, position: int, actual: SlotActual) -> ExerciseSlot:
         if self.status not in {SessionStatus.IN_PROGRESS, SessionStatus.PENDING_COMPLETION}:
             raise DomainError("only an open session can record slot actual")

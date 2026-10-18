@@ -106,6 +106,17 @@ class ConfirmExerciseAsPlannedCommandResult(CommandResult):
     document: WorkoutDocument
 
 
+class ClearSlotActualCommand(Command):
+    telegram_user_id: int
+    slot_position: int
+
+
+class ClearSlotActualCommandResult(CommandResult):
+    session_id: UUID
+    slot: ExerciseSlot
+    document: WorkoutDocument
+
+
 class RecordSlotActualCommand(Command):
     telegram_user_id: int
     slot_position: int

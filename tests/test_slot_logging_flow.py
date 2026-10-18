@@ -128,6 +128,11 @@ def test_parse_weight_accepts_comma_and_bodyweight() -> None:
 def test_slot_actions_keyboard_labels() -> None:
     markup = slot_actions_keyboard(position=3, has_catalog_guide=True)
     labels = [button.text for row in markup.inline_keyboard for button in row]
-    assert "✅ Как в плане → дальше" in labels
+    assert "✅ Выполнить" in labels
+    done = slot_actions_keyboard(position=3, has_actual=True, has_catalog_guide=True)
+    done_labels = [button.text for row in done.inline_keyboard for button in row]
+    done_callbacks = [button.callback_data for row in done.inline_keyboard for button in row]
+    assert "✅ Выполнено" in done_labels
+    assert "slot_undo:3" in done_callbacks
     assert "✏️ Вес и повторы" in labels
     assert "📖 Как делать" in labels

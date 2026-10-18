@@ -13,7 +13,7 @@ from uuid import UUID
 from aiogram.types import InlineKeyboardMarkup, LinkPreviewOptions
 
 from fitness_bot.domain.program_catalog import training_style_label
-from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay
+from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay
 from fitness_bot.presentation.keyboards import INTENSITY_LABELS, WEEKDAY_LABELS, program_day_keyboard
 from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideResult
 
@@ -195,6 +195,20 @@ def _exercise_message(
     )
 
 
+def slot_actual_differs_from_plan(slot: ExerciseSlot) -> bool:
+    """True when a logged set is not the planned prescription."""
+    actual = slot.actual
+    if actual is None:
+        return False
+    return not (
+        actual.sets == slot.sets
+        and actual.reps == slot.reps
+        and actual.duration_seconds == slot.duration_seconds
+        and actual.weight_kg == slot.weight_kg
+        and not actual.note.strip()
+    )
+
+
 def _meta_lines(
     slot: ExerciseSlot,
     primary: Sequence[str],
@@ -215,9 +229,24 @@ def _meta_lines(
         lines.append(f"<i>Отдых:</i> {slot.rest_seconds} с")
     if slot.rpe:
         lines.append(f"<i>RPE:</i> {slot.rpe}")
+    if slot.actual is not None and slot_actual_differs_from_plan(slot):
+        lines.append("<i>Факт:</i> " + html.escape(_format_actual_load(slot.actual)))
     if not lines:
         return None
     return "\n".join(lines)
+
+
+def _format_actual_load(actual: SlotActual) -> str:
+    if actual.reps is not None:
+        text = f"{actual.sets}×{actual.reps}"
+    else:
+        text = f"{actual.sets}×{actual.duration_seconds} с"
+    if actual.weight_kg is not None:
+        text += f" · {_format_kg(actual.weight_kg)} кг"
+    note = actual.note.strip()
+    if note:
+        text += f" · {note}"
+    return text
 
 
 def _format_kg(weight: Decimal) -> str:

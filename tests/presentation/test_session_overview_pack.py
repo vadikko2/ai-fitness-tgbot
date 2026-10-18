@@ -4,17 +4,22 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
-from fitness_bot.domain.enums import ProgramType, SessionStatus
+from fitness_bot.domain.enums import ExpectedInput, ProgramType, SessionStatus
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay, WorkoutDocument
+from fitness_bot.presentation.keyboards import session_exercise_actions_keyboard
 from fitness_bot.presentation.planned_day_pack import EXERCISE_PACK_PAUSE_SECONDS
 from fitness_bot.presentation.routers.session import _show_session_card, create_session_router
 from fitness_bot.presentation.templates_env import create_jinja_env
 from fitness_bot.service.models.commands.session import (
+    ClearSlotActualCommand,
+    ClearSlotActualCommandResult,
     ConfirmExerciseAsPlannedCommand,
     ConfirmExerciseAsPlannedCommandResult,
     FinalizeSessionCommand,
     FinalizeSessionCommandResult,
+    RecordSlotActualCommand,
+    RecordSlotActualCommandResult,
 )
 from fitness_bot.service.models.queries.match_exercises import (
     ExerciseGuideVideoItem,
@@ -24,6 +29,7 @@ from fitness_bot.service.models.queries.match_exercises import (
     GetExerciseNamesResult,
 )
 from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery, GetTodayWorkoutQueryResult
+from fitness_bot.service.models.queries.users import GetWorkflowQuery, GetWorkflowQueryResult
 
 
 def _slot(**kwargs: object) -> ExerciseSlot:
@@ -44,11 +50,13 @@ def _button_texts(markup) -> list[str]:
     return [button.text for row in markup.inline_keyboard for button in row]
 
 
-def _exercise_actions(position: int) -> list[str]:
-    return [f"slot_plan:{position}", f"slot_fact:{position}", f"slot_alt:{position}"]
+def _exercise_actions(position: int, *, confirmed: bool = False) -> list[str]:
+    first = f"slot_undo:{position}" if confirmed else f"slot_plan:{position}"
+    return [first, f"slot_fact:{position}", f"slot_alt:{position}"]
 
 
-_EXERCISE_LABELS = ["✅ Как в плане → дальше", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+_OPEN_LABELS = ["✅ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+_DONE_LABELS = ["✅ Выполнено", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
 _CLOSER_ACTIONS = ["sess_plan_all", "sess_fin", "home"]
 _CLOSER_LABELS = ["Выполнить все", "Завершить тренировку", "🏠 В меню"]
 
@@ -173,9 +181,10 @@ async def test_session_pack_is_calm_messages_then_one_next_exercise() -> None:
     assert "Продолжаем" not in "\n".join(texts)
     assert "Записать подход" not in "\n".join(texts)
     assert _callbacks(message.answers[0][1]) == []
-    assert _callbacks(message.answers[1][1]) == _exercise_actions(1)
-    assert _button_texts(message.answers[1][1]) == _EXERCISE_LABELS
+    assert _callbacks(message.answers[1][1]) == _exercise_actions(1, confirmed=True)
+    assert _button_texts(message.answers[1][1]) == _DONE_LABELS
     assert _callbacks(message.answers[2][1]) == _exercise_actions(2)
+    assert _button_texts(message.answers[2][1]) == _OPEN_LABELS
     assert _callbacks(message.answers[3][1]) == []
     assert _callbacks(message.answers[4][1]) == _CLOSER_ACTIONS
     assert _button_texts(message.answers[4][1]) == _CLOSER_LABELS
@@ -239,7 +248,8 @@ async def test_finished_pack_offers_done_instead_of_an_exercise_wall() -> None:
             document=document,
         )
 
-    assert _callbacks(message.answers[0][1]) == _exercise_actions(1)
+    assert _callbacks(message.answers[0][1]) == _exercise_actions(1, confirmed=True)
+    assert _button_texts(message.answers[0][1]) == _DONE_LABELS
     assert _callbacks(message.answers[-1][1]) == _CLOSER_ACTIONS
     assert "slot:" not in " ".join(_callbacks(message.answers[-1][1]))
 
@@ -349,3 +359,202 @@ async def test_do_all_stops_when_confirm_fails() -> None:
     assert not any(isinstance(item, FinalizeSessionCommand) for item in mediator.requests)
     assert message.answers[-1][0].startswith("Не удалось отметить")
     assert callback.answered == 1
+
+
+def _one_day(*slots: ExerciseSlot) -> WorkoutDocument:
+    return WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Грудь", position=1, slots=list(slots))],
+    )
+
+
+class _EditableMessage(_Message):
+    def __init__(self, *, position: int, html_text: str = "") -> None:
+        super().__init__()
+        self.reply_markup = session_exercise_actions_keyboard(position=position)
+        self.html_text = html_text
+        self.text = html_text
+        self.edited_text: str | None = None
+
+    async def edit_reply_markup(self, reply_markup=None, **kwargs: object) -> None:
+        self.reply_markup = reply_markup
+
+    async def edit_text(self, text: str, reply_markup=None, **kwargs: object) -> None:
+        self.edited_text = text
+        self.html_text = text
+        self.text = text
+        self.reply_markup = reply_markup
+
+
+class _ToggleMediator:
+    def __init__(self, document: WorkoutDocument) -> None:
+        self.document = document
+        self.requests: list[object] = []
+
+    async def send(self, request: object):
+        self.requests.append(request)
+        slot = self.document.days[0].slots[0]
+        if isinstance(request, ConfirmExerciseAsPlannedCommand):
+            updated = slot.with_actual(slot.planned_actual())
+            return ConfirmExerciseAsPlannedCommandResult(session_id=uuid4(), slot=updated, document=self.document)
+        if isinstance(request, ClearSlotActualCommand):
+            updated = slot.model_copy(update={"actual": None})
+            return ClearSlotActualCommandResult(session_id=uuid4(), slot=updated, document=self.document)
+        if isinstance(request, GetExerciseNamesQuery):
+            return GetExerciseNamesResult(names={})
+        if isinstance(request, GetExerciseGuideQuery):
+            return GetExerciseGuideResult(found=False)
+        raise AssertionError(type(request))
+
+
+async def test_do_button_confirms_in_place_without_a_new_message() -> None:
+    document = _one_day(_slot(position=2, exercise_id=uuid4(), weight_kg=Decimal("60")))
+    mediator = _ToggleMediator(document)
+    router = create_session_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    message = _EditableMessage(position=2)
+
+    await _handler(router, "handle_slot_plan")(_Callback("slot_plan:2", message))
+
+    assert message.answers == []
+    assert message.edited_text is None
+    assert _button_texts(message.reply_markup) == _DONE_LABELS
+    assert _callbacks(message.reply_markup) == _exercise_actions(2, confirmed=True)
+    assert [type(item) for item in mediator.requests] == [ConfirmExerciseAsPlannedCommand]
+
+
+async def test_done_button_undoes_planned_confirm_without_a_new_message() -> None:
+    document = _one_day(
+        _slot(
+            position=2,
+            exercise_id=uuid4(),
+            weight_kg=Decimal("60"),
+            actual=SlotActual(sets=4, reps=8, weight_kg=Decimal("60")),
+        ),
+    )
+    mediator = _ToggleMediator(document)
+    router = create_session_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    message = _EditableMessage(position=2)
+    message.reply_markup = session_exercise_actions_keyboard(position=2, confirmed=True)
+
+    await _handler(router, "handle_slot_undo")(_Callback("slot_undo:2", message))
+
+    assert message.answers == []
+    assert message.edited_text is None
+    assert _button_texts(message.reply_markup) == _OPEN_LABELS
+    assert _callbacks(message.reply_markup) == _exercise_actions(2)
+    assert [type(item) for item in mediator.requests] == [ClearSlotActualCommand]
+
+
+async def test_done_button_undoes_custom_fact_and_drops_it_from_the_card() -> None:
+    document = _one_day(
+        _slot(
+            position=2,
+            exercise_id=uuid4(),
+            weight_kg=Decimal("60"),
+            actual=SlotActual(sets=4, reps=6, weight_kg=Decimal("70")),
+        ),
+    )
+    mediator = _ToggleMediator(document)
+    router = create_session_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    message = _EditableMessage(position=2, html_text="<b>Жим</b>\n<i>Факт:</i> 4×6 · 70 кг")
+    message.reply_markup = session_exercise_actions_keyboard(position=2, confirmed=True)
+
+    await _handler(router, "handle_slot_undo")(_Callback("slot_undo:2", message))
+
+    assert message.answers == []
+    assert message.edited_text is not None
+    assert "<i>Факт:</i>" not in message.edited_text
+    assert _button_texts(message.reply_markup) == _OPEN_LABELS
+    assert any(isinstance(item, ClearSlotActualCommand) for item in mediator.requests)
+
+
+class _Bot:
+    def __init__(self) -> None:
+        self.text_edits: list[tuple[object, ...]] = []
+        self.markup_edits: list[tuple[object, ...]] = []
+
+    async def edit_message_text(
+        self,
+        text: str,
+        *,
+        chat_id: int,
+        message_id: int,
+        reply_markup=None,
+        **kwargs: object,
+    ) -> None:
+        self.text_edits.append((chat_id, message_id, text, reply_markup))
+
+    async def edit_message_reply_markup(
+        self,
+        *,
+        chat_id: int,
+        message_id: int,
+        reply_markup=None,
+        **kwargs: object,
+    ) -> None:
+        self.markup_edits.append((chat_id, message_id, reply_markup))
+
+
+class _PromptMessage(_Message):
+    def __init__(self, bot: _Bot) -> None:
+        super().__init__()
+        self.bot = bot
+        self.chat = type("Chat", (), {"id": 9})()
+        self.message_id = 99
+
+
+class _CustomMediator:
+    def __init__(self, document: WorkoutDocument) -> None:
+        self.document = document
+        self.requests: list[object] = []
+
+    async def send(self, request: object):
+        self.requests.append(request)
+        slot = self.document.days[0].slots[0]
+        if isinstance(request, GetWorkflowQuery):
+            return GetWorkflowQueryResult(
+                user_id=uuid4(),
+                chat_id=9,
+                expected_input=ExpectedInput.SLOT_LOAD,
+                expected_field="70@15",
+                focus_slot=slot.position,
+                profile_complete=True,
+                goal=None,
+            )
+        if isinstance(request, GetTodayWorkoutQuery):
+            return GetTodayWorkoutQueryResult(
+                screen="session",
+                document=self.document,
+                session_status=SessionStatus.IN_PROGRESS,
+            )
+        if isinstance(request, RecordSlotActualCommand):
+            updated = slot.with_actual(SlotActual(sets=slot.sets, reps=slot.reps, weight_kg=request.weight_kg))
+            return RecordSlotActualCommandResult(session_id=uuid4(), slot=updated, document=self.document)
+        if isinstance(request, GetExerciseNamesQuery):
+            return GetExerciseNamesResult(names={})
+        if isinstance(request, GetExerciseGuideQuery):
+            return GetExerciseGuideResult(found=False)
+        raise AssertionError(type(request))
+
+
+async def test_custom_log_marks_the_same_card_done_without_a_new_bubble() -> None:
+    document = _one_day(_slot(position=1, exercise_id=uuid4(), weight_kg=Decimal("60")))
+    mediator = _CustomMediator(document)
+    router = create_session_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    bot = _Bot()
+    message = _PromptMessage(bot)
+
+    await _handler(router, "handle_slot_r_plan")(_Callback("slot_r_plan:1", message))
+
+    assert message.answers == []
+    assert bot.markup_edits == []
+    assert len(bot.text_edits) == 1
+    chat_id, message_id, text, markup = bot.text_edits[0]
+    assert (chat_id, message_id) == (9, 15)
+    assert "<i>Вес:</i> 60 кг" in text
+    assert "<i>Факт:</i> 4×8 · 70 кг" in text
+    assert _button_texts(markup) == _DONE_LABELS
+    assert _callbacks(markup) == _exercise_actions(1, confirmed=True)
+    recorded = [item for item in mediator.requests if isinstance(item, RecordSlotActualCommand)]
+    assert len(recorded) == 1
+    assert recorded[0].weight_kg == Decimal("70")

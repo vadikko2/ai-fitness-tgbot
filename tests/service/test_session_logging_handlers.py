@@ -26,10 +26,12 @@ from fitness_bot.service.handlers.commands.program import (
 )
 from fitness_bot.service.handlers.commands.session import (
     BeginSessionCompletionCommandHandler,
+    ClearSlotActualCommandHandler,
     ConfirmExerciseAsPlannedCommandHandler,
     FinalizeSessionCommandHandler,
     ProposeSessionDeviationCommandHandler,
     ProposeSlotActualCommandHandler,
+    RecordSlotActualCommandHandler,
     RestartOpenSessionCommandHandler,
     StartSessionFromTemplateCommandHandler,
 )
@@ -47,10 +49,12 @@ from fitness_bot.service.models.commands.program import (
 )
 from fitness_bot.service.models.commands.session import (
     BeginSessionCompletionCommand,
+    ClearSlotActualCommand,
     ConfirmExerciseAsPlannedCommand,
     FinalizeSessionCommand,
     ProposeSessionDeviationCommand,
     ProposeSlotActualCommand,
+    RecordSlotActualCommand,
     RestartOpenSessionCommand,
     StartSessionFromTemplateCommand,
 )
@@ -353,6 +357,48 @@ async def test_confirm_exercise_as_planned(uow: InMemoryUow) -> None:
     assert today.document is not None
     assert today.document.days[0].slots[0].actual is not None
     assert today.document.days[0].slots[1].actual is None
+
+
+@pytest.mark.asyncio
+async def test_undo_confirm_drops_the_log_before_finish(uow: InMemoryUow) -> None:
+    await _start_session(uow)
+    await ConfirmExerciseAsPlannedCommandHandler(uow).handle(
+        ConfirmExerciseAsPlannedCommand(telegram_user_id=7, slot_position=1),
+    )
+    cleared = await ClearSlotActualCommandHandler(uow).handle(
+        ClearSlotActualCommand(telegram_user_id=7, slot_position=1),
+    )
+    assert cleared.slot.actual is None
+    assert cleared.document.days[0].slots[1].actual is None
+    finalized = await FinalizeSessionCommandHandler(uow).handle(FinalizeSessionCommand(telegram_user_id=7))
+    assert finalized.session_status == SessionStatus.COMPLETED
+    assert finalized.document.days[0].slots[0].actual is None
+    assert finalized.document.days[0].slots[1].actual is None
+
+
+@pytest.mark.asyncio
+async def test_undo_clears_a_custom_weight_and_reps_log(uow: InMemoryUow) -> None:
+    await _start_session(uow)
+    logged = await RecordSlotActualCommandHandler(uow).handle(
+        RecordSlotActualCommand(
+            telegram_user_id=7,
+            slot_position=1,
+            sets=3,
+            reps=5,
+            weight_kg=Decimal("55"),
+        ),
+    )
+    assert logged.slot.actual is not None
+    assert logged.slot.actual.reps == 5
+    cleared = await ClearSlotActualCommandHandler(uow).handle(
+        ClearSlotActualCommand(telegram_user_id=7, slot_position=1),
+    )
+    assert cleared.slot.actual is None
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.document is not None
+    assert today.document.days[0].slots[0].actual is None
+    assert today.document.days[0].slots[0].reps == 8
+    assert today.document.days[0].slots[0].weight_kg == Decimal("60")
 
 
 @pytest.mark.asyncio

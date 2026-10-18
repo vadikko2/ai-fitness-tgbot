@@ -498,6 +498,31 @@ class ConfirmExerciseAsPlannedCommandHandler(
             )
 
 
+class ClearSlotActualCommandHandler(
+    cqrs.RequestHandler[cmds.ClearSlotActualCommand, cmds.ClearSlotActualCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: cmds.ClearSlotActualCommand) -> cmds.ClearSlotActualCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            if user.active_session_id is None:
+                raise DomainError("open session is required")
+            session = await repos.sessions.get_by_id(user.active_session_id)
+            if session is None or not session.is_open:
+                raise DomainError("open session is required")
+            slot = session.clear_slot_actual(request.slot_position)
+            await repos.sessions.save(session)
+            user.clear_expectation()
+            await repos.users.save(user)
+            return cmds.ClearSlotActualCommandResult(
+                session_id=session.id,
+                slot=slot,
+                document=session.to_document(),
+            )
+
+
 class RecordSlotActualCommandHandler(
     cqrs.RequestHandler[cmds.RecordSlotActualCommand, cmds.RecordSlotActualCommandResult],
 ):

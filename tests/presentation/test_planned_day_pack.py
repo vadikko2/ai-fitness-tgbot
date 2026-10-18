@@ -5,7 +5,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fitness_bot.domain.enums import ProgramType
-from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
+from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay, WorkoutDocument
 from fitness_bot.presentation.planned_day_pack import (
     EXERCISE_PACK_PAUSE_SECONDS,
     format_planned_exercise_message,
@@ -53,6 +53,21 @@ def test_exercise_message_shows_catalog_fields_and_escapes() -> None:
     assert 'YouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in text
     assert "javascript:" not in text
     assert "мимо" not in text
+
+
+def test_exercise_message_shows_fact_only_when_it_differs() -> None:
+    planned = _slot(position=1, exercise_id=uuid4(), weight_kg=Decimal("60"))
+    same = format_planned_exercise_message(
+        planned.model_copy(update={"actual": SlotActual(sets=4, reps=8, weight_kg=Decimal("60"))}),
+        name="Жим",
+    )
+    changed = format_planned_exercise_message(
+        planned.model_copy(update={"actual": SlotActual(sets=4, reps=6, weight_kg=Decimal("70"))}),
+        name="Жим",
+    )
+    assert "Факт" not in same
+    assert "<i>Вес:</i> 60 кг" in changed
+    assert "<i>Факт:</i> 4×6 · 70 кг" in changed
 
 
 def test_sparse_exercise_keeps_name_and_prescription() -> None:

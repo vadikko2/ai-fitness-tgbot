@@ -207,6 +207,9 @@ def test_session_confirm_and_complete() -> None:
     assert session.day.slots[0].actual is None
     slot = session.confirm_slot_as_planned(1)
     assert slot.actual == SlotActual(sets=3, reps=8, weight_kg=40, note="")
+    undone = session.clear_slot_actual(1)
+    assert undone.actual is None
+    session.confirm_slot_as_planned(1)
     session.begin_completion()
     assert session.status == SessionStatus.PENDING_COMPLETION
     assert session.day.slots[0].actual is not None
@@ -219,6 +222,36 @@ def test_session_confirm_and_complete() -> None:
     session.finalize()
     assert session.status == SessionStatus.COMPLETED
     assert session.completed_at is not None
+
+
+def test_clear_slot_actual_undoes_planned_and_custom_logs() -> None:
+    exercise_id = uuid4()
+    day = WorkoutDay(
+        title="День",
+        position=1,
+        weekday=1,
+        slots=[
+            ExerciseSlot(
+                position=1,
+                exercise_id=exercise_id,
+                sets=3,
+                reps=8,
+                rest_seconds=60,
+                rpe=7,
+                weight_kg=40,
+            ),
+        ],
+    )
+    session = Session.from_template_day(user_id=uuid4(), program_type=ProgramType.FULL_BODY, day=day)
+    session.apply_slot_actual(1, SlotActual(sets=3, reps=5, weight_kg=50))
+    cleared = session.clear_slot_actual(1)
+    assert cleared.actual is None
+    with pytest.raises(DomainError):
+        session.clear_slot_actual(1)
+    session.confirm_slot_as_planned(1)
+    session.finalize()
+    with pytest.raises(DomainError):
+        session.clear_slot_actual(1)
 
 
 def test_technique_video_key_and_replace_clears_file_id() -> None:

@@ -80,6 +80,7 @@ from fitness_bot.service.handlers.commands.program import (
 )
 from fitness_bot.service.handlers.commands.session import (
     BeginSessionCompletionCommandHandler,
+    ClearSlotActualCommandHandler,
     ConfirmExerciseAsPlannedCommandHandler,
     FinalizeSessionCommandHandler,
     GenerateNextSessionCommandHandler,
@@ -236,6 +237,7 @@ from fitness_bot.service.models.commands.program import (
 )
 from fitness_bot.service.models.commands.session import (
     BeginSessionCompletionCommand,
+    ClearSlotActualCommand,
     ConfirmExerciseAsPlannedCommand,
     FinalizeSessionCommand,
     GenerateNextSessionCommand,
@@ -460,6 +462,7 @@ class Container(containers.DeclarativeContainer):
         catalog=exercise_catalog,
     )
     confirm_exercise_as_planned_handler = providers.Factory(ConfirmExerciseAsPlannedCommandHandler, uow=uow)
+    clear_slot_actual_handler = providers.Factory(ClearSlotActualCommandHandler, uow=uow)
     record_slot_actual_handler = providers.Factory(RecordSlotActualCommandHandler, uow=uow)
     propose_slot_actual_handler = providers.Factory(
         ProposeSlotActualCommandHandler,
@@ -675,6 +678,7 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(ReplaceProgramSlotFromSessionCommand, ReplaceProgramSlotFromSessionCommandHandler)
     request_map.bind(ProposeWorkoutChangeCommand, ProposeWorkoutChangeCommandHandler)
     request_map.bind(ConfirmExerciseAsPlannedCommand, ConfirmExerciseAsPlannedCommandHandler)
+    request_map.bind(ClearSlotActualCommand, ClearSlotActualCommandHandler)
     request_map.bind(RecordSlotActualCommand, RecordSlotActualCommandHandler)
     request_map.bind(ProposeSlotActualCommand, ProposeSlotActualCommandHandler)
     request_map.bind(BeginSessionCompletionCommand, BeginSessionCompletionCommandHandler)
