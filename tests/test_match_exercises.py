@@ -132,4 +132,6 @@ async def test_get_exercise_guide_returns_technique_and_videos() -> None:
     assert result.found is True
     assert result.name == "Жим лёжа"
     assert "скамью" in result.technique
+    assert result.primary_muscles == ["грудь"]
+    assert result.secondary_muscles == []
     assert result.videos[0].url == "https://rutube.ru/video/demo/"

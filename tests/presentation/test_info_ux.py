@@ -1,6 +1,7 @@
 from fitness_bot.presentation.keyboards import (
     INFO_TOPIC_IDS,
     INFO_TOPICS,
+    help_hub_keyboard,
     home_keyboard,
     info_menu_keyboard,
     info_offer_keyboard,
@@ -13,8 +14,23 @@ def _callback_data(markup) -> list[str]:
     return [button.callback_data for row in markup.inline_keyboard for button in row if button.callback_data]
 
 
-def test_home_keyboard_has_info() -> None:
-    assert "info" in _callback_data(home_keyboard())
+def test_info_and_feedback_open_from_profile_help_hub() -> None:
+    from fitness_bot.presentation.keyboards import profile_hub_keyboard
+
+    home = _callback_data(home_keyboard())
+    assert "help_hub" not in home
+    assert "info" not in home
+    assert "fb_menu:idea" not in home
+    assert "fb_menu:problem" not in home
+    assert "help_hub" in _callback_data(profile_hub_keyboard())
+    assert _callback_data(help_hub_keyboard()) == ["info", "fb_menu:idea", "fb_menu:problem", "profile", "home"]
+    menu = _callback_data(info_menu_keyboard())
+    assert menu[-2:] == ["help_hub", "home"]
+    text = create_jinja_env().get_template("help_hub.j2").render()
+    assert "Инфо и связь" in text
+    assert "&lt;" not in text
+    menu_copy = create_jinja_env().get_template("info.j2").render(topic="menu")
+    assert "«Профиль» → «Инфо и связь»" in menu_copy
 
 
 def test_info_menu_lists_every_topic_and_returns_home() -> None:
@@ -80,3 +96,18 @@ def test_info_copy_renders_for_offer_menu_and_topics() -> None:
         assert len(text) < 4096
         assert "<b>" in text
         assert "&lt;" not in text
+    body = template.render(topic="body")
+    assert "«Питание», «Самочувствие», «История», «Мой план сейчас», «Библиотека программ» и «Инфо и связь»" in body
+    assert "лежит в «👤 Профиль»" in template.render(topic="history")
+    assert "лежит в «👤 Профиль»" in template.render(topic="nutrition")
+    assert "«Профиль» → «Инфо и связь»" in template.render(topic="menu")
+    assert "Профиль → История → Самочувствие" in template.render(topic="adapt")
+    assert "«Профиль» → «Библиотека программ»" in template.render(topic="share")
+    assert "«Профиль»" in template.render(topic="offer")
+    offer = template.render(topic="offer")
+    assert "В меню — «Начать тренировку»." in offer
+    assert "«Мой план сейчас»" in offer
+    assert "и «Мой план сейчас»" not in offer
+    plan = template.render(topic="plan")
+    assert "лежит в «👤 Профиль»" in plan
+    assert "В меню есть «Мой план сейчас»" not in plan

@@ -31,7 +31,6 @@ from fitness_bot.presentation.keyboards import (
     home_keyboard,
     match_exercises_keyboard,
     program_after_type_keyboard,
-    program_day_keyboard,
     program_edit_menu_keyboard,
     program_screen_keyboard,
     program_slot_keyboard,
@@ -44,6 +43,7 @@ from fitness_bot.presentation.keyboards import (
 )
 from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
 from fitness_bot.presentation.muscle_emoji import build_slot_nav_items
+from fitness_bot.presentation.planned_day_pack import present_planned_training_day
 from fitness_bot.service.models.commands.program import (
     ApproveProposalCommand,
     ChooseProgramTypeCommand,
@@ -56,6 +56,7 @@ from fitness_bot.service.models.commands.program import (
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import (
     GetExerciseGuideQuery,
+    GetExerciseGuideResult,
     GetExerciseNamesQuery,
     MatchExercisesQuery,
 )
@@ -971,17 +972,23 @@ def create_program_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.message.answer("День не найден.")
             await callback.answer()
             return
-        names = await _load_exercise_names(mediator)
-        text = jinja_env.get_template("workout_day.j2").render(day=_day_view(day, names))
-        if callback.message:
-            await callback.message.answer(
-                text,
-                reply_markup=program_day_keyboard(
-                    day_position=day_position,
-                    slots=_slot_button_items(day, names),
-                ),
-            )
+        names, primary_muscles = await _load_catalog_maps(mediator)
+        guides: dict[UUID, GetExerciseGuideResult] = {}
+        for slot in day.slots:
+            if slot.exercise_id is None or slot.exercise_id in guides:
+                continue
+            guide = await mediator.send(GetExerciseGuideQuery(exercise_id=slot.exercise_id))
+            if guide.found:
+                guides[slot.exercise_id] = guide
         await callback.answer()
+        await present_planned_training_day(
+            message=callback.message,
+            day=day,
+            day_position=day_position,
+            names=names,
+            guides=guides,
+            primary_muscles=primary_muscles,
+        )
 
     @router.callback_query(F.data.startswith("prog_view_slot:"))
     async def handle_prog_view_slot(callback: CallbackQuery) -> None:

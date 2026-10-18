@@ -45,6 +45,8 @@ class CatalogExerciseGuide:
     name: str
     technique: str
     videos: tuple[CatalogVideoLink, ...]
+    primary_muscles: tuple[str, ...] = ()
+    secondary_muscles: tuple[str, ...] = ()
 
 
 class ExerciseCatalogReader(Protocol):

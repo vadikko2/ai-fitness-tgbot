@@ -99,22 +99,48 @@ def test_body_tracking_moved_from_home_to_profile_hub() -> None:
     from fitness_bot.presentation.keyboards import home_keyboard, profile_hub_keyboard, profile_reminders_keyboard
 
     home = _callbacks(home_keyboard())
-    for moved in ("wt_menu", "meas_menu", "pp_menu"):
+    for moved in ("wt_menu", "meas_menu", "pp_menu", "nutr", "feel", "hist", "library", "help_hub", "info", "prog"):
         assert moved not in home
-    assert {"profile", "feel", "hist", "sess_go", "prog"} <= set(home)
+    assert home[0] == "sess_go"
+    assert {"profile", "sess_go"} <= set(home)
+    home_labels = [button.text for row in home_keyboard().inline_keyboard for button in row]
+    assert home_labels[0] == "▶️ Начать тренировку"
+    assert "👤 Профиль" in home_labels
+    assert "📋 Мой план сейчас" not in home_labels
 
     hub = _callbacks(profile_hub_keyboard())
     assert hub[0] == "prof_form"
-    assert {"wt_menu", "meas_menu", "pp_menu", "prof_remind", "prof_edit:height", "ihow:profile", "home"} <= set(hub)
+    assert hub.index("prog") + 1 == hub.index("library")
+    assert {
+        "wt_menu",
+        "meas_menu",
+        "pp_menu",
+        "prof_remind",
+        "prof_edit:height",
+        "nutr",
+        "feel",
+        "hist",
+        "prog",
+        "library",
+        "help_hub",
+        "ihow:profile",
+        "home",
+    } <= set(hub)
     assert {"wt_remind", "pp_remind", "profile"} <= set(_callbacks(profile_reminders_keyboard()))
 
 
 def test_body_screens_lead_back_to_profile() -> None:
     from fitness_bot.presentation.keyboards import (
         body_saved_keyboard,
+        history_menu_keyboard,
+        library_home_keyboard,
         measurement_sites_keyboard,
+        nutrition_current_keyboard,
+        nutrition_no_program_keyboard,
+        program_screen_keyboard,
         progress_photo_menu_keyboard,
         weight_menu_keyboard,
+        wellbeing_prompt_keyboard,
     )
 
     for markup in (
@@ -123,6 +149,12 @@ def test_body_screens_lead_back_to_profile() -> None:
         measurement_sites_keyboard([("id", "Талия")]),
         progress_photo_menu_keyboard(),
         body_saved_keyboard(back_callback="wt_menu", back_label="⬅️ К весу"),
+        nutrition_current_keyboard(),
+        nutrition_no_program_keyboard(),
+        history_menu_keyboard(),
+        wellbeing_prompt_keyboard(),
+        library_home_keyboard([]),
+        program_screen_keyboard(has_pending=False, has_active=True),
     ):
         callbacks = _callbacks(markup)
         assert "profile" in callbacks
@@ -144,5 +176,8 @@ def test_profile_hub_template_shows_last_weight_and_measurement_dates() -> None:
     )
     assert "80.5 кг</b> · 01.10.2026" in text
     assert "последний замер 20.09.2026" in text
+    assert "Питание, самочувствие и история." in text
+    assert "Мой план сейчас и библиотека программ." in text
+    assert "Инфо и связь" in text
     empty = create_jinja_env().get_template("profile_hub.j2").render(profile_text="", last_weight_kg=None)
     assert "ещё не записан" in empty and "ещё не снимали" in empty

@@ -160,21 +160,9 @@ def home_keyboard(
     )
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text=START_WORKOUT_LABEL, callback_data="sess_go")],
-        [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
-        [
-            InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
-            InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
-            InlineKeyboardButton(text="📜 История", callback_data="hist"),
-        ],
-        [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             coach_btn,
-        ],
-        [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="info")],
-        [
-            InlineKeyboardButton(text="💡 Есть идея", callback_data="fb_menu:idea"),
-            InlineKeyboardButton(text="⚠️ Сообщить о проблеме", callback_data="fb_menu:problem"),
         ],
     ]
     if show_coach_badge:
@@ -276,6 +264,7 @@ def nutrition_current_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Обновить план", callback_data="nutr_refresh")],
             [how_it_works_button("nutr")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -341,6 +330,14 @@ def profile_hub_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu")],
             [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="pp_menu")],
             [InlineKeyboardButton(text="⏰ Напоминания", callback_data="prof_remind")],
+            [
+                InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
+                InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
+            ],
+            [InlineKeyboardButton(text="📜 История", callback_data="hist")],
+            [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
+            [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
+            [InlineKeyboardButton(text="ℹ️ Инфо и связь", callback_data="help_hub")],
             [how_it_works_button("profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
@@ -464,6 +461,7 @@ def history_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="hist_pp")],
             [InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel_hist:0")],
             [how_it_works_button("hist")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -804,8 +802,22 @@ def parse_how_it_works(data: str) -> tuple[str, str] | None:
     return SECTION_INFO_ORIGIN[origin], origin
 
 
+def help_hub_keyboard() -> InlineKeyboardMarkup:
+    """Info, idea, and problem. Handlers stay separate; this is only the entry."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="info")],
+            [InlineKeyboardButton(text="💡 Есть идея", callback_data="fb_menu:idea")],
+            [InlineKeyboardButton(text="⚠️ Сообщить о проблеме", callback_data="fb_menu:problem")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
 def info_menu_keyboard() -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=label, callback_data=f"info:{topic}")] for topic, label in INFO_TOPICS]
+    rows.append([InlineKeyboardButton(text=_BACK, callback_data="help_hub")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1072,6 +1084,7 @@ def program_screen_keyboard(
     if has_pending:
         rows.append([InlineKeyboardButton(text="📝 Есть черновик — открыть", callback_data="prog_draft")])
     rows.append([how_it_works_button("prog")])
+    rows.append([InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1205,6 +1218,7 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 Программа", callback_data="prog")],
             [how_it_works_button("nutr")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -1502,6 +1516,7 @@ def feedback_menu_keyboard(kind: FeedbackKind) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=_FEEDBACK_WRITE[kind], callback_data=f"fb_new:{kind.value}")],
             [InlineKeyboardButton(text=_FEEDBACK_MINE[kind], callback_data=f"fb_list:{kind.value}:0")],
+            [InlineKeyboardButton(text=_BACK, callback_data="help_hub")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -1584,6 +1599,7 @@ def wellbeing_prompt_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📖 История самочувствия", callback_data="feel_hist:0")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -1652,6 +1668,7 @@ def library_home_keyboard(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     rows.append([InlineKeyboardButton(text="🔗 Ввести код или ссылку", callback_data="code_link")])
     rows.append([InlineKeyboardButton(text="➕ Создать через AI", callback_data="prog_setup")])
     rows.append([how_it_works_button("library")])
+    rows.append([InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

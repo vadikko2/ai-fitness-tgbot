@@ -49,4 +49,6 @@ class GetExerciseGuideResult(cqrs.Response):
     exercise_id: UUID | None = None
     name: str = ""
     technique: str = ""
+    primary_muscles: list[str] = []
+    secondary_muscles: list[str] = []
     videos: list[ExerciseGuideVideoItem] = []

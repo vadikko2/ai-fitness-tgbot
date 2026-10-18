@@ -6,6 +6,7 @@ from jinja2 import Environment
 
 from fitness_bot.presentation.keyboards import (
     INFO_TOPIC_IDS,
+    help_hub_keyboard,
     info_menu_keyboard,
     info_topic_keyboard,
     parse_how_it_works,
@@ -21,6 +22,13 @@ def create_menu_router(*, jinja_env: Environment) -> Router:
         text = jinja_env.get_template("stub_later.j2").render()
         if callback.message:
             await callback.message.answer(text, reply_markup=stub_later_keyboard())
+        await callback.answer()
+
+    @router.callback_query(F.data == "help_hub")
+    async def handle_help_hub(callback: CallbackQuery) -> None:
+        text = jinja_env.get_template("help_hub.j2").render()
+        if callback.message:
+            await callback.message.answer(text, reply_markup=help_hub_keyboard())
         await callback.answer()
 
     @router.callback_query(F.data == "info")

@@ -77,6 +77,8 @@ class GetExerciseGuideQueryHandler(cqrs.RequestHandler[GetExerciseGuideQuery, Ge
             exercise_id=guide.id,
             name=guide.name,
             technique=guide.technique,
+            primary_muscles=list(guide.primary_muscles),
+            secondary_muscles=list(guide.secondary_muscles),
             videos=[
                 ExerciseGuideVideoItem(platform=video.platform, url=video.url, title=video.title)
                 for video in guide.videos

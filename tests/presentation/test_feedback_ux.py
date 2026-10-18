@@ -8,6 +8,7 @@ from fitness_bot.presentation.keyboards import (
     feedback_list_keyboard,
     feedback_list_label,
     feedback_moderator_keyboard,
+    help_hub_keyboard,
     home_keyboard,
 )
 from fitness_bot.presentation.routers.feedback import author_status_text
@@ -22,10 +23,18 @@ def _button_text(markup) -> list[str]:
     return [button.text for row in markup.inline_keyboard for button in row]
 
 
-def test_home_keyboard_has_idea_and_problem() -> None:
-    callbacks = _callback_data(home_keyboard())
+def test_idea_and_problem_open_from_the_profile_help_hub() -> None:
+    from fitness_bot.presentation.keyboards import feedback_menu_keyboard
+
+    assert "fb_menu:idea" not in _callback_data(home_keyboard())
+    assert "fb_menu:problem" not in _callback_data(home_keyboard())
+    callbacks = _callback_data(help_hub_keyboard())
     assert "fb_menu:idea" in callbacks
     assert "fb_menu:problem" in callbacks
+    assert callbacks[-2:] == ["profile", "home"]
+    for kind in (FeedbackKind.IDEA, FeedbackKind.PROBLEM):
+        menu = _callback_data(feedback_menu_keyboard(kind))
+        assert menu[-2:] == ["help_hub", "home"]
 
 
 def test_my_ideas_page_shows_at_most_five_and_status_marks() -> None:

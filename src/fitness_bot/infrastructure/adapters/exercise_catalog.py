@@ -42,7 +42,12 @@ class SqlAlchemyExerciseCatalog(ExerciseCatalogReader):
     async def get_guide(self, exercise_id: UUID) -> CatalogExerciseGuide | None:
         async with self._session_factory() as session:
             result = await session.execute(
-                select(ExerciseRow).where(ExerciseRow.id == exercise_id).options(selectinload(ExerciseRow.videos)),
+                select(ExerciseRow)
+                .where(ExerciseRow.id == exercise_id)
+                .options(
+                    selectinload(ExerciseRow.videos),
+                    selectinload(ExerciseRow.muscles),
+                ),
             )
             row = result.scalar_one_or_none()
             if row is None:
@@ -51,9 +56,13 @@ class SqlAlchemyExerciseCatalog(ExerciseCatalogReader):
                 CatalogVideoLink(platform=video.platform, url=video.url, title=video.title)
                 for video in sorted(row.videos, key=lambda item: item.position)
             )
+            primary = tuple(muscle.muscle for muscle in row.muscles if muscle.role == "primary")
+            secondary = tuple(muscle.muscle for muscle in row.muscles if muscle.role == "secondary")
             return CatalogExerciseGuide(
                 id=row.id,
                 name=row.name,
                 technique=row.technique,
                 videos=videos,
+                primary_muscles=primary,
+                secondary_muscles=secondary,
             )
