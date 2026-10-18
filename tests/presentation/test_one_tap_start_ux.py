@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 from fitness_bot.domain.enums import ProgramStatus, ProgramType
@@ -17,17 +18,21 @@ from fitness_bot.presentation.keyboards import (
     session_done_today_keyboard,
     session_rest_keyboard,
 )
+from fitness_bot.presentation.planned_day_pack import EXERCISE_PACK_PAUSE_SECONDS
 from fitness_bot.presentation.routers.session import start_workout_one_tap
 from fitness_bot.presentation.templates_env import create_jinja_env
 from fitness_bot.service.handlers.commands.body import RecordWellbeingCommandHandler
 from fitness_bot.service.handlers.commands.session import StartTodayWorkoutCommandHandler
 from fitness_bot.service.handlers.commands.users import EnsureUserCommandHandler
-from fitness_bot.service.handlers.queries.match_exercises import GetExerciseNamesQueryHandler
+from fitness_bot.service.handlers.queries.match_exercises import (
+    GetExerciseGuideQueryHandler,
+    GetExerciseNamesQueryHandler,
+)
 from fitness_bot.service.handlers.queries.session import GetTodayWorkoutQueryHandler
 from fitness_bot.service.models.commands.body import RecordWellbeingCommand
 from fitness_bot.service.models.commands.session import StartTodayWorkoutCommand
 from fitness_bot.service.models.commands.users import EnsureUserCommand
-from fitness_bot.service.models.queries.match_exercises import GetExerciseNamesQuery
+from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
 from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery
 from fitness_bot.service.ports.exercise_catalog import InMemoryExerciseCatalog, record
 
@@ -46,6 +51,7 @@ class _Mediator:
             StartTodayWorkoutCommand: StartTodayWorkoutCommandHandler(uow),
             GetTodayWorkoutQuery: GetTodayWorkoutQueryHandler(uow),
             GetExerciseNamesQuery: GetExerciseNamesQueryHandler(catalog),
+            GetExerciseGuideQuery: GetExerciseGuideQueryHandler(catalog),
         }
 
     async def send(self, request):
@@ -124,28 +130,41 @@ def test_session_card_shows_adapt_button_only_with_fresh_wellbeing() -> None:
     assert "feel_adapt_today" in _callbacks(session_card_keyboard(slots=[(1, "Жим")], has_unapplied_wellbeing=True))
 
 
-async def test_one_tap_shows_card_and_first_exercise_with_wellbeing_banner() -> None:
+async def test_one_tap_sends_exercise_pack_then_one_log_button() -> None:
     uow = InMemoryUow()
     today = local_calendar_date(now=datetime.now(UTC), timezone_offset=None).isoweekday()
     await _seed(uow, weekday=today)
     await RecordWellbeingCommandHandler(uow).handle(RecordWellbeingCommand(telegram_user_id=TG, text="<болит> спина"))
     message = _Message()
+    sleeps: list[float] = []
 
-    await start_workout_one_tap(
-        jinja_env=create_jinja_env(),
-        mediator=_Mediator(uow, _catalog()),  # type: ignore[arg-type]
-        message=message,  # type: ignore[arg-type]
-        telegram_user_id=TG,
-    )
+    async def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
 
-    assert len(message.answers) == 2
-    card_text, card_markup = message.answers[0]
-    assert "Поехали" in card_text
-    assert "&lt;болит&gt; спина" in card_text
-    assert "feel_adapt_today" in _callbacks(card_markup)
-    slot_text, slot_markup = message.answers[1]
-    assert "Жим лёжа" in slot_text
-    assert "slot_plan:1" in _callbacks(slot_markup)
+    with patch("fitness_bot.presentation.planned_day_pack.asyncio.sleep", _sleep):
+        await start_workout_one_tap(
+            jinja_env=create_jinja_env(),
+            mediator=_Mediator(uow, _catalog()),  # type: ignore[arg-type]
+            message=message,  # type: ignore[arg-type]
+            telegram_user_id=TG,
+        )
+
+    texts = [text for text, _markup in message.answers]
+    assert len(texts) == 3
+    assert sleeps == [EXERCISE_PACK_PAUSE_SECONDS, EXERCISE_PACK_PAUSE_SECONDS]
+    assert "<b>Жим лёжа</b>" in texts[0]
+    assert "<b>Тяга штанги</b>" in texts[1]
+    assert "Тренировка сегодня" not in "\n".join(texts)
+    prompt, markup = message.answers[-1]
+    assert "Поехали" in prompt
+    assert "&lt;болит&gt; спина" in prompt
+    callbacks = _callbacks(markup)
+    assert callbacks == ["slot:1", "home"]
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert labels[0] == "Жим лёжа"
+    forbidden = {"sess_edit", "sess_all", "sess_restart", "ihow:sess", "feel_adapt_today", "slot_plan:1"}
+    assert forbidden.isdisjoint(callbacks)
+    assert all(markup is None for _text, markup in message.answers[:-1])
 
 
 async def test_one_tap_on_rest_day_renders_train_anyway() -> None:

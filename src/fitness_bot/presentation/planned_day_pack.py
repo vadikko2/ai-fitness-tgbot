@@ -52,6 +52,20 @@ def format_planned_exercise_message(
     return "\n\n".join(blocks)
 
 
+def format_day_warmup_message(warmup: str) -> str | None:
+    text = warmup.strip()
+    if not text:
+        return None
+    return "<b>Разминка</b>\n" + html.escape(text)
+
+
+def format_day_cooldown_message(cooldown: str) -> str | None:
+    text = cooldown.strip()
+    if not text:
+        return None
+    return "<b>Заминка</b>\n" + html.escape(text)
+
+
 def format_planned_day_intro(day: WorkoutDay) -> str:
     title = html.escape(day.title.strip() or "Тренировка")
     head = f"<b>{title}</b>"
@@ -61,17 +75,33 @@ def format_planned_day_intro(day: WorkoutDay) -> str:
     intensity = INTENSITY_LABELS.get(day.intensity.value, day.intensity.value)
     style = training_style_label(day.training_style)
     lines = [head, "", f"{html.escape(intensity.capitalize())} тренировка · {html.escape(style)}."]
-    warmup = day.warmup.strip()
+    warmup = format_day_warmup_message(day.warmup)
     if warmup:
-        lines.extend(["", "<b>Разминка</b>", html.escape(warmup)])
+        lines.extend(["", warmup])
     return "\n".join(lines)
 
 
 def format_planned_day_outro(day: WorkoutDay) -> str:
-    cooldown = day.cooldown.strip()
+    cooldown = format_day_cooldown_message(day.cooldown)
     if cooldown:
-        return "<b>Заминка</b>\n" + html.escape(cooldown)
+        return cooldown
     return "К программе или в меню."
+
+
+def format_planned_slot_message(
+    slot: ExerciseSlot,
+    *,
+    names: Mapping[UUID, str],
+    guides: Mapping[UUID, GetExerciseGuideResult],
+    primary_muscles: Mapping[UUID, Sequence[str]] | None = None,
+) -> str:
+    """Same card as the plan-day pack: catalog text that exists, plus the prescription."""
+    return _exercise_message(
+        slot,
+        names=names,
+        guides=guides,
+        primary_muscles=primary_muscles or {},
+    )
 
 
 async def send_planned_day_pack(

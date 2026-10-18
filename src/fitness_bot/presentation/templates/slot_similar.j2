@@ -1,9 +1,9 @@
 <b>🔄 Вместо «{{ exercise_name }}»</b>
-{% if primary_muscles %}💪 {{ primary_muscles | join(", ") }}{% if secondary_muscles %} · {{ secondary_muscles | join(", ") }}{% endif %}
-{% endif %}
+{% if primary_muscles %}💪 {{ primary_muscles | join(", ") }}{% if secondary_muscles %} · {{ secondary_muscles | join(", ") }}{% endif +%}
+{% endif +%}
 {% if items %}Можно сделать:
-{% for item in items %}• <b>{{ item.name }}</b> — {{ item.primary_muscles | join(", ") }}{% if item.secondary_muscles %} · {{ item.secondary_muscles | join(", ") }}{% endif %}
-{% endfor %}
+{% for item in items %}• <b>{{ item.name }}</b> — {{ item.primary_muscles | join(", ") }}{% if item.secondary_muscles %} · {{ item.secondary_muscles | join(", ") }}{% endif +%}
+{% endfor +%}
 Замена — только в сегодняшней тренировке. Подходы, повторы и отдых останутся как в плане.
 {% else %}Похожих упражнений для твоего места тренировки в каталоге не нашёл.
 {% endif %}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -21,6 +22,7 @@ from fitness_bot.presentation.keyboards import (
     INTENSITY_LABELS,
     PROGRAM_TYPE_LABELS,
     WEEKDAY_LABELS,
+    back_to_menu_keyboard,
     back_to_slot_keyboard,
     completion_deviation_actions_keyboard,
     completion_prompt_keyboard,
@@ -29,7 +31,7 @@ from fitness_bot.presentation.keyboards import (
     match_session_exercises_keyboard,
     next_session_actions_keyboard,
     performance_actions_keyboard,
-    session_card_keyboard,
+    session_continue_keyboard,
     session_done_today_keyboard,
     session_no_program_keyboard,
     session_repeat_confirm_keyboard,
@@ -44,7 +46,13 @@ from fitness_bot.presentation.keyboards import (
     workout_edit_actions_keyboard,
 )
 from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
-from fitness_bot.presentation.muscle_emoji import build_slot_nav_items
+from fitness_bot.presentation.muscle_emoji import build_slot_nav_items, slot_button_label
+from fitness_bot.presentation.planned_day_pack import (
+    format_day_cooldown_message,
+    format_day_warmup_message,
+    format_planned_slot_message,
+    send_planned_day_pack,
+)
 from fitness_bot.presentation.routers.program import render_proposal
 from fitness_bot.service.models.commands.program import (
     ApproveProposalCommand,
@@ -78,6 +86,13 @@ from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery,
 from fitness_bot.service.models.queries.users import GetWorkflowQuery
 
 WELLBEING_ADAPT_EDIT_UTTERANCE = "Подстрой сегодняшнюю тренировку под моё самочувствие."
+
+
+def _chat_message(message: object) -> Message | None:
+    """Real chat messages and test doubles. Inaccessible callbacks have no answer()."""
+    if getattr(message, "answer", None) is None:
+        return None
+    return message  # type: ignore[return-value]
 
 
 def _weekday_label(weekday: int | None) -> str | None:
@@ -190,17 +205,24 @@ def _slot_button_items(
     return build_slot_nav_items(open_slots, names=names)
 
 
-async def _session_card_markup(
-    mediator: RequestMediator,
-    document: WorkoutDocument,
-    *,
-    has_unapplied_wellbeing: bool = False,
-):
-    names = await _load_exercise_names(mediator)
-    return session_card_keyboard(
-        slots=_slot_button_items(document, names),
-        has_unapplied_wellbeing=has_unapplied_wellbeing,
-    )
+def _first_open_slot(document: WorkoutDocument) -> ExerciseSlot | None:
+    for day in document.days:
+        for slot in sorted(day.slots, key=lambda item: item.position):
+            if slot.actual is None:
+                return slot
+    return None
+
+
+async def _load_session_guides(mediator: RequestMediator, document: WorkoutDocument):
+    guides = {}
+    for day in document.days:
+        for slot in day.slots:
+            if slot.exercise_id is None or slot.exercise_id in guides:
+                continue
+            guide = await mediator.send(GetExerciseGuideQuery(exercise_id=slot.exercise_id))
+            if guide.found:
+                guides[slot.exercise_id] = guide
+    return guides
 
 
 def _format_kg(value: Decimal | None) -> str | None:
@@ -324,10 +346,7 @@ async def _show_slot_screen(
 _SIMILAR_BLOCKED_TEXT = {
     "no_session": "Замена упражнения доступна только во время тренировки.",
     "unresolved": "Сначала выбери упражнение из каталога.",
-    "logged": (
-        "По этому упражнению уже записан факт — заменить его нельзя. "
-        "Если нужно переделать, на карточке тренировки есть «🔄 Начать заново»."
-    ),
+    "logged": "По этому упражнению уже записан факт — заменить его нельзя.",
 }
 
 
@@ -381,30 +400,51 @@ async def show_similar_exercises(
 
 async def _show_session_card(
     *,
-    jinja_env: Environment,
     mediator: RequestMediator,
     message: Message,
     document: WorkoutDocument,
-    telegram_user_id: int | None = None,
     status_line: str | None = None,
-    has_unapplied_wellbeing: bool = False,
+    offer_log: bool = True,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> None:
-    text = await _render_document_template(
-        jinja_env=jinja_env,
-        mediator=mediator,
-        template_name="session_card.j2",
-        document=document,
-    )
+    """One calm message per exercise, then a single next-step keyboard. Not the old button wall."""
+    names, primary_muscles = await _load_catalog_maps(mediator)
+    guides = await _load_session_guides(mediator, document)
+    parts: list[str] = []
+    for day in document.days:
+        warmup = format_day_warmup_message(day.warmup)
+        if warmup:
+            parts.append(warmup)
+        for slot in sorted(day.slots, key=lambda item: item.position):
+            parts.append(
+                format_planned_slot_message(
+                    slot,
+                    names=names,
+                    guides=guides,
+                    primary_muscles=primary_muscles,
+                ),
+            )
+        cooldown = format_day_cooldown_message(day.cooldown)
+        if cooldown:
+            parts.append(cooldown)
+    next_slot = _first_open_slot(document) if offer_log else None
     if status_line:
-        text = f"{text}\n\n{status_line}"
-    await message.answer(
-        text,
-        reply_markup=await _session_card_markup(
-            mediator,
-            document,
-            has_unapplied_wellbeing=has_unapplied_wellbeing,
-        ),
-    )
+        prompt = status_line
+    elif next_slot is not None:
+        prompt = "Записать подход"
+    else:
+        prompt = "Все упражнения отмечены. Можно завершить тренировку."
+    parts.append(prompt)
+    if not offer_log:
+        markup = back_to_menu_keyboard()
+    elif next_slot is None:
+        markup = session_continue_keyboard()
+    else:
+        markup = session_continue_keyboard(
+            next_position=next_slot.position,
+            next_label=slot_button_label(next_slot, names),
+        )
+    await send_planned_day_pack(message, parts, reply_markup=markup, sleep=sleep)
 
 
 async def _advance_after_slot(
@@ -419,11 +459,9 @@ async def _advance_after_slot(
     next_position = _next_open_slot_position(document, current_position)
     if next_position is None:
         await _show_session_card(
-            jinja_env=jinja_env,
             mediator=mediator,
             message=message,
             document=document,
-            telegram_user_id=telegram_user_id,
             status_line="Все упражнения отмечены. Можно завершить тренировку.",
         )
         return
@@ -761,7 +799,7 @@ def _alternative_context(alternative: tuple[int, str] | None) -> dict:
 
 def _wellbeing_banner(note: str | None) -> str:
     quoted = f"Ты отметил: «{html.escape(note[:120])}»" if note else "Есть свежая отметка самочувствия"
-    return f"🙂 {quoted}. Тренировка начата по плану — нажми «Подстроить под самочувствие», если нужно её адаптировать."
+    return f"🙂 {quoted}. Тренировка начата по плану."
 
 
 async def start_workout_one_tap(
@@ -772,7 +810,7 @@ async def start_workout_one_tap(
     telegram_user_id: int,
     weekday: int | None = None,
 ) -> None:
-    """One tap: resume or start the planned day and open the first exercise right away."""
+    """One tap: resume or start the planned day and send one message per exercise."""
     try:
         result = await mediator.send(StartTodayWorkoutCommand(telegram_user_id=telegram_user_id, weekday=weekday))
     except DomainError as exc:
@@ -813,25 +851,11 @@ async def start_workout_one_tap(
     if show_wellbeing:
         lines.append(_wellbeing_banner(result.wellbeing_note))
     await _show_session_card(
-        jinja_env=jinja_env,
         mediator=mediator,
         message=message,
         document=result.document,
-        telegram_user_id=telegram_user_id,
         status_line="\n\n".join(lines),
-        has_unapplied_wellbeing=show_wellbeing,
     )
-    if not in_progress:
-        return
-    first_open = _next_open_slot_position(result.document, 0)
-    if first_open is not None:
-        await _show_slot_screen(
-            jinja_env=jinja_env,
-            mediator=mediator,
-            message=message,
-            telegram_user_id=telegram_user_id,
-            position=first_open,
-        )
 
 
 def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) -> Router:
@@ -873,21 +897,12 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         if today.screen == "session" and today.document is not None:
-            text = await _render_document_template(
-                jinja_env=jinja_env,
-                mediator=mediator,
-                template_name="session_card.j2",
-                document=today.document,
-            )
-            if callback.message:
-                await callback.message.answer(
-                    text,
-                    reply_markup=await _session_card_markup(
-                        mediator,
-                        today.document,
-                        has_unapplied_wellbeing=bool(today.has_unapplied_wellbeing)
-                        and today.session_status == SessionStatus.IN_PROGRESS,
-                    ),
+            chat = _chat_message(callback.message)
+            if chat is not None:
+                await _show_session_card(
+                    mediator=mediator,
+                    message=chat,
+                    document=today.document,
                 )
             await callback.answer()
         elif today.screen == "template" and today.document is not None:
@@ -946,11 +961,9 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             return
         assert isinstance(callback.message, Message)
         await _show_session_card(
-            jinja_env=jinja_env,
             mediator=mediator,
             message=callback.message,
             document=result.document,
-            telegram_user_id=callback.from_user.id,
             status_line=status_line,
         )
 
@@ -1013,17 +1026,15 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.message.answer(f"Не удалось начать: {exc}")
             await callback.answer()
             return
-        if callback.message is None or result.document is None:
+        chat = _chat_message(callback.message)
+        if chat is None or result.document is None:
             await callback.answer()
             return
-        text = await _render_document_template(
-            jinja_env=jinja_env,
+        await _show_session_card(
             mediator=mediator,
-            template_name="session_card.j2",
+            message=chat,
             document=result.document,
         )
-        if callback.message:
-            await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, result.document))
         await callback.answer()
 
     @router.callback_query(F.data == "sess_tmpl_edit")
@@ -1053,23 +1064,20 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             text = jinja_env.get_template("session_repeat_confirm.j2").render()
             if callback.message:
                 await callback.message.answer(
-                    text + "\n\nПосле повтора открой «✏️ Изменить» на карточке тренировки.",
+                    text + "\n\nПосле повтора откроется сегодняшняя тренировка.",
                     reply_markup=session_repeat_confirm_keyboard(),
                 )
             await callback.answer()
             return
+        chat = _chat_message(callback.message)
         if result.document is None:
-            if callback.message:
-                await callback.message.answer("Не удалось начать тренировку.")
+            if chat is not None:
+                await chat.answer("Не удалось начать тренировку.")
             await callback.answer()
             return
-        text = await _render_document_template(
-            jinja_env=jinja_env,
-            mediator=mediator,
-            template_name="session_card.j2",
-            document=result.document,
-        )
-        text = f"{text}\n\nНапиши или продиктуй голосом, что поменять в сегодняшней тренировке."
+        if chat is None:
+            await callback.answer()
+            return
         await mediator.send(
             ExpectInputCommand(
                 telegram_user_id=callback.from_user.id,
@@ -1077,8 +1085,13 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 expected_field="workout_edit",
             ),
         )
-        if callback.message:
-            await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, result.document))
+        await _show_session_card(
+            mediator=mediator,
+            message=chat,
+            document=result.document,
+            status_line="Напиши или продиктуй голосом, что поменять в сегодняшней тренировке.",
+            offer_log=False,
+        )
         await callback.answer()
 
     @router.callback_query(F.data == "sess_gen")
@@ -1186,20 +1199,17 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.answer()
             return
         today = await mediator.send(GetTodayWorkoutQuery(telegram_user_id=callback.from_user.id))
-        if today.document is not None:
-            text = await _render_document_template(
-                jinja_env=jinja_env,
-                mediator=mediator,
-                template_name="session_card.j2",
-                document=today.document,
-            )
-            if callback.message:
-                await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, today.document))
-            await callback.answer()
-        else:
-            if callback.message:
-                await callback.message.answer("Сессия начата.", reply_markup=home_keyboard())
-            await callback.answer()
+        chat = _chat_message(callback.message)
+        if chat is not None:
+            if today.document is not None:
+                await _show_session_card(
+                    mediator=mediator,
+                    message=chat,
+                    document=today.document,
+                )
+            else:
+                await chat.answer("Сессия начата.", reply_markup=home_keyboard())
+        await callback.answer()
 
     @router.callback_query(F.data == "sess_edit")
     async def handle_sess_edit(callback: CallbackQuery) -> None:
@@ -1273,20 +1283,17 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.answer()
             return
         today = await mediator.send(GetTodayWorkoutQuery(telegram_user_id=callback.from_user.id))
-        if today.document is not None:
-            text = await _render_document_template(
-                jinja_env=jinja_env,
-                mediator=mediator,
-                template_name="session_card.j2",
-                document=today.document,
-            )
-            if callback.message:
-                await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, today.document))
-            await callback.answer()
-        else:
-            if callback.message:
-                await callback.message.answer("Правка сохранена.", reply_markup=home_keyboard())
-            await callback.answer()
+        chat = _chat_message(callback.message)
+        if chat is not None:
+            if today.document is not None:
+                await _show_session_card(
+                    mediator=mediator,
+                    message=chat,
+                    document=today.document,
+                )
+            else:
+                await chat.answer("Правка сохранена.", reply_markup=home_keyboard())
+        await callback.answer()
 
     @router.callback_query(F.data.startswith("slot:"))
     async def handle_slot(callback: CallbackQuery) -> None:
@@ -1619,16 +1626,14 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         today = await mediator.send(GetTodayWorkoutQuery(telegram_user_id=callback.from_user.id))
-        if today.document is not None:
-            text = await _render_document_template(
-                jinja_env=jinja_env,
+        chat = _chat_message(callback.message)
+        if today.document is not None and chat is not None:
+            await _show_session_card(
                 mediator=mediator,
-                template_name="session_card.j2",
+                message=chat,
                 document=today.document,
             )
-            if callback.message:
-                await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, today.document))
-            await callback.answer()
+        await callback.answer()
 
     @router.callback_query(F.data == "sess_all")
     async def handle_sess_all(callback: CallbackQuery) -> None:
@@ -1665,17 +1670,15 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.message.answer(f"Не удалось начать заново: {exc}")
             await callback.answer()
             return
-        if callback.message is None:
+        chat = _chat_message(callback.message)
+        if chat is None:
             await callback.answer()
             return
-        text = await _render_document_template(
-            jinja_env=jinja_env,
+        await _show_session_card(
             mediator=mediator,
-            template_name="session_card.j2",
+            message=chat,
             document=result.document,
         )
-        if callback.message:
-            await callback.message.answer(text, reply_markup=await _session_card_markup(mediator, result.document))
         await callback.answer()
 
     @router.callback_query(F.data == "sess_fin")

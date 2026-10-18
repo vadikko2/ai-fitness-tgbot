@@ -78,7 +78,15 @@ async def test_similar_screen_lists_alternatives_and_wraps_paging() -> None:
         exercise_name="Жим штанги лёжа",
         primary_muscles=["грудь"],
         secondary_muscles=["трицепс"],
-        items=[SimilarExerciseItem(exercise_id=uuid4(), name="Жим гантелей лёжа", primary_muscles=["грудь"])],
+        items=[
+            SimilarExerciseItem(
+                exercise_id=uuid4(),
+                name="Жим гантелей лёжа",
+                primary_muscles=["грудь"],
+                secondary_muscles=["плечи", "трицепс"],
+            ),
+            SimilarExerciseItem(exercise_id=uuid4(), name="Жим одной гантели лёжа", primary_muscles=["грудь"]),
+        ],
         offset=3,
         has_more=False,
     )
@@ -92,9 +100,16 @@ async def test_similar_screen_lists_alternatives_and_wraps_paging() -> None:
         offset=3,
     )
     text, markup = message.answers[0]
-    assert "Вместо «Жим штанги лёжа»" in text
-    assert "Жим гантелей лёжа" in text
-    assert "только в сегодняшней тренировке" in text
+    assert text == (
+        "<b>🔄 Вместо «Жим штанги лёжа»</b>\n"
+        "💪 грудь · трицепс\n"
+        "\n"
+        "Можно сделать:\n"
+        "• <b>Жим гантелей лёжа</b> — грудь · плечи, трицепс\n"
+        "• <b>Жим одной гантели лёжа</b> — грудь\n"
+        "\n"
+        "Замена — только в сегодняшней тренировке. Подходы, повторы и отдых останутся как в плане.\n"
+    )
     assert "slot_alt:1:0" in _callbacks(markup)
 
 

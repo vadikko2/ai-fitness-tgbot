@@ -8,8 +8,7 @@ from jinja2 import Environment
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.technique_video import MAX_TECHNIQUE_VIDEO_BYTES
-from fitness_bot.presentation.keyboards import session_card_keyboard
-from fitness_bot.presentation.routers.session import _document_view, _load_exercise_names, _session_card_markup
+from fitness_bot.presentation.routers.session import _show_session_card
 from fitness_bot.service.models.commands.session import SaveTechniqueVideoCommand
 from fitness_bot.service.models.queries.users import GetWorkflowQuery
 
@@ -84,12 +83,11 @@ def create_video_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             await message.answer(f"Не удалось сохранить видео: {exc}")
             return
 
-        names = await _load_exercise_names(mediator)
-        card = jinja_env.get_template("session_card.j2").render(document=_document_view(result.document, names))
-        text = f"Видео упражнения сохранено.\n\n{card}"
-        markup = (
-            await _session_card_markup(mediator, result.document) if result.document.days else session_card_keyboard()
+        await _show_session_card(
+            mediator=mediator,
+            message=message,
+            document=result.document,
+            status_line="Видео упражнения сохранено.",
         )
-        await message.answer(text, reply_markup=markup)
 
     return router

@@ -1224,6 +1224,24 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def session_continue_keyboard(
+    *,
+    next_position: int | None = None,
+    next_label: str | None = None,
+) -> InlineKeyboardMarkup:
+    """One next exercise to log, or «Готово» when every set is already written. Plus the menu."""
+    rows: list[list[InlineKeyboardButton]] = []
+    label = (next_label or "").strip()
+    if next_position is not None and label:
+        rows.append(
+            [InlineKeyboardButton(text=label[:64], callback_data=f"slot:{next_position}")],
+        )
+    else:
+        rows.append([InlineKeyboardButton(text=_DONE, callback_data="sess_fin")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def session_card_keyboard(
     *,
     slots: list[tuple[int, str]] | None = None,
