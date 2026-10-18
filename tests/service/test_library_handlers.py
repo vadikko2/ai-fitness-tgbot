@@ -217,7 +217,7 @@ async def test_delete_card_hides_it_and_unpublishes() -> None:
     keep = await _save(uow, title="Оставить")
     drop = await _save(uow, title="Удалить")
     await PublishProgramCommandHandler(uow).handle(
-        PublishProgramCommand(telegram_user_id=7, program_id=drop.program_id)
+        PublishProgramCommand(telegram_user_id=7, program_id=drop.program_id),
     )
 
     deleted = await DeleteLibraryProgramCommandHandler(uow).handle(

@@ -43,7 +43,7 @@ def test_card_keyboard_has_days_edit_rename_delete_and_fits_callback_limit() -> 
     nested = [
         *_callbacks(library_day_keyboard(program_id=program_id, day_position=7, slots=[(12, "Жим")])),
         *_callbacks(
-            library_slot_keyboard(program_id=program_id, day_position=7, slot_position=12, has_catalog_guide=True)
+            library_slot_keyboard(program_id=program_id, day_position=7, slot_position=12, has_catalog_guide=True),
         ),
         *_callbacks(library_edit_proposal_keyboard(program_id=program_id, can_approve=True)),
         *_callbacks(library_delete_confirm_keyboard(program_id=program_id)),

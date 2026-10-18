@@ -24,7 +24,7 @@ def _day(weekday: int, title: str) -> WorkoutDay:
                 reps=8,
                 rest_seconds=60,
                 rpe=7,
-            )
+            ),
         ],
     )
 
