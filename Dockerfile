@@ -20,7 +20,8 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH" \
     SHERPA_MODEL_NAME=sherpa-onnx-zipformer-ru-2024-09-18 \
-    SHERPA_MODEL_DIR=/app/models/sherpa-onnx-zipformer-ru-2024-09-18
+    SHERPA_MODEL_DIR=/app/models/sherpa-onnx-zipformer-ru-2024-09-18 \
+    SHERPA_MODEL_URL=https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ru-2024-09-18.tar.bz2
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
@@ -33,18 +34,9 @@ RUN chmod +x /entrypoint.sh
 
 RUN uv sync --frozen --no-dev
 
-# Download ASR pack at build time (gitignored locally; not in the repo).
-RUN mkdir -p /app/models \
-    && curl -fL --retry 3 --retry-delay 2 \
-        -o /tmp/sherpa.tar.bz2 \
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${SHERPA_MODEL_NAME}.tar.bz2" \
-    && tar xjf /tmp/sherpa.tar.bz2 -C /app/models \
-    && rm -f /tmp/sherpa.tar.bz2 \
-        "/app/models/${SHERPA_MODEL_NAME}/encoder.onnx" \
-        "/app/models/${SHERPA_MODEL_NAME}/decoder.onnx" \
-        "/app/models/${SHERPA_MODEL_NAME}/joiner.onnx" \
-    && test -f "${SHERPA_MODEL_DIR}/tokens.txt" \
-    && test -f "${SHERPA_MODEL_DIR}/encoder.int8.onnx"
+# The ~283 MB sherpa archive is only published on GitHub releases. The Timeweb
+# builder fetches GitHub at ~26 KB/s and is killed at 1680s, so the download
+# runs in entrypoint.sh on container start instead of during docker build.
 
 RUN test -d /app/data/progress_poses/male \
     && test -d /app/data/progress_poses/female
