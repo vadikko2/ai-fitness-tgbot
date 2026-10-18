@@ -118,6 +118,22 @@ class WeightReminderRow(Base):
     )
 
 
+class TrainingReminderRow(Base):
+    """Evening (20:00) and morning (09:00) training nudges. Times are fixed in code."""
+
+    __tablename__ = "training_reminders"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    evening_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    morning_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    last_evening_sent_on: Mapped[date | None] = mapped_column(Date)
+    last_morning_sent_on: Mapped[date | None] = mapped_column(Date)
+
+
 class WeightReminderWeekdayRow(Base):
     __tablename__ = "weight_reminder_weekdays"
 
@@ -728,6 +744,10 @@ class WellbeingEntryRow(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    proposal_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("proposals.id", ondelete="SET NULL"),
+    )
 
 
 # Satisfy UniqueConstraint import used via table args in future migrations if needed.

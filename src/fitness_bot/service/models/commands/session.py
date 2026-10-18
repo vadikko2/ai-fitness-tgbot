@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from fitness_bot.domain.enums import SessionStatus
@@ -11,6 +12,7 @@ from fitness_bot.service.models.commands.base import Command, CommandResult
 class StartSessionFromTemplateCommand(Command):
     telegram_user_id: int
     overwrite_completed: bool = False
+    weekday: int | None = None
 
 
 class StartSessionFromTemplateCommandResult(CommandResult):
@@ -19,9 +21,69 @@ class StartSessionFromTemplateCommandResult(CommandResult):
     needs_repeat_confirmation: bool = False
 
 
+StartTodayOutcome = Literal["started", "resumed", "already_done", "rest", "no_program"]
+
+
+class StartTodayWorkoutCommand(Command):
+    """One-tap start: resume the open session or start the planned day right away.
+
+    ``weekday`` starts another program day instead of today's (e.g. on a rest day).
+    """
+
+    telegram_user_id: int
+    weekday: int | None = None
+
+
+class StartTodayWorkoutCommandResult(CommandResult):
+    outcome: StartTodayOutcome
+    session_id: UUID | None = None
+    session_status: SessionStatus | None = None
+    document: WorkoutDocument | None = None
+    weekday: int | None = None
+    alternative_weekday: int | None = None
+    alternative_title: str | None = None
+    has_unapplied_wellbeing: bool = False
+    wellbeing_note: str | None = None
+    week_finished: bool = False
+    planned_count: int = 0
+    completed_count: int = 0
+
+
+class SwapSessionSlotExerciseCommand(Command):
+    """Swap one not-yet-logged exercise of the open session (today only)."""
+
+    telegram_user_id: int
+    slot_position: int
+    exercise_id: UUID
+
+
+class SwapSessionSlotExerciseCommandResult(CommandResult):
+    session_id: UUID
+    document: WorkoutDocument
+    slot: ExerciseSlot
+    previous_exercise_id: UUID | None = None
+    weight_source: Literal["program", "history", "none"] = "none"
+    matches_program: bool = False
+    can_replace_in_program: bool = False
+
+
+class ReplaceProgramSlotFromSessionCommand(Command):
+    """Copy the swapped exercise of an open-session slot into the active program day."""
+
+    telegram_user_id: int
+    slot_position: int
+
+
+class ReplaceProgramSlotFromSessionCommandResult(CommandResult):
+    program_id: UUID
+    day_title: str
+    exercise_id: UUID
+
+
 class ProposeWorkoutChangeCommand(Command):
     telegram_user_id: int
     utterance: str
+    adapt_for_wellbeing: bool = False
 
 
 class ProposeWorkoutChangeCommandResult(CommandResult):
@@ -30,6 +92,7 @@ class ProposeWorkoutChangeCommandResult(CommandResult):
     schema_failed: bool = False
     reply: str = ""
     document: WorkoutDocument | None = None
+    wellbeing_entry_ids: list[UUID] = []
 
 
 class ConfirmExerciseAsPlannedCommand(Command):
@@ -120,6 +183,9 @@ class FinalizeSessionCommandResult(CommandResult):
 class GenerateNextSessionCommand(Command):
     telegram_user_id: int
     adapt_for_wellbeing: bool = False
+    # None keeps today's weekday. Evening «Да, завтра» passes tomorrow's weekday
+    # so the draft is that day, not whatever is planned for today.
+    target_weekday: int | None = None
 
 
 class GenerateNextSessionCommandResult(CommandResult):

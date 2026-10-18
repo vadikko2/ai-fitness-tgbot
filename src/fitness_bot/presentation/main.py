@@ -24,9 +24,11 @@ from fitness_bot.presentation.routers.progress_photo import create_progress_phot
 from fitness_bot.presentation.routers.session import create_session_router
 from fitness_bot.presentation.routers.start import create_start_router
 from fitness_bot.presentation.routers.text import create_text_router
+from fitness_bot.presentation.routers.training_reminder import create_training_reminder_router
 from fitness_bot.presentation.routers.unsupported import create_unsupported_router
 from fitness_bot.presentation.routers.video import create_video_router
 from fitness_bot.presentation.routers.voice import create_voice_router
+from fitness_bot.presentation.routers.wellbeing import create_wellbeing_router
 from fitness_bot.presentation.scheduler import run_weight_reminder_scheduler
 from fitness_bot.presentation.wiring.container import build_container, build_mediator
 
@@ -52,6 +54,8 @@ async def run() -> None:
     dispatcher.include_router(create_moderator_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_feedback_router(mediator=mediator))
     dispatcher.include_router(create_session_router(jinja_env=jinja_env, mediator=mediator))
+    dispatcher.include_router(create_training_reminder_router(jinja_env=jinja_env, mediator=mediator))
+    dispatcher.include_router(create_wellbeing_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_nutrition_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_menu_router(jinja_env=jinja_env))
     dispatcher.include_router(create_video_router(jinja_env=jinja_env, mediator=mediator))

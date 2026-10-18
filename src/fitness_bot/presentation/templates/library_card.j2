@@ -1,0 +1,27 @@
+{% import "_macros.j2" as m %}
+<b>{{ status_icon }} {{ title|e }}</b>
+Тип: {{ program_type_label }} · {{ m.count_words(document.days|length, "тренировка", "тренировки", "тренировок") }} в неделю · {{ status_label }}
+{% if author_label %}Автор: {{ author_label|e }}
+{% endif %}
+{% if code %}Код: <code>{{ code }}</code>
+Ссылка: {{ link or ("start=p_" ~ code) }}
+{% endif %}
+{% if claim_note %}{{ claim_note }}
+{% endif %}
+{% if status_line %}
+{{ status_line }}
+{% endif %}
+{% for day in document.days %}
+
+<b>{% if day.weekday_label %}{{ day.weekday_label }} — {% endif %}{{ day.title }}</b>{% if compact %} · {{ m.count_words(day.slots|length, "упражнение", "упражнения", "упражнений") }}{% endif %}
+
+{% if not compact %}
+{% for slot in day.slots %}
+{{ m.slot_line(slot) }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% if compact %}
+
+Открой день ниже, чтобы увидеть упражнения, подходы и повторы.
+{% endif %}

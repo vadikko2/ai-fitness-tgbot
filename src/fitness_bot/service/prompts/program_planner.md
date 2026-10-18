@@ -27,6 +27,8 @@ Training styles (assign per day in `days[].training_style` — classic | strengt
 Exercise catalog, id, name, muscles, and places only:
 {{ catalog_json }}
 
+{% include "_wellbeing_block.md" %}
+
 JSON Schema for WorkoutDocument (follow field types and nesting):
 {{ schema_json }}
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from fitness_bot.domain.enums import ProgramType, SessionStatus
@@ -26,6 +27,34 @@ class GetTodayWorkoutQueryResult(QueryResult):
     week_finished: bool = False
     technique_video_positions: list[int] = []
     has_unapplied_wellbeing: bool = False
+    alternative_weekday: int | None = None
+    alternative_title: str | None = None
+
+
+class GetSimilarExercisesQuery(Query):
+    telegram_user_id: int
+    slot_position: int
+    offset: int = 0
+    limit: int = 3
+
+
+class SimilarExerciseItem(QueryResult):
+    exercise_id: UUID
+    name: str
+    primary_muscles: list[str] = []
+    secondary_muscles: list[str] = []
+
+
+class GetSimilarExercisesQueryResult(QueryResult):
+    slot_position: int
+    exercise_id: UUID | None = None
+    exercise_name: str = ""
+    primary_muscles: list[str] = []
+    secondary_muscles: list[str] = []
+    items: list[SimilarExerciseItem] = []
+    offset: int = 0
+    has_more: bool = False
+    blocked_reason: Literal["no_session", "logged", "unresolved"] | None = None
 
 
 class GetSessionHistoryQuery(Query):

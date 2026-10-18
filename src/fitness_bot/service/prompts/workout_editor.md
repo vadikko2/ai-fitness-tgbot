@@ -17,6 +17,8 @@ Training place (hard constraint — never violate):
 - gym / mixed → match place and available gear; prefer multi-place tags for mixed.
 {% endif %}
 
+{% include "_wellbeing_block.md" %}
+
 Catalog ids allowed (each row has `places`):
 {{ catalog_json }}
 

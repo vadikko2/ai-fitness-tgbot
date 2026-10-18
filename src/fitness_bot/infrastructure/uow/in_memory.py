@@ -15,6 +15,7 @@ from fitness_bot.domain.body.wellbeing import WellbeingEntry
 from fitness_bot.domain.enums import Goal
 from fitness_bot.domain.users.user import User
 from fitness_bot.domain.workout.technique_video import TechniqueVideo
+from fitness_bot.domain.workout.training_reminder import TrainingReminderPrefs
 from fitness_bot.infrastructure.uow.in_memory_coach import InMemoryCoachesRepository
 from fitness_bot.infrastructure.uow.in_memory_feedback import InMemoryFeedbackRepository
 from fitness_bot.infrastructure.uow.in_memory_program import (
@@ -33,6 +34,7 @@ from fitness_bot.service.interfaces.uow import (
     IProposalsRepository,
     ISessionsRepository,
     ITechniqueVideosRepository,
+    ITrainingReminderRepository,
     IUow,
     IUowRepositories,
     IUsersRepository,
@@ -153,6 +155,23 @@ class InMemoryWeightReminderRepository(IWeightReminderRepository):
         return deepcopy(stored)
 
     async def list_all(self) -> list[WeightReminder]:
+        return [deepcopy(item) for item in self._by_user.values()]
+
+
+class InMemoryTrainingReminderRepository(ITrainingReminderRepository):
+    def __init__(self) -> None:
+        self._by_user: dict[UUID, TrainingReminderPrefs] = {}
+
+    async def get(self, user_id: UUID) -> TrainingReminderPrefs | None:
+        prefs = self._by_user.get(user_id)
+        return deepcopy(prefs) if prefs else None
+
+    async def save(self, prefs: TrainingReminderPrefs) -> TrainingReminderPrefs:
+        stored = deepcopy(prefs)
+        self._by_user[stored.user_id] = stored
+        return deepcopy(stored)
+
+    async def list_all(self) -> list[TrainingReminderPrefs]:
         return [deepcopy(item) for item in self._by_user.values()]
 
 
@@ -349,6 +368,31 @@ class InMemoryWellbeingRepository(IWellbeingRepository):
                 continue
             entry.applied_at = moment
 
+    async def list_page(self, user_id: UUID, *, offset: int = 0, limit: int = 10) -> list[WellbeingEntry]:
+        items = [item for item in self._by_id.values() if item.user_id == user_id]
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        return [deepcopy(item) for item in items[offset : offset + limit]]
+
+    async def link_to_proposal(self, entry_ids: list[UUID], proposal_id: UUID) -> None:
+        for entry_id in entry_ids:
+            entry = self._by_id.get(entry_id)
+            if entry is not None and entry.applied_at is None:
+                entry.proposal_id = proposal_id
+
+    async def mark_applied_for_proposal(
+        self,
+        proposal_id: UUID,
+        *,
+        applied_at: datetime | None = None,
+    ) -> list[UUID]:
+        moment = applied_at or datetime.now(UTC)
+        marked: list[UUID] = []
+        for entry in self._by_id.values():
+            if entry.proposal_id == proposal_id and entry.applied_at is None:
+                entry.applied_at = moment
+                marked.append(entry.id)
+        return marked
+
 
 class InMemoryTechniqueVideosRepository(ITechniqueVideosRepository):
     def __init__(self) -> None:
@@ -378,6 +422,7 @@ class InMemoryUowRepositories(IUowRepositories):
         users: InMemoryUsersRepository | None = None,
         weights: InMemoryWeightRepository | None = None,
         weight_reminders: InMemoryWeightReminderRepository | None = None,
+        training_reminders: InMemoryTrainingReminderRepository | None = None,
         progress_photos: InMemoryProgressPhotoRepository | None = None,
         progress_photo_reminders: InMemoryProgressPhotoReminderRepository | None = None,
         measurements: InMemoryMeasurementRepository | None = None,
@@ -393,6 +438,7 @@ class InMemoryUowRepositories(IUowRepositories):
         self._users = users or InMemoryUsersRepository()
         self._weights = weights or InMemoryWeightRepository()
         self._weight_reminders = weight_reminders or InMemoryWeightReminderRepository()
+        self._training_reminders = training_reminders or InMemoryTrainingReminderRepository()
         self._progress_photos = progress_photos or InMemoryProgressPhotoRepository()
         self._progress_photo_reminders = progress_photo_reminders or InMemoryProgressPhotoReminderRepository()
         self._measurements = measurements or InMemoryMeasurementRepository()
@@ -416,6 +462,10 @@ class InMemoryUowRepositories(IUowRepositories):
     @property
     def weight_reminders(self) -> InMemoryWeightReminderRepository:
         return self._weight_reminders
+
+    @property
+    def training_reminders(self) -> InMemoryTrainingReminderRepository:
+        return self._training_reminders
 
     @property
     def progress_photos(self) -> InMemoryProgressPhotoRepository:

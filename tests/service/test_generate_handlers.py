@@ -689,12 +689,43 @@ async def test_after_next_week_approve_next_session_and_template_still_work(uow:
     assert today.session_status == SessionStatus.IN_PROGRESS
 
 
-async def test_wellbeing_record_flag_and_adapt_marks_applied(uow: InMemoryUow) -> None:
+class RecordingLanguageModel(ScriptedLanguageModel):
+    def __init__(self, responses: list[str] | None = None, *, fail: Exception | None = None) -> None:
+        super().__init__(responses, fail=fail)
+        self.prompts: list[str] = []
+
+    async def complete(self, *, system: str, user: str) -> str:
+        self.prompts.append(user)
+        return await super().complete(system=system, user=user)
+
+
+async def _record_wellbeing(uow: InMemoryUow, text: str, *, age: timedelta | None = None):
+    from fitness_bot.domain.body.wellbeing import WellbeingEntry
     from fitness_bot.service.handlers.commands.body import RecordWellbeingCommandHandler
-    from fitness_bot.service.handlers.commands.wellbeing_adapt import clear_wellbeing_adapt
     from fitness_bot.service.models.commands.body import RecordWellbeingCommand
 
-    clear_wellbeing_adapt()
+    if age is None:
+        recorded = await RecordWellbeingCommandHandler(uow).handle(
+            RecordWellbeingCommand(telegram_user_id=7, text=text),
+        )
+        return recorded.entry_id
+    async with uow.transaction() as repos:
+        user = await repos.users.get_by_telegram_id(7)
+        assert user is not None
+        entry = WellbeingEntry.create(user_id=user.id, text=text, now=datetime.now(UTC) - age)
+        saved = await repos.wellbeing.add(entry)
+        return saved.id
+
+
+async def _wellbeing_entry(uow: InMemoryUow, entry_id):
+    async with uow.transaction() as repos:
+        user = await repos.users.get_by_telegram_id(7)
+        assert user is not None
+        entries = await repos.wellbeing.list_recent(user.id, limit=50)
+    return next(entry for entry in entries if entry.id == entry_id)
+
+
+async def test_wellbeing_record_flag_and_adapt_marks_applied(uow: InMemoryUow) -> None:
     await _seed_profile(uow)
     await _activate_program(uow)
 
@@ -702,35 +733,183 @@ async def test_wellbeing_record_flag_and_adapt_marks_applied(uow: InMemoryUow) -
     assert today.screen == "template"
     assert today.has_unapplied_wellbeing is False
 
-    recorded = await RecordWellbeingCommandHandler(uow).handle(
-        RecordWellbeingCommand(telegram_user_id=7, text="болит колено"),
-    )
-    assert recorded.entry_id is not None
+    entry_id = await _record_wellbeing(uow, "болит колено")
 
     today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
     assert today.has_unapplied_wellbeing is True
 
-    lm = ScriptedLanguageModel([_next_session_json(weight_kg=55)])
+    lm = RecordingLanguageModel([_next_session_json(weight_kg=55)])
     draft = await GenerateNextSessionCommandHandler(uow, lm, _catalog()).handle(
         GenerateNextSessionCommand(telegram_user_id=7, adapt_for_wellbeing=True),
     )
     assert draft.proposal_id is not None
-    assert draft.wellbeing_entry_ids == [recorded.entry_id]
-    assert lm.calls == 1
+    assert draft.wellbeing_entry_ids == [entry_id]
+    assert "болит колено" in lm.prompts[0]
+    assert "HARD constraints" in lm.prompts[0]
 
-    async with uow.transaction() as repos:
-        user = await repos.users.get_by_telegram_id(7)
-        assert user is not None
-        unapplied = await repos.wellbeing.list_unapplied(user.id)
-        assert len(unapplied) == 1
+    # Link is persisted on the entry itself (survives restarts), not in process memory.
+    stored = await _wellbeing_entry(uow, entry_id)
+    assert stored.proposal_id == draft.proposal_id
+    assert stored.applied_at is None
 
+    # A fresh handler instance (as after a deploy) still marks the notes applied.
     approved = await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
     assert approved.session_id is not None
 
-    async with uow.transaction() as repos:
-        user = await repos.users.get_by_telegram_id(7)
-        assert user is not None
-        assert await repos.wellbeing.list_unapplied(user.id) == []
-        recent = await repos.wellbeing.list_recent(user.id, limit=5)
-        assert recent[0].id == recorded.entry_id
-        assert recent[0].applied_at is not None
+    stored = await _wellbeing_entry(uow, entry_id)
+    assert stored.applied_at is not None
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.has_unapplied_wellbeing is False
+
+
+async def test_wellbeing_older_than_window_is_ignored(uow: InMemoryUow) -> None:
+    from fitness_bot.domain.body.wellbeing import WELLBEING_FRESHNESS_WINDOW
+    from fitness_bot.domain.errors import NoFreshWellbeing
+
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    await _record_wellbeing(uow, "старая жалоба на спину", age=WELLBEING_FRESHNESS_WINDOW + timedelta(hours=1))
+
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.has_unapplied_wellbeing is False
+
+    with pytest.raises(NoFreshWellbeing):
+        await GenerateNextSessionCommandHandler(uow, RecordingLanguageModel([]), _catalog()).handle(
+            GenerateNextSessionCommand(telegram_user_id=7, adapt_for_wellbeing=True),
+        )
+
+    lm = RecordingLanguageModel([_next_session_json()])
+    draft = await GenerateNextSessionCommandHandler(uow, lm, _catalog()).handle(
+        GenerateNextSessionCommand(telegram_user_id=7),
+    )
+    assert draft.wellbeing_entry_ids == []
+    assert "старая жалоба" not in lm.prompts[0]
+
+
+async def test_regenerate_session_takes_fresh_wellbeing_softly(uow: InMemoryUow) -> None:
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    entry_id = await _record_wellbeing(uow, "спал 5 часов")
+
+    lm = RecordingLanguageModel([_next_session_json()])
+    draft = await GenerateNextSessionCommandHandler(uow, lm, _catalog()).handle(
+        GenerateNextSessionCommand(telegram_user_id=7),
+    )
+    assert draft.wellbeing_entry_ids == [entry_id]
+    assert "спал 5 часов" in lm.prompts[0]
+    assert "soft context" in lm.prompts[0]
+
+    await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
+    assert (await _wellbeing_entry(uow, entry_id)).applied_at is not None
+
+
+async def test_discarded_draft_keeps_wellbeing_unapplied(uow: InMemoryUow) -> None:
+    from fitness_bot.service.handlers.commands.program import DiscardProposalCommandHandler
+    from fitness_bot.service.models.commands.program import DiscardProposalCommand
+
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    entry_id = await _record_wellbeing(uow, "тянет поясницу")
+
+    await GenerateNextSessionCommandHandler(uow, RecordingLanguageModel([_next_session_json()]), _catalog()).handle(
+        GenerateNextSessionCommand(telegram_user_id=7, adapt_for_wellbeing=True),
+    )
+    await DiscardProposalCommandHandler(uow).handle(DiscardProposalCommand(telegram_user_id=7))
+
+    assert (await _wellbeing_entry(uow, entry_id)).applied_at is None
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.has_unapplied_wellbeing is True
+
+
+async def test_workout_edit_includes_wellbeing_and_marks_applied(uow: InMemoryUow) -> None:
+    from fitness_bot.service.handlers.commands.session import ProposeWorkoutChangeCommandHandler
+    from fitness_bot.service.models.commands.session import ProposeWorkoutChangeCommand
+
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    await StartSessionFromTemplateCommandHandler(uow, InMemoryObjectStorage()).handle(
+        StartSessionFromTemplateCommand(telegram_user_id=7),
+    )
+    entry_id = await _record_wellbeing(uow, "болит плечо")
+
+    today = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=7))
+    assert today.screen == "session"
+    assert today.has_unapplied_wellbeing is True
+
+    lm = RecordingLanguageModel([_next_session_json(weight_kg=40)])
+    edit = await ProposeWorkoutChangeCommandHandler(uow, lm, _catalog()).handle(
+        ProposeWorkoutChangeCommand(telegram_user_id=7, utterance="замени жим", adapt_for_wellbeing=False),
+    )
+    assert edit.wellbeing_entry_ids == [entry_id]
+    assert "болит плечо" in lm.prompts[0]
+
+    await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
+    assert (await _wellbeing_entry(uow, entry_id)).applied_at is not None
+
+
+async def test_next_week_includes_fresh_wellbeing(uow: InMemoryUow) -> None:
+    await _seed_profile(uow)
+    await _activate_program(uow)
+    entry_id = await _record_wellbeing(uow, "простыл, слабость")
+
+    lm = RecordingLanguageModel([_next_week_json()])
+    draft = await GenerateNextWeekCommandHandler(uow, lm, _catalog()).handle(
+        GenerateNextWeekCommand(telegram_user_id=7),
+    )
+    assert draft.wellbeing_entry_ids == [entry_id]
+    assert "простыл, слабость" in lm.prompts[0]
+
+    await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
+    assert (await _wellbeing_entry(uow, entry_id)).applied_at is not None
+
+
+async def test_adapt_week_for_wellbeing_requires_fresh_and_marks_applied(uow: InMemoryUow) -> None:
+    from fitness_bot.domain.errors import NoFreshWellbeing
+    from fitness_bot.service.handlers.commands.program import AdaptWeekForWellbeingCommandHandler
+    from fitness_bot.service.models.commands.program import AdaptWeekForWellbeingCommand
+
+    await _seed_profile(uow)
+    await _activate_program(uow)
+
+    with pytest.raises(NoFreshWellbeing):
+        await AdaptWeekForWellbeingCommandHandler(uow, RecordingLanguageModel([]), _catalog()).handle(
+            AdaptWeekForWellbeingCommand(telegram_user_id=7),
+        )
+
+    entry_id = await _record_wellbeing(uow, "болит колено")
+    lm = RecordingLanguageModel([_next_week_json(weight_kg=50)])
+    draft = await AdaptWeekForWellbeingCommandHandler(uow, lm, _catalog()).handle(
+        AdaptWeekForWellbeingCommand(telegram_user_id=7),
+    )
+    assert draft.proposal_id is not None
+    assert draft.wellbeing_entry_ids == [entry_id]
+    assert "HARD constraints" in lm.prompts[0]
+    pending = await GetPendingProposalQueryHandler(uow).handle(GetPendingProposalQuery(telegram_user_id=7))
+    assert pending.kind == ProposalKind.PROGRAM
+
+    approved = await ApproveProposalCommandHandler(uow).handle(ApproveProposalCommand(telegram_user_id=7))
+    assert approved.program_id is not None
+    assert (await _wellbeing_entry(uow, entry_id)).applied_at is not None
+
+
+async def test_wellbeing_history_pages_and_statuses(uow: InMemoryUow) -> None:
+    from fitness_bot.service.handlers.queries.body import GetWellbeingHistoryQueryHandler
+    from fitness_bot.service.models.queries.body import GetWellbeingHistoryQuery
+
+    await _seed_profile(uow)
+    for index in range(12):
+        await _record_wellbeing(uow, f"запись {index}", age=timedelta(days=15 - index))
+    await _record_wellbeing(uow, "свежая")
+
+    handler = GetWellbeingHistoryQueryHandler(uow)
+    first = await handler.handle(GetWellbeingHistoryQuery(telegram_user_id=7, offset=0, limit=10))
+    assert [item.text for item in first.items][:2] == ["свежая", "запись 11"]
+    assert len(first.items) == 10
+    assert first.has_more is True
+    assert first.has_fresh_unapplied is True
+    assert first.items[0].is_fresh is True
+    assert first.items[1].is_fresh is False
+
+    second = await handler.handle(GetWellbeingHistoryQuery(telegram_user_id=7, offset=10, limit=10))
+    assert len(second.items) == 3
+    assert second.has_more is False

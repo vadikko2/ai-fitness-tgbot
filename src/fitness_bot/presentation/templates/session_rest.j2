@@ -2,4 +2,6 @@
 <b>🏖 Выходной</b>
 📅 {{ weekday_label or "—" }}
 {{ m.week_progress(planned_count, completed_count, week_finished) }}
-Сегодня по программе отдыхаем. Можно глянуть историю или начать новую неделю.
+{% if alternative_title %}Сегодня по плану отдых. Хочешь потренироваться — начну ближайший невыполненный день: <b>{{ alternative_label }} · {{ alternative_title }}</b>.
+{% else %}Сегодня по программе отдыхаем. Можно глянуть историю или начать новую неделю.
+{% endif %}

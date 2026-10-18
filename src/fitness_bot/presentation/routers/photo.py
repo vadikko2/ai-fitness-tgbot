@@ -9,7 +9,10 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.presentation.keyboards import back_to_menu_keyboard, coach_apply_submitted_keyboard
+from fitness_bot.presentation.keyboards import (
+    body_saved_keyboard,
+    coach_apply_submitted_keyboard,
+)
 from fitness_bot.presentation.routers.feedback import accept_feedback_image
 from fitness_bot.presentation.routers.progress_photo import send_angle_prompt
 from fitness_bot.service.models.commands.body import RecordProgressPhotoCommand
@@ -134,7 +137,10 @@ async def _record_progress_photo(
         return
     if result.complete:
         text = jinja_env.get_template("progress_photo_done.j2").render()
-        await message.answer(text, reply_markup=back_to_menu_keyboard())
+        await message.answer(
+            text,
+            reply_markup=body_saved_keyboard(back_callback="pp_menu", back_label="⬅️ К фото прогресса"),
+        )
         return
     assert result.next_angle is not None
     await send_angle_prompt(

@@ -36,6 +36,11 @@ from fitness_bot.service.handlers.commands.agent_json import (
     reply_from_payload,
     workout_document_schema_json,
 )
+from fitness_bot.service.handlers.commands.wellbeing_context import (
+    WELLBEING_ADAPT_UTTERANCE,
+    link_wellbeing_to_proposal,
+    load_wellbeing_context,
+)
 from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
 from fitness_bot.service.models.commands import program as cmds
 from fitness_bot.service.ports.language_model import LanguageModel
@@ -140,6 +145,23 @@ async def _load_catalog_ids(
     return records, {record.id for record in records}
 
 
+async def _library_card_for_edit(
+    repos: IUowRepositories,
+    pending: Proposal,
+    *,
+    user: User,
+) -> Program | None:
+    """A PROGRAM draft based on the owner's library card is saved back into that card."""
+    if pending.kind != ProposalKind.PROGRAM or pending.base_program_id is None:
+        return None
+    if pending.base_program_id == user.active_program_id:
+        return None
+    card = await repos.programs.get_by_id(pending.base_program_id)
+    if card is None or card.user_id != user.id or not card.is_library_card:
+        return None
+    return card
+
+
 class ChooseProgramTypeCommandHandler(
     cqrs.RequestHandler[cmds.ChooseProgramTypeCommand, cmds.ChooseProgramTypeCommandResult],
 ):
@@ -194,6 +216,7 @@ class ProposeProgramCommandHandler(
                 ),
                 ensure_ascii=False,
             )
+            wellbeing = await load_wellbeing_context(repos, user.id)
             payload: dict[str, Any] | None = None
             document: WorkoutDocument | None = None
             reply = ""
@@ -215,6 +238,7 @@ class ProposeProgramCommandHandler(
                             "catalog_json": catalog_json(records),
                             "schema_json": workout_document_schema_json(),
                             "validation_hint": validation_hint,
+                            **wellbeing.prompt_context(),
                         },
                     )
                 except AgentUnavailable:
@@ -255,6 +279,7 @@ class ProposeProgramCommandHandler(
                 pending.base_program_id = user.active_program_id
             user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field="program_edit")
             saved = await repos.proposals.save(pending)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
             user.pending_proposal_id = saved.id
             await repos.users.save(user)
             return cmds.ProposeProgramCommandResult(
@@ -309,6 +334,7 @@ class ProposeProgramChangeCommandHandler(
                     raise DomainError(f"day position={focus_day_position} not found in draft")
                 editor_document = WorkoutDocument(program_type=program_type, days=[focus_day])
 
+            wellbeing = await load_wellbeing_context(repos, user.id)
             payload: dict[str, Any] | None = None
             try:
                 payload = await complete_json(
@@ -322,6 +348,7 @@ class ProposeProgramChangeCommandHandler(
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
                         "focus_day_position": focus_day_position,
+                        **wellbeing.prompt_context(),
                     },
                 )
             except AgentUnavailable:
@@ -366,6 +393,7 @@ class ProposeProgramChangeCommandHandler(
                     base_program_id=user.active_program_id,
                 )
                 saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
             if coach_actor is not None:
                 coach_actor.expect_input(
                     ExpectedInput.COACH_EDIT_CLIENT,
@@ -518,6 +546,7 @@ class GenerateNextWeekCommandHandler(
                 "week_finished": progress.week_finished,
             }
 
+            wellbeing = await load_wellbeing_context(repos, user.id)
             payload: dict[str, Any] | None = None
             try:
                 payload = await complete_json(
@@ -538,6 +567,7 @@ class GenerateNextWeekCommandHandler(
                         "week_progress_json": json.dumps(week_progress_payload, ensure_ascii=False),
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
+                        **wellbeing.prompt_context(),
                     },
                 )
             except AgentUnavailable:
@@ -567,6 +597,7 @@ class GenerateNextWeekCommandHandler(
                 base_program_id=program.id,
             )
             saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
             user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field="program_edit")
             user.pending_proposal_id = saved.id
             await repos.users.save(user)
@@ -574,6 +605,91 @@ class GenerateNextWeekCommandHandler(
                 proposal_id=saved.id,
                 reply=reply,
                 document=document,
+                wellbeing_entry_ids=wellbeing.entry_ids,
+            )
+
+
+class AdaptWeekForWellbeingCommandHandler(
+    cqrs.RequestHandler[cmds.AdaptWeekForWellbeingCommand, cmds.AdaptWeekForWellbeingCommandResult],
+):
+    """Edit the active week against fresh wellbeing notes; approve via the usual program draft."""
+
+    def __init__(self, uow: IUow, language_model: LanguageModel, catalog: ExerciseCatalogReader) -> None:
+        self._uow = uow
+        self._language_model = language_model
+        self._catalog = catalog
+
+    async def handle(
+        self,
+        request: cmds.AdaptWeekForWellbeingCommand,
+    ) -> cmds.AdaptWeekForWellbeingCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            if user.active_program_id is None:
+                raise DomainError("active program is required to adapt the week")
+            program = await repos.programs.get_by_id(user.active_program_id)
+            if program is None:
+                raise DomainError("active program not found")
+            wellbeing = await load_wellbeing_context(repos, user.id, hard=True)
+            records, allowed = await _load_catalog_ids(
+                self._catalog,
+                training_place=user.training_place,
+            )
+            if not records:
+                raise DomainError("exercise catalog is empty")
+
+            payload: dict[str, Any] | None = None
+            try:
+                payload = await complete_json(
+                    self._language_model,
+                    prompt_name="workout_editor.md",
+                    prompt_context={
+                        "document_json": document_json(program.to_document()),
+                        "utterance": WELLBEING_ADAPT_UTTERANCE,
+                        "limitations": user.limitations or "",
+                        "training_place": user.training_place.value if user.training_place else "",
+                        "catalog_json": catalog_json(records),
+                        "schema_json": workout_document_schema_json(),
+                        "focus_day_position": None,
+                        **wellbeing.prompt_context(),
+                    },
+                )
+            except AgentUnavailable:
+                return cmds.AdaptWeekForWellbeingCommandResult(agent_unavailable=True)
+
+            try:
+                document_raw = payload.get("document")
+                if not isinstance(document_raw, dict):
+                    raise InvalidWorkoutDocument("response.document must be an object")
+                document = parse_workout_document(document_raw, default_program_type=program.program_type)
+                document = document.model_copy(update={"program_type": program.program_type})
+                document.assert_catalog_ids(allowed)
+                document.assert_schedule_complete()
+                reply = clip_reply(payload.get("reply"))
+            except (InvalidWorkoutDocument, ValueError, TypeError, KeyError) as exc:
+                logger.warning("adapt_week_for_wellbeing schema failed: %s", exc)
+                return cmds.AdaptWeekForWellbeingCommandResult(
+                    schema_failed=True,
+                    reply=reply_from_payload(payload),
+                )
+
+            proposal = Proposal.new_program_document(
+                user_id=user.id,
+                program_type=program.program_type,
+                document=document,
+                reply=reply,
+                base_program_id=program.id,
+            )
+            saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
+            user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field="program_edit")
+            user.pending_proposal_id = saved.id
+            await repos.users.save(user)
+            return cmds.AdaptWeekForWellbeingCommandResult(
+                proposal_id=saved.id,
+                reply=reply,
+                document=document,
+                wellbeing_entry_ids=wellbeing.entry_ids,
             )
 
 
@@ -642,11 +758,7 @@ class ApproveProposalCommandHandler(
                 session = Session.from_document(user_id=user.id, document=document)
                 saved_session = await repos.sessions.add(session)
                 await repos.proposals.save(pending)
-                from fitness_bot.service.handlers.commands.wellbeing_adapt import pop_wellbeing_adapt
-
-                wellbeing_ids = pop_wellbeing_adapt(pending.id)
-                if wellbeing_ids:
-                    await repos.wellbeing.mark_applied(wellbeing_ids)
+                await repos.wellbeing.mark_applied_for_proposal(pending.id)
                 user.active_session_id = saved_session.id
                 user.pending_proposal_id = None
                 user.clear_expectation()
@@ -670,6 +782,7 @@ class ApproveProposalCommandHandler(
                 session.apply_document(document)
                 await repos.sessions.save(session)
                 await repos.proposals.save(pending)
+                await repos.wellbeing.mark_applied_for_proposal(pending.id)
                 user.pending_proposal_id = None
                 if pending.kind == ProposalKind.COMPLETION_DEVIATION:
                     user.expect_input(ExpectedInput.COMPLETION_DEVIATION)
@@ -680,6 +793,22 @@ class ApproveProposalCommandHandler(
                     session_id=session.id,
                     proposal_id=pending.id,
                     document=document,
+                )
+
+            library_card = await _library_card_for_edit(repos, pending, user=user)
+            if library_card is not None:
+                library_card.replace_document(document)
+                await repos.programs.save(library_card)
+                await repos.proposals.save(pending)
+                await repos.wellbeing.mark_applied_for_proposal(pending.id)
+                user.pending_proposal_id = None
+                user.clear_expectation()
+                await repos.users.save(user)
+                return cmds.ApproveProposalCommandResult(
+                    proposal_id=pending.id,
+                    document=document,
+                    library_program_id=library_card.id,
+                    program_title=library_card.display_title(),
                 )
 
             now = datetime.now(UTC)
@@ -700,6 +829,7 @@ class ApproveProposalCommandHandler(
             )
             saved_program = await repos.programs.add(program)
             await repos.proposals.save(pending)
+            await repos.wellbeing.mark_applied_for_proposal(pending.id)
             await repos.proposals.attach_days_to_program(pending.id, saved_program.id)
             reloaded = await repos.programs.get_by_id(saved_program.id)
             if reloaded is not None and reloaded.days:

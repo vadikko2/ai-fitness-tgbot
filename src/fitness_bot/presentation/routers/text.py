@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
+from fitness_bot.domain.body.wellbeing import WELLBEING_FRESHNESS_WINDOW
 from fitness_bot.domain.enums import ExpectedInput, ProfileField, Supplement, WeightSource
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.flow_helpers import (
@@ -12,9 +13,16 @@ from fitness_bot.presentation.flow_helpers import (
     show_info_offer,
     show_next_onboarding_step,
 )
-from fitness_bot.presentation.keyboards import home_keyboard
+from fitness_bot.presentation.keyboards import body_saved_keyboard, wellbeing_saved_keyboard
 from fitness_bot.presentation.routers.body import apply_weight_reminder_time
 from fitness_bot.presentation.routers.feedback import handle_feedback_utterance
+from fitness_bot.presentation.routers.library import (
+    LIBRARY_EDIT_FIELD_PREFIX,
+    LIBRARY_TITLE_FIELD_PREFIX,
+    apply_library_title,
+    handle_library_edit_utterance,
+    library_field_program_id,
+)
 from fitness_bot.presentation.routers.program import (
     ask_proposal_slot_load,
     handle_proposal_utterance,
@@ -69,6 +77,8 @@ def voice_input_allowed(*, expected_input: ExpectedInput, expected_field: str | 
         return True
     if expected_input == ExpectedInput.PROFILE_FIELD and expected_field in _VOICE_FREE_TEXT_PROFILE_FIELDS:
         return True
+    if expected_input == ExpectedInput.PROFILE_FIELD and (expected_field or "").startswith(LIBRARY_TITLE_FIELD_PREFIX):
+        return True
     return False
 
 
@@ -110,17 +120,24 @@ async def handle_user_utterance(
                     source=WeightSource.MANUAL,
                 ),
             )
-            await message.answer("Вес сохранён.", reply_markup=home_keyboard())
+            await message.answer(
+                "Вес сохранён.",
+                reply_markup=body_saved_keyboard(back_callback="wt_menu", back_label="⬅️ К весу"),
+            )
             return
 
         if workflow.expected_input == ExpectedInput.WELLBEING:
-            await mediator.send(
+            recorded = await mediator.send(
                 RecordWellbeingCommand(
                     telegram_user_id=message.from_user.id,
                     text=text,
                 ),
             )
-            await message.answer("Самочувствие записано.", reply_markup=home_keyboard())
+            reply = jinja_env.get_template("wellbeing_saved.j2").render(
+                text=recorded.text,
+                freshness_hours=int(WELLBEING_FRESHNESS_WINDOW.total_seconds() // 3600),
+            )
+            await message.answer(reply, reply_markup=wellbeing_saved_keyboard())
             return
 
         if workflow.expected_input == ExpectedInput.MEASUREMENT_VALUE:
@@ -134,11 +151,26 @@ async def handle_user_utterance(
                     centimeters=text,
                 ),
             )
-            await message.answer("Обхват сохранён.", reply_markup=home_keyboard())
+            await message.answer(
+                "Обхват сохранён.",
+                reply_markup=body_saved_keyboard(back_callback="meas_menu", back_label="📏 Ещё обхват"),
+            )
             return
 
         if workflow.expected_input == ExpectedInput.PROFILE_FIELD:
             field_name = workflow.expected_field
+            library_program_id = library_field_program_id(field_name, LIBRARY_TITLE_FIELD_PREFIX)
+            if library_program_id is not None:
+                await apply_library_title(
+                    jinja_env=jinja_env,
+                    mediator=mediator,
+                    message=message,
+                    telegram_user_id=message.from_user.id,
+                    program_id=library_program_id,
+                    text=text,
+                )
+                return
+
             if field_name == "weight_reminder_time":
                 await apply_weight_reminder_time(
                     mediator=mediator,
@@ -151,7 +183,10 @@ async def handle_user_utterance(
                         expected_input=ExpectedInput.NONE,
                     ),
                 )
-                await message.answer("Время напоминания сохранено.", reply_markup=home_keyboard())
+                await message.answer(
+                    "Время напоминания сохранено.",
+                    reply_markup=body_saved_keyboard(back_callback="wt_remind", back_label="⬅️ К напоминаниям"),
+                )
                 return
 
             if field_name == "progress_photo_reminder_time":
@@ -166,7 +201,10 @@ async def handle_user_utterance(
                         expected_input=ExpectedInput.NONE,
                     ),
                 )
-                await message.answer("Время напоминания сохранено.", reply_markup=home_keyboard())
+                await message.answer(
+                    "Время напоминания сохранено.",
+                    reply_markup=body_saved_keyboard(back_callback="pp_remind", back_label="⬅️ К напоминаниям"),
+                )
                 return
 
             if field_name == "custom_measurement_name":
@@ -268,7 +306,16 @@ async def handle_user_utterance(
             return
 
         if workflow.expected_input == ExpectedInput.PROPOSAL_UTTERANCE:
-            if workflow.expected_field == "workout_edit":
+            library_program_id = library_field_program_id(workflow.expected_field, LIBRARY_EDIT_FIELD_PREFIX)
+            if library_program_id is not None:
+                await handle_library_edit_utterance(
+                    jinja_env=jinja_env,
+                    mediator=mediator,
+                    message=message,
+                    program_id=library_program_id,
+                    text=text,
+                )
+            elif workflow.expected_field == "workout_edit":
                 await handle_workout_edit_utterance(
                     jinja_env=jinja_env,
                     mediator=mediator,
@@ -480,10 +527,11 @@ async def handle_user_utterance(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="Применить сейчас",
+                            text="✨ Применить с адаптацией",
                             callback_data=f"lib_apply:{claimed.program_id}:adapt",
                         ),
                     ],
+                    [InlineKeyboardButton(text="📚 Открыть карточку", callback_data=f"lib_card:{claimed.program_id}")],
                     [InlineKeyboardButton(text="Позже в библиотеке", callback_data="library")],
                 ],
             )

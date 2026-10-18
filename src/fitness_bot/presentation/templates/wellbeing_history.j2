@@ -1,0 +1,10 @@
+<b>🙂 История самочувствия</b>
+{% if items %}
+{% for item in items %}
+• <b>{{ item.created_local.strftime('%d.%m %H:%M') }}</b> · {% if item.applied_on %}✅ учтено {{ item.applied_on.strftime('%d.%m') }}{% elif item.is_fresh %}⏳ ещё не учтено{% else %}не учтено (устарело){% endif %}
+
+{{ item.text|e }}
+{% endfor %}
+{% else %}
+Отметок пока нет. Нажми «✍️ Отметить самочувствие».
+{% endif %}

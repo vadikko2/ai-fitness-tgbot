@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,6 +95,17 @@ class Session(BaseModel):
         if self.status not in {SessionStatus.IN_PROGRESS, SessionStatus.PENDING_COMPLETION}:
             raise DomainError("only an open session can record slot actual")
         updated = self.slot_at(position).with_actual(actual)
+        self._replace_slot(updated)
+        return updated
+
+    def swap_slot_exercise(self, position: int, exercise_id: UUID, *, weight_kg: Decimal | None) -> ExerciseSlot:
+        """Replace the exercise of a not-yet-logged slot; sets, reps and rest stay as planned."""
+        if self.status != SessionStatus.IN_PROGRESS:
+            raise DomainError("exercise can be swapped only while session is in_progress")
+        slot = self.slot_at(position)
+        if slot.actual is not None:
+            raise DomainError("exercise with logged sets cannot be swapped")
+        updated = slot.with_exercise(exercise_id).model_copy(update={"weight_kg": weight_kg, "technique_note": ""})
         self._replace_slot(updated)
         return updated
 

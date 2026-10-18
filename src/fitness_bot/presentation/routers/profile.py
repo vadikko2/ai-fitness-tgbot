@@ -15,6 +15,7 @@ from fitness_bot.domain.enums import (
     Supplement,
     TrainingPlace,
 )
+from fitness_bot.domain.users.user import local_calendar_date
 from fitness_bot.presentation.flow_helpers import (
     begin_profile_edit,
     clear_profile_edit,
@@ -35,6 +36,8 @@ from fitness_bot.presentation.keyboards import (
     nutrition_constraints_none_keyboard,
     pharma_keyboard,
     profile_edit_keyboard,
+    profile_hub_keyboard,
+    profile_reminders_keyboard,
     session_minutes_keyboard,
     sex_keyboard,
     supplements_keyboard,
@@ -42,11 +45,31 @@ from fitness_bot.presentation.keyboards import (
     weekdays_keyboard,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand, SetGoalCommand, UpdateProfileCommand
+from fitness_bot.service.models.queries.body import GetMeasurementHistoryQuery, GetWeightHistoryQuery
+from fitness_bot.service.models.queries.training_reminder import GetTrainingReminderSettingsQuery
 from fitness_bot.service.models.queries.users import GetHomeQuery, GetProfileQuery
 
 # Temporary selected weekdays while user toggles before "Готово".
 _WEEKDAY_DRAFT: dict[int, set[int]] = {}
 _SUPPLEMENT_DRAFT: dict[int, set[str]] = {}
+
+
+async def profile_hub_text(*, jinja_env: Environment, mediator: RequestMediator, telegram_user_id: int) -> str:
+    profile = await mediator.send(GetProfileQuery(telegram_user_id=telegram_user_id))
+    weights = await mediator.send(GetWeightHistoryQuery(telegram_user_id=telegram_user_id, limit=1))
+    measurements = await mediator.send(GetMeasurementHistoryQuery(telegram_user_id=telegram_user_id, limit=1))
+    last_weight = weights.items[0] if weights.items else None
+    last_measurement = measurements.entries[0] if measurements.entries else None
+    return jinja_env.get_template("profile_hub.j2").render(
+        profile_text=profile_text(jinja_env=jinja_env, profile=profile),
+        last_weight_kg=last_weight.kilograms if last_weight else None,
+        last_weight_on=last_weight.measured_on if last_weight else None,
+        last_measurement_on=(
+            local_calendar_date(now=last_measurement.measured_at, timezone_offset=profile.timezone_offset)
+            if last_measurement
+            else None
+        ),
+    )
 
 
 def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) -> Router:
@@ -312,9 +335,32 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
     async def handle_profile(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         clear_profile_edit(callback.from_user.id)
+        await mediator.send(
+            ExpectInputCommand(telegram_user_id=callback.from_user.id, expected_input=ExpectedInput.NONE),
+        )
+        text = await profile_hub_text(jinja_env=jinja_env, mediator=mediator, telegram_user_id=callback.from_user.id)
+        await _answer(callback, text, reply_markup=profile_hub_keyboard())
+
+    @router.callback_query(F.data == "prof_form")
+    async def handle_prof_form(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        clear_profile_edit(callback.from_user.id)
         profile = await mediator.send(GetProfileQuery(telegram_user_id=callback.from_user.id))
         text = profile_text(jinja_env=jinja_env, profile=profile)
         await _answer(callback, text, reply_markup=profile_edit_keyboard())
+
+    @router.callback_query(F.data == "prof_remind")
+    async def handle_prof_remind(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        settings = await mediator.send(GetTrainingReminderSettingsQuery(telegram_user_id=callback.from_user.id))
+        await _answer(
+            callback,
+            jinja_env.get_template("training_reminder_settings.j2").render(),
+            reply_markup=profile_reminders_keyboard(
+                evening_enabled=settings.evening_enabled,
+                morning_enabled=settings.morning_enabled,
+            ),
+        )
 
     @router.callback_query(F.data.startswith("prof_pharma:"))
     async def handle_prof_pharma(callback: CallbackQuery) -> None:

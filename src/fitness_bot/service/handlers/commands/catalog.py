@@ -1,18 +1,34 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
+from uuid import UUID
 
 import cqrs
 
-from fitness_bot.domain.enums import ExpectedInput, ProgramStatus
-from fitness_bot.domain.errors import DomainError
+from fitness_bot.domain.enums import ExpectedInput, ProgramStatus, ProposalKind
+from fitness_bot.domain.errors import AgentUnavailable, DomainError, InvalidWorkoutDocument
 from fitness_bot.domain.users.user import User
-from fitness_bot.domain.workout.program import Program
+from fitness_bot.domain.workout.program import (
+    Program,
+    default_library_title,
+    normalize_library_title,
+    unique_library_title,
+)
 from fitness_bot.domain.workout.proposal import Proposal
 from fitness_bot.service.authz import require_coach_of
-from fitness_bot.service.handlers.commands.agent_json import clip_reply, complete_json, parse_workout_document
+from fitness_bot.service.handlers.commands.agent_json import (
+    catalog_json,
+    clip_reply,
+    complete_json,
+    document_json,
+    parse_workout_document,
+    reply_from_payload,
+    workout_document_schema_json,
+)
 from fitness_bot.service.handlers.commands.program import _replace_pending, build_profile_payload
-from fitness_bot.service.interfaces.uow import IUow
+from fitness_bot.service.handlers.commands.wellbeing_context import link_wellbeing_to_proposal, load_wellbeing_context
+from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
 from fitness_bot.service.models.commands import catalog as cmds
 from fitness_bot.service.ports.language_model import LanguageModel
 from fitness_bot.service.ports.video_search import ExerciseCatalogReader
@@ -22,6 +38,23 @@ def _require_user(user: User | None) -> User:
     if user is None:
         raise DomainError("user not found")
     return user
+
+
+logger = logging.getLogger(__name__)
+
+_LIBRARY_TITLE_SCAN_LIMIT = 200
+
+
+async def _require_library_card(repos: IUowRepositories, user: User, program_id: UUID) -> Program:
+    card = await repos.programs.get_by_id(program_id)
+    if card is None or card.user_id != user.id or not card.is_library_card:
+        raise DomainError("library program not found")
+    return card
+
+
+async def _taken_library_titles(repos: IUowRepositories, user: User, *, exclude: UUID | None = None) -> set[str]:
+    cards = await repos.programs.list_catalog_for_user(user.id, limit=_LIBRARY_TITLE_SCAN_LIMIT)
+    return {card.display_title() for card in cards if card.id != exclude}
 
 
 def _normalize_code(raw: str) -> str:
@@ -40,14 +73,153 @@ class SaveProgramDraftCommandHandler(
     async def handle(self, request: cmds.SaveProgramDraftCommand) -> cmds.SaveProgramDraftCommandResult:
         async with self._uow.transaction() as repos:
             user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            if request.title and request.title.strip():
+                title = normalize_library_title(request.title)
+            else:
+                title = unique_library_title(
+                    default_library_title(request.document),
+                    await _taken_library_titles(repos, user),
+                )
             draft = Program.draft_from_document(
                 user_id=user.id,
                 document=request.document,
-                title=request.title,
+                title=title,
                 author_label=request.author_label or user.public_label(),
             )
             saved = await repos.programs.add(draft)
-            return cmds.SaveProgramDraftCommandResult(program_id=saved.id, status=saved.status)
+            return cmds.SaveProgramDraftCommandResult(
+                program_id=saved.id,
+                status=saved.status,
+                title=saved.display_title(),
+            )
+
+
+class RenameLibraryProgramCommandHandler(
+    cqrs.RequestHandler[cmds.RenameLibraryProgramCommand, cmds.RenameLibraryProgramCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: cmds.RenameLibraryProgramCommand) -> cmds.RenameLibraryProgramCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            card = await _require_library_card(repos, user, request.program_id)
+            card.rename(request.title)
+            saved = await repos.programs.save(card)
+            user.clear_expectation()
+            await repos.users.save(user)
+            return cmds.RenameLibraryProgramCommandResult(program_id=saved.id, title=saved.display_title())
+
+
+class DeleteLibraryProgramCommandHandler(
+    cqrs.RequestHandler[cmds.DeleteLibraryProgramCommand, cmds.DeleteLibraryProgramCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: cmds.DeleteLibraryProgramCommand) -> cmds.DeleteLibraryProgramCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            card = await _require_library_card(repos, user, request.program_id)
+            title = card.display_title()
+            pending = await repos.proposals.get_pending_for_user(user.id)
+            if pending is not None and pending.base_program_id == card.id:
+                pending.discard()
+                await repos.proposals.save(pending)
+                user.pending_proposal_id = None
+                user.clear_expectation()
+                await repos.users.save(user)
+            card.remove_from_library()
+            await repos.programs.save(card)
+            return cmds.DeleteLibraryProgramCommandResult(program_id=card.id, title=title)
+
+
+class ProposeLibraryProgramEditCommandHandler(
+    cqrs.RequestHandler[cmds.ProposeLibraryProgramEditCommand, cmds.ProposeLibraryProgramEditCommandResult],
+):
+    """Draft an edit of a library card; approving it saves into the card, not the active plan."""
+
+    def __init__(self, uow: IUow, language_model: LanguageModel, catalog: ExerciseCatalogReader) -> None:
+        self._uow = uow
+        self._language_model = language_model
+        self._catalog = catalog
+
+    async def handle(
+        self,
+        request: cmds.ProposeLibraryProgramEditCommand,
+    ) -> cmds.ProposeLibraryProgramEditCommandResult:
+        from fitness_bot.service.handlers.commands.program import _load_catalog_ids
+
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            card = await _require_library_card(repos, user, request.program_id)
+            pending = await repos.proposals.get_pending_for_user(user.id)
+            continuing = (
+                pending is not None
+                and pending.kind == ProposalKind.PROGRAM
+                and pending.base_program_id == card.id
+                and pending.document is not None
+            )
+            current = pending.document if continuing and pending is not None else card.to_document()
+            assert current is not None
+            records, allowed = await _load_catalog_ids(self._catalog, training_place=user.training_place)
+
+            payload = None
+            try:
+                payload = await complete_json(
+                    self._language_model,
+                    prompt_name="workout_editor.md",
+                    prompt_context={
+                        "document_json": document_json(current),
+                        "utterance": request.utterance,
+                        "limitations": user.limitations or "",
+                        "training_place": user.training_place.value if user.training_place else "",
+                        "catalog_json": catalog_json(records),
+                        "schema_json": workout_document_schema_json(),
+                        "focus_day_position": None,
+                    },
+                )
+            except AgentUnavailable:
+                return cmds.ProposeLibraryProgramEditCommandResult(program_id=card.id, agent_unavailable=True)
+
+            try:
+                document_raw = payload.get("document")
+                if not isinstance(document_raw, dict):
+                    raise InvalidWorkoutDocument("response.document must be an object")
+                document = parse_workout_document(document_raw, default_program_type=current.program_type)
+                document = document.model_copy(update={"program_type": current.program_type})
+                document.assert_catalog_ids(allowed)
+                document.assert_schedule_complete()
+                reply = clip_reply(payload.get("reply"))
+            except (InvalidWorkoutDocument, ValueError, TypeError, KeyError) as exc:
+                logger.warning("library edit schema failed: %s", exc)
+                return cmds.ProposeLibraryProgramEditCommandResult(
+                    program_id=card.id,
+                    schema_failed=True,
+                    reply=reply_from_payload(payload),
+                )
+
+            if continuing and pending is not None:
+                pending.replace_document(document, reply=reply)
+                saved = await repos.proposals.save(pending)
+            else:
+                proposal = Proposal.new_program_document(
+                    user_id=user.id,
+                    program_type=document.program_type,
+                    document=document,
+                    reply=reply,
+                    base_program_id=card.id,
+                )
+                saved = await _replace_pending(repos, user, proposal)
+            user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field=f"library_edit:{card.id}")
+            user.pending_proposal_id = saved.id
+            await repos.users.save(user)
+            return cmds.ProposeLibraryProgramEditCommandResult(
+                proposal_id=saved.id,
+                program_id=card.id,
+                reply=reply,
+                document=document,
+            )
 
 
 class PublishProgramCommandHandler(
@@ -185,6 +357,7 @@ class ApplyCatalogProgramCommandHandler(
                 self._catalog,
                 training_place=user.training_place,
             )
+            wellbeing = await load_wellbeing_context(repos, user.id)
             payload = await complete_json(
                 self._language_model,
                 prompt_name="workout_editor.md",
@@ -197,6 +370,7 @@ class ApplyCatalogProgramCommandHandler(
                     "schema_json": workout_document_schema_json(),
                     "focus_day_position": None,
                     "profile_json": json.dumps(profile, ensure_ascii=False),
+                    **wellbeing.prompt_context(),
                 },
             )
             adapted = parse_workout_document(payload, default_program_type=document.program_type)
@@ -210,6 +384,7 @@ class ApplyCatalogProgramCommandHandler(
                 base_program_id=user.active_program_id,
             )
             saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
             user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field="program_edit")
             user.pending_proposal_id = saved.id
             await repos.users.save(user)

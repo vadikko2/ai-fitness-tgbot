@@ -1,0 +1,9 @@
+{{ profile_text }}
+
+<b>📊 Замеры</b>
+• Последний вес: {% if last_weight_kg %}<b>{{ last_weight_kg }} кг</b>{% if last_weight_on %} · {{ last_weight_on.strftime('%d.%m.%Y') }}{% endif %}{% else %}ещё не записан{% endif %}
+
+• Обхваты: {% if last_measurement_on %}последний замер {{ last_measurement_on.strftime('%d.%m.%Y') }}{% else %}ещё не снимали{% endif %}
+
+
+Здесь же вес, рост, обхваты, фото прогресса и напоминания.

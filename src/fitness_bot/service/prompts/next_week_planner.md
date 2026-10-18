@@ -18,6 +18,8 @@ Week progress:
 Catalog:
 {{ catalog_json }}
 
+{% include "_wellbeing_block.md" %}
+
 JSON Schema for WorkoutDocument (follow field types and nesting):
 {{ schema_json }}
 

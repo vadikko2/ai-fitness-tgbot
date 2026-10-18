@@ -9,6 +9,7 @@ from fitness_bot.domain.body.reminder import ProgressPhotoReminder, WeightRemind
 from fitness_bot.domain.enums import ExpectedInput, ProfileField
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User
+from fitness_bot.domain.workout.training_reminder import TrainingReminderPrefs
 from fitness_bot.service.interfaces.uow import IUow
 from fitness_bot.service.models.commands import users as cmds
 
@@ -38,6 +39,9 @@ class EnsureUserCommandHandler(cqrs.RequestHandler[cmds.EnsureUserCommand, cmds.
                     await repos.progress_photo_reminders.save(
                         ProgressPhotoReminder.default_for_user(user_id=user.id),
                     )
+                existing_training = await repos.training_reminders.get(user.id)
+                if existing_training is None:
+                    await repos.training_reminders.save(TrainingReminderPrefs.default_for_user(user_id=user.id))
             return cmds.EnsureUserCommandResult(user_id=user.id, created=created)
 
 

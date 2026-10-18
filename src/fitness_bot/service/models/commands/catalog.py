@@ -17,6 +17,43 @@ class SaveProgramDraftCommand(Command):
 class SaveProgramDraftCommandResult(CommandResult):
     program_id: UUID
     status: ProgramStatus
+    title: str = ""
+
+
+class RenameLibraryProgramCommand(Command):
+    telegram_user_id: int
+    program_id: UUID
+    title: str
+
+
+class RenameLibraryProgramCommandResult(CommandResult):
+    program_id: UUID
+    title: str
+
+
+class DeleteLibraryProgramCommand(Command):
+    telegram_user_id: int
+    program_id: UUID
+
+
+class DeleteLibraryProgramCommandResult(CommandResult):
+    program_id: UUID
+    title: str
+
+
+class ProposeLibraryProgramEditCommand(Command):
+    telegram_user_id: int
+    program_id: UUID
+    utterance: str
+
+
+class ProposeLibraryProgramEditCommandResult(CommandResult):
+    proposal_id: UUID | None = None
+    program_id: UUID
+    agent_unavailable: bool = False
+    schema_failed: bool = False
+    reply: str = ""
+    document: WorkoutDocument | None = None
 
 
 class PublishProgramCommand(Command):

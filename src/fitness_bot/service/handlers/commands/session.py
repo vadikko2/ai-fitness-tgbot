@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID
 
 import cqrs
 
+from fitness_bot.domain.body.wellbeing import fresh_unapplied
 from fitness_bot.domain.enums import ExpectedInput, ProposalKind, SessionStatus
 from fitness_bot.domain.errors import AgentUnavailable, DomainError, InvalidWorkoutDocument
 from fitness_bot.domain.users.user import User, local_calendar_date
 from fitness_bot.domain.workout.document import SlotActual, WorkoutDocument
+from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.proposal import Proposal
 from fitness_bot.domain.workout.session import Session
 from fitness_bot.domain.workout.technique_video import MAX_TECHNIQUE_VIDEO_BYTES, TechniqueVideo
+from fitness_bot.domain.workout.week_progress import nearest_open_training_day, training_week_progress
 from fitness_bot.service.handlers.commands.agent_json import (
     catalog_json,
     clip_reply,
@@ -23,7 +28,12 @@ from fitness_bot.service.handlers.commands.agent_json import (
     workout_document_schema_json,
 )
 from fitness_bot.service.handlers.commands.program import _load_catalog_ids, _replace_pending
-from fitness_bot.service.interfaces.uow import IUow
+from fitness_bot.service.handlers.commands.wellbeing_context import (
+    WellbeingContext,
+    link_wellbeing_to_proposal,
+    load_wellbeing_context,
+)
+from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
 from fitness_bot.service.models.commands import session as cmds
 from fitness_bot.service.ports.language_model import LanguageModel
 from fitness_bot.service.ports.object_storage import ObjectStorage
@@ -54,6 +64,134 @@ def _completed_on_local_day(
     return matched
 
 
+def _completed_today_for_day(
+    history: list[Session],
+    *,
+    user: User,
+    program: Program,
+    local_day,
+    weekday: int,
+) -> list[Session]:
+    """Sessions of this program day finished today (since the program was activated)."""
+    matched = _completed_on_local_day(history, local_day=local_day, timezone_offset=user.timezone_offset)
+    matched = [session for session in matched if session.day.weekday in (None, weekday)]
+    if program.activated_at is None:
+        return matched
+    activated_at = program.activated_at
+    if activated_at.tzinfo is None:
+        activated_at = activated_at.replace(tzinfo=UTC)
+    return [
+        session
+        for session in matched
+        if session.completed_at is not None
+        and (
+            session.completed_at
+            if session.completed_at.tzinfo is not None
+            else session.completed_at.replace(tzinfo=UTC)
+        )
+        >= activated_at
+    ]
+
+
+class StartTodayWorkoutCommandHandler(
+    cqrs.RequestHandler[cmds.StartTodayWorkoutCommand, cmds.StartTodayWorkoutCommandResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: cmds.StartTodayWorkoutCommand) -> cmds.StartTodayWorkoutCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            now = datetime.now(UTC)
+            today = local_calendar_date(now=now, timezone_offset=user.timezone_offset)
+            today_weekday = today.isoweekday()
+            fresh = fresh_unapplied(await repos.wellbeing.list_unapplied(user.id, limit=1), now=now)
+            has_unapplied = bool(fresh)
+            wellbeing_note = fresh[0].text if fresh else None
+
+            if user.active_session_id is not None:
+                existing = await repos.sessions.get_by_id(user.active_session_id)
+                if existing is not None and existing.is_open:
+                    return cmds.StartTodayWorkoutCommandResult(
+                        outcome="resumed",
+                        session_id=existing.id,
+                        session_status=existing.status,
+                        document=existing.to_document(),
+                        weekday=existing.day.weekday,
+                        has_unapplied_wellbeing=has_unapplied,
+                        wellbeing_note=wellbeing_note,
+                    )
+
+            program = await repos.programs.get_by_id(user.active_program_id) if user.active_program_id else None
+            if program is None:
+                return cmds.StartTodayWorkoutCommandResult(outcome="no_program", weekday=today_weekday)
+
+            history = await repos.sessions.list_completed_for_user(user.id, limit=50)
+            progress = training_week_progress(program, history, timezone_offset=user.timezone_offset, now=now)
+            progress_fields = {
+                "week_finished": progress.week_finished,
+                "planned_count": len(progress.planned_weekdays),
+                "completed_count": len(progress.completed_weekdays),
+                "has_unapplied_wellbeing": has_unapplied,
+                "wellbeing_note": wellbeing_note,
+            }
+            weekday = request.weekday or today_weekday
+            template = next((day for day in program.days if day.weekday == weekday), None)
+            if template is None:
+                alternative = nearest_open_training_day(
+                    program,
+                    progress.completed_weekdays,
+                    today_weekday=today_weekday,
+                )
+                return cmds.StartTodayWorkoutCommandResult(
+                    outcome="rest",
+                    weekday=today_weekday,
+                    alternative_weekday=alternative.weekday if alternative else None,
+                    alternative_title=alternative.title if alternative else None,
+                    **progress_fields,
+                )
+
+            if _completed_today_for_day(history, user=user, program=program, local_day=today, weekday=weekday):
+                alternative = nearest_open_training_day(
+                    program,
+                    progress.completed_weekdays,
+                    today_weekday=today_weekday,
+                    exclude_weekdays=[weekday],
+                )
+                return cmds.StartTodayWorkoutCommandResult(
+                    outcome="already_done",
+                    weekday=weekday,
+                    alternative_weekday=alternative.weekday if alternative else None,
+                    alternative_title=alternative.title if alternative else None,
+                    **progress_fields,
+                )
+
+            pending = await repos.proposals.get_pending_for_user(user.id)
+            if pending is not None and pending.kind == ProposalKind.NEXT_SESSION:
+                pending.discard()
+                await repos.proposals.save(pending)
+                user.pending_proposal_id = None
+
+            session = Session.from_template_day(
+                user_id=user.id,
+                program_type=program.program_type,
+                day=template,
+                now=now,
+            )
+            saved = await repos.sessions.add(session)
+            user.active_session_id = saved.id
+            user.clear_expectation()
+            await repos.users.save(user)
+            return cmds.StartTodayWorkoutCommandResult(
+                outcome="started",
+                session_id=saved.id,
+                session_status=saved.status,
+                document=saved.to_document(),
+                weekday=weekday,
+                **progress_fields,
+            )
+
+
 class StartSessionFromTemplateCommandHandler(
     cqrs.RequestHandler[cmds.StartSessionFromTemplateCommand, cmds.StartSessionFromTemplateCommandResult],
 ):
@@ -78,32 +216,19 @@ class StartSessionFromTemplateCommandHandler(
                 raise DomainError("active program not found")
 
             today = local_calendar_date(now=datetime.now(UTC), timezone_offset=user.timezone_offset)
-            weekday = today.isoweekday()
+            weekday = request.weekday or today.isoweekday()
             template = next((day for day in program.days if day.weekday == weekday), None)
             if template is None:
                 raise DomainError("today is not a training day in the active program")
 
             history = await repos.sessions.list_completed_for_user(user.id, limit=50)
-            completed_today = _completed_on_local_day(
+            completed_today = _completed_today_for_day(
                 history,
+                user=user,
+                program=program,
                 local_day=today,
-                timezone_offset=user.timezone_offset,
+                weekday=weekday,
             )
-            if program.activated_at is not None:
-                activated_at = program.activated_at
-                if activated_at.tzinfo is None:
-                    activated_at = activated_at.replace(tzinfo=UTC)
-                completed_today = [
-                    session
-                    for session in completed_today
-                    if session.completed_at is not None
-                    and (
-                        session.completed_at
-                        if session.completed_at.tzinfo is not None
-                        else session.completed_at.replace(tzinfo=UTC)
-                    )
-                    >= activated_at
-                ]
             if completed_today and not request.overwrite_completed:
                 return cmds.StartSessionFromTemplateCommandResult(needs_repeat_confirmation=True)
 
@@ -133,6 +258,117 @@ class StartSessionFromTemplateCommandHandler(
             return cmds.StartSessionFromTemplateCommandResult(
                 session_id=saved.id,
                 document=saved.to_document(),
+            )
+
+
+def _history_weight(history: list[Session], exercise_id: UUID) -> tuple[bool, Decimal | None]:
+    """(found, weight) of the latest logged set of this exercise; newest sessions first."""
+    for past in history:
+        for slot in past.day.slots:
+            if slot.exercise_id == exercise_id and slot.actual is not None:
+                return True, slot.actual.weight_kg
+    return False, None
+
+
+async def _open_in_progress_session(repos: IUowRepositories, user: User) -> Session:
+    session = await repos.sessions.get_by_id(user.active_session_id) if user.active_session_id else None
+    if session is None or session.status != SessionStatus.IN_PROGRESS:
+        raise DomainError("exercise can be swapped only while session is in_progress")
+    return session
+
+
+class SwapSessionSlotExerciseCommandHandler(
+    cqrs.RequestHandler[cmds.SwapSessionSlotExerciseCommand, cmds.SwapSessionSlotExerciseCommandResult],
+):
+    def __init__(self, uow: IUow, catalog: ExerciseCatalogReader) -> None:
+        self._uow = uow
+        self._catalog = catalog
+
+    async def handle(
+        self,
+        request: cmds.SwapSessionSlotExerciseCommand,
+    ) -> cmds.SwapSessionSlotExerciseCommandResult:
+        records = await self._catalog.list_exercises()
+        if not any(record.id == request.exercise_id for record in records):
+            raise DomainError("exercise not found in catalog")
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            session = await _open_in_progress_session(repos, user)
+            previous = session.slot_at(request.slot_position).exercise_id
+
+            program = await repos.programs.get_by_id(user.active_program_id) if user.active_program_id else None
+            template_day = program.template_day_for(session.day) if program is not None else None
+            template_slot = (
+                next((slot for slot in template_day.slots if slot.position == request.slot_position), None)
+                if template_day is not None
+                else None
+            )
+            matches_program = template_slot is not None and template_slot.exercise_id == request.exercise_id
+            if matches_program:
+                assert template_slot is not None
+                weight_source, weight_kg = "program", template_slot.weight_kg
+            else:
+                history = await repos.sessions.list_completed_for_user(user.id, limit=50)
+                found, weight_kg = _history_weight(history, request.exercise_id)
+                weight_source = "history" if found else "none"
+
+            slot = session.swap_slot_exercise(request.slot_position, request.exercise_id, weight_kg=weight_kg)
+            await repos.sessions.save(session)
+
+            pending = await repos.proposals.get_pending_for_user(user.id)
+            if pending is not None and pending.base_session_id == session.id:
+                pending.discard()
+                await repos.proposals.save(pending)
+                user.pending_proposal_id = None
+            user.clear_expectation()
+            await repos.users.save(user)
+            return cmds.SwapSessionSlotExerciseCommandResult(
+                session_id=session.id,
+                document=session.to_document(),
+                slot=slot,
+                previous_exercise_id=previous,
+                weight_source=weight_source,
+                matches_program=matches_program,
+                can_replace_in_program=template_slot is not None and not matches_program,
+            )
+
+
+class ReplaceProgramSlotFromSessionCommandHandler(
+    cqrs.RequestHandler[
+        cmds.ReplaceProgramSlotFromSessionCommand,
+        cmds.ReplaceProgramSlotFromSessionCommandResult,
+    ],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(
+        self,
+        request: cmds.ReplaceProgramSlotFromSessionCommand,
+    ) -> cmds.ReplaceProgramSlotFromSessionCommandResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            session = await repos.sessions.get_by_id(user.active_session_id) if user.active_session_id else None
+            if session is None or not session.is_open:
+                raise DomainError("open session is required")
+            slot = session.slot_at(request.slot_position)
+            if slot.exercise_id is None:
+                raise DomainError("slot has no catalog exercise")
+            program = await repos.programs.get_by_id(user.active_program_id) if user.active_program_id else None
+            template_day = program.template_day_for(session.day) if program is not None else None
+            if program is None or template_day is None:
+                raise DomainError("this workout is not a day of the active program")
+            program.replace_slot_exercise(
+                day_position=template_day.position,
+                slot_position=request.slot_position,
+                exercise_id=slot.exercise_id,
+                weight_kg=slot.weight_kg,
+            )
+            await repos.programs.save(program)
+            return cmds.ReplaceProgramSlotFromSessionCommandResult(
+                program_id=program.id,
+                day_title=template_day.title,
+                exercise_id=slot.exercise_id,
             )
 
 
@@ -170,6 +406,7 @@ class ProposeWorkoutChangeCommandHandler(
                 self._catalog,
                 training_place=user.training_place,
             )
+            wellbeing = await load_wellbeing_context(repos, user.id, hard=request.adapt_for_wellbeing)
             payload = None
             try:
                 payload = await complete_json(
@@ -183,6 +420,7 @@ class ProposeWorkoutChangeCommandHandler(
                         "catalog_json": catalog_json(records),
                         "schema_json": workout_document_schema_json(),
                         "focus_day_position": current.days[0].position if current.days else 1,
+                        **wellbeing.prompt_context(),
                     },
                 )
             except AgentUnavailable:
@@ -219,6 +457,7 @@ class ProposeWorkoutChangeCommandHandler(
                     reply=reply,
                 )
                 saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
 
             user.expect_input(ExpectedInput.PROPOSAL_UTTERANCE, expected_field="workout_edit")
             user.pending_proposal_id = saved.id
@@ -227,6 +466,7 @@ class ProposeWorkoutChangeCommandHandler(
                 proposal_id=saved.id,
                 reply=reply,
                 document=document,
+                wellbeing_entry_ids=wellbeing.entry_ids,
             )
 
 
@@ -598,10 +838,6 @@ class GenerateNextSessionCommandHandler(
     async def handle(self, request: cmds.GenerateNextSessionCommand) -> cmds.GenerateNextSessionCommandResult:
         async with self._uow.transaction() as repos:
             user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
-            if user.active_session_id is not None:
-                existing = await repos.sessions.get_by_id(user.active_session_id)
-                if existing is not None and existing.is_open:
-                    raise DomainError("an open session already exists")
             if user.active_program_id is None:
                 raise DomainError("active program is required to generate a session")
             if user.goal is None:
@@ -611,10 +847,21 @@ class GenerateNextSessionCommandHandler(
                 raise DomainError("active program not found")
 
             today = local_calendar_date(now=datetime.now(UTC), timezone_offset=user.timezone_offset)
-            weekday = today.isoweekday()
+            weekday = request.target_weekday if request.target_weekday is not None else today.isoweekday()
+            if weekday < 1 or weekday > 7:
+                raise DomainError("weekday must be between 1 and 7")
+            open_session = None
+            if user.active_session_id is not None:
+                existing = await repos.sessions.get_by_id(user.active_session_id)
+                if existing is not None and existing.is_open:
+                    open_session = existing
+            # Drafting another day must not start a session. Block only a collision
+            # with the workout already open, or the historical "today" call.
+            if open_session is not None and (request.target_weekday is None or open_session.day.weekday == weekday):
+                raise DomainError("an open session already exists")
             template = next((day for day in program.days if day.weekday == weekday), None)
             if template is None:
-                raise DomainError("today is not a training day in the active program")
+                raise DomainError("that weekday is not a training day in the active program")
 
             weight = await repos.weights.latest_for_user(user.id)
             history = await repos.sessions.list_completed_for_user(user.id, limit=10)
@@ -641,24 +888,11 @@ class GenerateNextSessionCommandHandler(
                 for session in history
             ]
 
-            wellbeing_entry_ids: list = []
-            wellbeing_json = ""
-            if request.adapt_for_wellbeing:
-                entries = await repos.wellbeing.list_unapplied(user.id, limit=20)
-                if not entries:
-                    raise DomainError("no unapplied wellbeing entries")
-                wellbeing_entry_ids = [entry.id for entry in entries]
-                wellbeing_json = json.dumps(
-                    [
-                        {
-                            "id": str(entry.id),
-                            "text": entry.text,
-                            "created_at": entry.created_at.isoformat(),
-                        }
-                        for entry in entries
-                    ],
-                    ensure_ascii=False,
-                )
+            wellbeing: WellbeingContext = await load_wellbeing_context(
+                repos,
+                user.id,
+                hard=request.adapt_for_wellbeing,
+            )
 
             try:
                 payload = await complete_json(
@@ -677,7 +911,7 @@ class GenerateNextSessionCommandHandler(
                         ),
                         "goal": user.goal.value,
                         "catalog_json": catalog_json(records),
-                        "wellbeing_json": wellbeing_json,
+                        **wellbeing.prompt_context(),
                     },
                 )
             except AgentUnavailable:
@@ -721,18 +955,15 @@ class GenerateNextSessionCommandHandler(
                 reply=reply,
             )
             saved = await _replace_pending(repos, user, proposal)
+            await link_wellbeing_to_proposal(repos, wellbeing, saved.id)
             user.clear_expectation()
             user.pending_proposal_id = saved.id
             await repos.users.save(user)
-            if wellbeing_entry_ids:
-                from fitness_bot.service.handlers.commands.wellbeing_adapt import remember_wellbeing_adapt
-
-                remember_wellbeing_adapt(proposal_id=saved.id, entry_ids=wellbeing_entry_ids)
             return cmds.GenerateNextSessionCommandResult(
                 proposal_id=saved.id,
                 reply=reply,
                 document=document,
-                wellbeing_entry_ids=wellbeing_entry_ids,
+                wellbeing_entry_ids=wellbeing.entry_ids,
             )
 
 

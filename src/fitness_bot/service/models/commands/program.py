@@ -92,6 +92,7 @@ class ApproveProposalCommandResult(CommandResult):
     client_chat_id: int | None = None
     program_title: str | None = None
     subject_user_id: UUID | None = None
+    library_program_id: UUID | None = None
 
 
 class DiscardProposalCommand(Command):
@@ -114,3 +115,17 @@ class GenerateNextWeekCommandResult(CommandResult):
     schema_failed: bool = False
     reply: str = ""
     document: WorkoutDocument | None = None
+    wellbeing_entry_ids: list[UUID] = []
+
+
+class AdaptWeekForWellbeingCommand(Command):
+    telegram_user_id: int
+
+
+class AdaptWeekForWellbeingCommandResult(CommandResult):
+    proposal_id: UUID | None = None
+    agent_unavailable: bool = False
+    schema_failed: bool = False
+    reply: str = ""
+    document: WorkoutDocument | None = None
+    wellbeing_entry_ids: list[UUID] = []

@@ -28,11 +28,7 @@ If limitations imply rehab / pregnancy / older adult / child: prefer «ЛФК:»
 - `outdoor` → no gym; bodyweight / portable only; exercises with `outdoor` in `places`.
 - `gym` / `mixed` → match available place and gear; prefer multi-place tags for `mixed`.
 
-{% if wellbeing_json %}
-Recent wellbeing notes (hard constraints for TODAY — adapt or replace exercises; never ignore for “staying on template”):
-{{ wellbeing_json }}
-If a note mentions joint pain, illness, poor sleep, or fatigue: reduce load/volume, swap the offending pattern, or deload that area. Prefer safer alternatives from the catalog.
-{% endif %}
+{% include "_wellbeing_block.md" %}
 
 Profile fields Rules (null / unknown = do **not** invent):
 - `session_minutes`: hard time budget for this session — fit slots/rest/density to it.

@@ -37,5 +37,13 @@ class EmptyProgramWeek(DomainError):
     """Approve blocked for a week with no days or no slots."""
 
 
+class CannotShiftTrainingDay(DomainError):
+    """The week has no rest day that can absorb moving a workout forward."""
+
+
+class NoFreshWellbeing(DomainError):
+    """Wellbeing adaptation requested, but there are no fresh unapplied notes."""
+
+
 class AgentUnavailable(DomainError):
     """Language model timed out, returned 5xx, or was unreachable; document must not change."""

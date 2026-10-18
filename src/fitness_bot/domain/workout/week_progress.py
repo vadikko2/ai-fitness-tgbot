@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 
 from fitness_bot.domain.enums import SessionStatus
 from fitness_bot.domain.users.user import local_calendar_date
+from fitness_bot.domain.workout.document import WorkoutDay
 from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.session import Session
 
@@ -58,8 +59,9 @@ def training_week_progress(
             completed_at = completed_at.replace(tzinfo=UTC)
         if completed_at < activated_at:
             continue
+        # A program day done on another calendar day (e.g. on a rest day) still counts as that day.
         completed.add(
-            local_calendar_date(now=completed_at, timezone_offset=timezone_offset).isoweekday(),
+            session.day.weekday or local_calendar_date(now=completed_at, timezone_offset=timezone_offset).isoweekday(),
         )
 
     completed_weekdays = sorted(completed)
@@ -70,3 +72,18 @@ def training_week_progress(
         completed_weekdays=completed_weekdays,
         week_finished=week_finished,
     )
+
+
+def nearest_open_training_day(
+    program: Program,
+    completed_weekdays: Sequence[int],
+    *,
+    today_weekday: int,
+    exclude_weekdays: Sequence[int] = (),
+) -> WorkoutDay | None:
+    """Next program day (cyclically from today) that is not completed in the current microcycle."""
+    skipped = set(completed_weekdays) | set(exclude_weekdays)
+    candidates = [day for day in program.days if day.weekday is not None and day.weekday not in skipped]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda day: ((day.weekday or 0) - today_weekday) % 7)

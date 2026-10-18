@@ -4,12 +4,18 @@ from datetime import UTC, datetime
 
 import cqrs
 
+from fitness_bot.domain.body.wellbeing import fresh_unapplied
+from fitness_bot.domain.catalog.similar import similar_exercises
 from fitness_bot.domain.enums import SessionStatus
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User, local_calendar_date
 from fitness_bot.domain.workout.document import WorkoutDocument
 from fitness_bot.domain.workout.program import Program
-from fitness_bot.domain.workout.week_progress import TrainingWeekProgress, training_week_progress
+from fitness_bot.domain.workout.week_progress import (
+    TrainingWeekProgress,
+    nearest_open_training_day,
+    training_week_progress,
+)
 from fitness_bot.service.authz import require_coach_of
 from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
 from fitness_bot.service.models.queries import session as queries
@@ -61,6 +67,13 @@ class GetTodayWorkoutQueryHandler(
                 timezone_offset=user.timezone_offset,
             ).isoweekday()
 
+            has_unapplied = bool(
+                fresh_unapplied(
+                    await repos.wellbeing.list_unapplied(user.id, limit=1),
+                    now=datetime.now(UTC),
+                ),
+            )
+
             if user.active_session_id is not None:
                 session = await repos.sessions.get_by_id(user.active_session_id)
                 if session is not None and session.is_open:
@@ -78,6 +91,7 @@ class GetTodayWorkoutQueryHandler(
                         document=session.to_document(),
                         weekday=weekday,
                         technique_video_positions=positions,
+                        has_unapplied_wellbeing=has_unapplied,
                     )
 
             if user.active_program_id is None:
@@ -89,15 +103,20 @@ class GetTodayWorkoutQueryHandler(
 
             progress = await _week_progress_for_program(repos, user=user, program=program)
             template = next((day for day in program.days if day.weekday == weekday), None)
-            unapplied = await repos.wellbeing.list_unapplied(user.id, limit=1)
-            has_unapplied = bool(unapplied)
             if template is None:
+                alternative = nearest_open_training_day(
+                    program,
+                    progress.completed_weekdays,
+                    today_weekday=weekday,
+                )
                 return queries.GetTodayWorkoutQueryResult(
                     screen="rest",
                     program_id=program.id,
                     program_type=program.program_type,
                     weekday=weekday,
                     has_unapplied_wellbeing=has_unapplied,
+                    alternative_weekday=alternative.weekday if alternative else None,
+                    alternative_title=alternative.title if alternative else None,
                     **_progress_fields(progress),
                 )
 
@@ -111,6 +130,62 @@ class GetTodayWorkoutQueryHandler(
                 has_unapplied_wellbeing=has_unapplied,
                 **_progress_fields(progress),
             )
+
+
+class GetSimilarExercisesQueryHandler(
+    cqrs.RequestHandler[queries.GetSimilarExercisesQuery, queries.GetSimilarExercisesQueryResult],
+):
+    def __init__(self, uow: IUow, catalog: ExerciseCatalogReader) -> None:
+        self._uow = uow
+        self._catalog = catalog
+
+    async def handle(self, request: queries.GetSimilarExercisesQuery) -> queries.GetSimilarExercisesQueryResult:
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            session = await repos.sessions.get_by_id(user.active_session_id) if user.active_session_id else None
+        position = request.slot_position
+        if session is None or session.status != SessionStatus.IN_PROGRESS:
+            return queries.GetSimilarExercisesQueryResult(slot_position=position, blocked_reason="no_session")
+        slot = next((item for item in session.day.slots if item.position == position), None)
+        if slot is None or slot.exercise_id is None:
+            return queries.GetSimilarExercisesQueryResult(slot_position=position, blocked_reason="unresolved")
+        records = await self._catalog.list_exercises()
+        target = next((record for record in records if record.id == slot.exercise_id), None)
+        if target is None:
+            return queries.GetSimilarExercisesQueryResult(slot_position=position, blocked_reason="unresolved")
+        base = queries.GetSimilarExercisesQueryResult(
+            slot_position=position,
+            exercise_id=target.id,
+            exercise_name=target.name,
+            primary_muscles=list(target.primary_muscles),
+            secondary_muscles=list(target.secondary_muscles),
+            offset=max(0, request.offset),
+        )
+        if slot.actual is not None:
+            return base.model_copy(update={"blocked_reason": "logged"})
+        page = similar_exercises(
+            target,
+            records,
+            training_place=user.training_place,
+            exclude_ids={item.exercise_id for item in session.day.slots if item.exercise_id is not None},
+            offset=request.offset,
+            limit=max(1, min(request.limit, 10)),
+        )
+        by_id = {record.id: record for record in records}
+        return base.model_copy(
+            update={
+                "items": [
+                    queries.SimilarExerciseItem(
+                        exercise_id=item.exercise_id,
+                        name=item.name,
+                        primary_muscles=list(by_id[item.exercise_id].primary_muscles),
+                        secondary_muscles=list(by_id[item.exercise_id].secondary_muscles),
+                    )
+                    for item in page.items
+                ],
+                "has_more": page.has_more,
+            },
+        )
 
 
 class GetSessionHistoryQueryHandler(

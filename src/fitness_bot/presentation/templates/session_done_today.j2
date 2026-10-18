@@ -1,0 +1,4 @@
+{% import "_macros.j2" as m %}
+<b>✅ Сегодня тренировка уже сделана</b>
+{{ m.week_progress(planned_count, completed_count, week_finished) }}
+Можно повторить её (результаты за сегодня перезапишутся){% if alternative_title %} или сделать следующий день: <b>{{ alternative_label }} · {{ alternative_title }}</b>{% endif %}.

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import cqrs
 
+from fitness_bot.domain.body.wellbeing import fresh_unapplied
 from fitness_bot.domain.enums import ExpectedInput, ProgressPhotoAngle
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User, local_calendar_date, parse_timezone_offset
@@ -364,3 +365,45 @@ class ListDueProgressPhotoRemindersQueryHandler(
                     ),
                 )
         return queries.ListDueProgressPhotoRemindersQueryResult(items=due)
+
+
+class GetWellbeingHistoryQueryHandler(
+    cqrs.RequestHandler[queries.GetWellbeingHistoryQuery, queries.GetWellbeingHistoryQueryResult],
+):
+    def __init__(self, uow: IUow) -> None:
+        self._uow = uow
+
+    async def handle(self, request: queries.GetWellbeingHistoryQuery) -> queries.GetWellbeingHistoryQueryResult:
+        offset = max(0, request.offset)
+        limit = max(1, min(request.limit, 30))
+        now = datetime.now(UTC)
+        async with self._uow.transaction() as repos:
+            user = _require_user(await repos.users.get_by_telegram_id(request.telegram_user_id))
+            shift = parse_timezone_offset(user.timezone_offset) if user.timezone_offset else timedelta(0)
+            entries = await repos.wellbeing.list_page(user.id, offset=offset, limit=limit + 1)
+            fresh = fresh_unapplied(
+                await repos.wellbeing.list_unapplied(user.id, limit=1),
+                now=now,
+            )
+            page = entries[:limit]
+            items = [
+                queries.WellbeingHistoryItem(
+                    id=entry.id,
+                    text=entry.text,
+                    created_local=(entry.created_at.astimezone(UTC) + shift).replace(tzinfo=None),
+                    applied_on=(
+                        local_calendar_date(now=entry.applied_at, timezone_offset=user.timezone_offset)
+                        if entry.applied_at is not None
+                        else None
+                    ),
+                    is_fresh=not entry.is_applied and entry.is_fresh(now=now),
+                )
+                for entry in page
+            ]
+            return queries.GetWellbeingHistoryQueryResult(
+                items=items,
+                offset=offset,
+                limit=limit,
+                has_more=len(entries) > limit,
+                has_fresh_unapplied=bool(fresh),
+            )

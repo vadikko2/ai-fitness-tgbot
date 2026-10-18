@@ -155,3 +155,25 @@ class ListDueProgressPhotoRemindersQuery(Query):
 
 class ListDueProgressPhotoRemindersQueryResult(QueryResult):
     items: list[DueProgressPhotoReminderItem]
+
+
+class WellbeingHistoryItem(QueryResult):
+    id: UUID
+    text: str
+    created_local: datetime
+    applied_on: date | None = None
+    is_fresh: bool = False
+
+
+class GetWellbeingHistoryQuery(Query):
+    telegram_user_id: int
+    offset: int = 0
+    limit: int = 10
+
+
+class GetWellbeingHistoryQueryResult(QueryResult):
+    items: list[WellbeingHistoryItem]
+    offset: int
+    limit: int
+    has_more: bool
+    has_fresh_unapplied: bool = False

@@ -21,6 +21,7 @@ from fitness_bot.infrastructure.db.repositories.program import (
 )
 from fitness_bot.infrastructure.db.repositories.session import SqlAlchemySessionsRepository
 from fitness_bot.infrastructure.db.repositories.technique_video import SqlAlchemyTechniqueVideosRepository
+from fitness_bot.infrastructure.db.repositories.training_reminder import SqlAlchemyTrainingReminderRepository
 from fitness_bot.infrastructure.db.repositories.users import SqlAlchemyUsersRepository
 from fitness_bot.infrastructure.db.repositories.wellbeing import SqlAlchemyWellbeingRepository
 from fitness_bot.service.interfaces.uow import IUow, IUowRepositories
@@ -41,6 +42,7 @@ class SqlAlchemyUowRepositories(IUowRepositories):
         self._users = SqlAlchemyUsersRepository(session)
         self._weights = SqlAlchemyWeightRepository(session)
         self._weight_reminders = SqlAlchemyWeightReminderRepository(session)
+        self._training_reminders = SqlAlchemyTrainingReminderRepository(session)
         self._progress_photos = SqlAlchemyProgressPhotoRepository(session)
         self._progress_photo_reminders = SqlAlchemyProgressPhotoReminderRepository(session)
         self._measurements = SqlAlchemyMeasurementRepository(session)
@@ -64,6 +66,10 @@ class SqlAlchemyUowRepositories(IUowRepositories):
     @property
     def weight_reminders(self) -> SqlAlchemyWeightReminderRepository:
         return self._weight_reminders
+
+    @property
+    def training_reminders(self) -> SqlAlchemyTrainingReminderRepository:
+        return self._training_reminders
 
     @property
     def progress_photos(self) -> SqlAlchemyProgressPhotoRepository:

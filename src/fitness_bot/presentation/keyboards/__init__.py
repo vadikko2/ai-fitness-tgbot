@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -132,11 +134,16 @@ INTENSITY_LABELS = {
 }
 
 _MENU = "🏠 В меню"
+_TO_PROFILE = "⬅️ В профиль"
 _BACK = "⬅️ Назад"
 _CANCEL = "❌ Отмена"
 _CONFIRM = "✅ Подтвердить"
 _DONE = "✅ Готово"
 _EDIT_TEXT = "✏️ Изменить текстом"
+FEEL_ADAPT_LABEL = "🙂 Подстроить под самочувствие"
+START_WORKOUT_LABEL = "▶️ Начать тренировку"
+SIMILAR_EXERCISE_LABEL = "🔄 Похожее упражнение"
+WELLBEING_HISTORY_PAGE_SIZE = 10
 
 
 def home_keyboard(
@@ -152,13 +159,8 @@ def home_keyboard(
         else InlineKeyboardButton(text="🔎 Найти тренера", callback_data="coach_search")
     )
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="🏋️ Тренировка сегодня", callback_data="sess")],
+        [InlineKeyboardButton(text=START_WORKOUT_LABEL, callback_data="sess_go")],
         [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
-        [
-            InlineKeyboardButton(text="⚖️ Вес", callback_data="wt_menu"),
-            InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu"),
-            InlineKeyboardButton(text="📷 Результаты", callback_data="pp_menu"),
-        ],
         [
             InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
             InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
@@ -323,8 +325,76 @@ def profile_edit_keyboard() -> InlineKeyboardMarkup:
         for field in _PROFILE_EDIT_FIELDS
     ]
     rows.append([InlineKeyboardButton(text="🎯 Цель", callback_data="prof_edit:goal")])
+    rows.append([InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def profile_hub_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Анкета и цель", callback_data="prof_form")],
+            [
+                InlineKeyboardButton(text="⚖️ Вес", callback_data="wt_menu"),
+                InlineKeyboardButton(text=PROFILE_FIELD_LABELS[ProfileField.HEIGHT], callback_data="prof_edit:height"),
+            ],
+            [InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu")],
+            [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="pp_menu")],
+            [InlineKeyboardButton(text="⏰ Напоминания", callback_data="prof_remind")],
+            [how_it_works_button("profile")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def profile_reminders_keyboard(
+    *,
+    evening_enabled: bool = True,
+    morning_enabled: bool = True,
+) -> InlineKeyboardMarkup:
+    evening = "🌙 Завтра тренировка: вкл" if evening_enabled else "🌙 Завтра тренировка: выкл"
+    morning = "☀️ Сегодня тренировка: вкл" if morning_enabled else "☀️ Сегодня тренировка: выкл"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⚖️ Напоминания о весе", callback_data="wt_remind")],
+            [InlineKeyboardButton(text="📷 Напоминания о фото", callback_data="pp_remind")],
+            [InlineKeyboardButton(text=evening, callback_data="tr_tog:evening")],
+            [InlineKeyboardButton(text=morning, callback_data="tr_tog:morning")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def training_reminder_keyboard(
+    *,
+    kind: Literal["evening", "morning"],
+    target_date: date,
+) -> InlineKeyboardMarkup:
+    """Buttons on a training nudge.
+
+    Evening «Да, завтра» prepares a draft the user confirms (``tr_yes``).
+    Morning «Да» is the existing one-tap start (``sess_go``): generating a
+    second draft in the morning would duplicate that flow.
+    """
+    iso = target_date.isoformat()
+    if kind == "evening":
+        yes = InlineKeyboardButton(text="✅ Да, завтра", callback_data=f"tr_yes:{iso}")
+    else:
+        yes = InlineKeyboardButton(text="✅ Да", callback_data="sess_go")
+    skip = InlineKeyboardButton(text="🚫 Пропущу", callback_data=f"tr_skip:{iso}")
+    return InlineKeyboardMarkup(inline_keyboard=[[yes, skip]])
+
+
+def body_saved_keyboard(*, back_callback: str, back_label: str) -> InlineKeyboardMarkup:
+    """After a weight / measurement save: back to that section, the profile hub, or home."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=back_label, callback_data=back_callback)],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
 
 
 def weight_menu_keyboard() -> InlineKeyboardMarkup:
@@ -334,6 +404,7 @@ def weight_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📈 История", callback_data="wt_hist")],
             [InlineKeyboardButton(text="⏰ Расписание напоминаний", callback_data="wt_remind")],
             [how_it_works_button("wt_menu")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -391,6 +462,7 @@ def history_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="⚖️ Вес", callback_data="hist_wt")],
             [InlineKeyboardButton(text="📏 Обхваты", callback_data="hist_meas")],
             [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="hist_pp")],
+            [InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel_hist:0")],
             [how_it_works_button("hist")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
@@ -404,6 +476,7 @@ def progress_photo_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📈 История", callback_data="pp_hist")],
             [InlineKeyboardButton(text="⏰ Расписание напоминаний", callback_data="pp_remind")],
             [how_it_works_button("pp_menu")],
+            [InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
@@ -416,7 +489,7 @@ def progress_photo_reminder_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔁 Каждый день", callback_data="pp_rm_preset:daily")],
             [InlineKeyboardButton(text="🗓 Выбрать дни", callback_data="pp_rm_custom")],
             [InlineKeyboardButton(text="🕐 Изменить время", callback_data="pp_rm_time")],
-            [InlineKeyboardButton(text="⬅️ К результатам", callback_data="pp_menu")],
+            [InlineKeyboardButton(text="⬅️ К фото прогресса", callback_data="pp_menu")],
         ],
     )
 
@@ -676,6 +749,7 @@ def measurement_sites_keyboard(sites: list[tuple[str, str]]) -> InlineKeyboardMa
     rows = [[InlineKeyboardButton(text=f"📍 {name}", callback_data=f"meas_site:{site_id}")] for site_id, name in sites]
     rows.append([InlineKeyboardButton(text="➕ Своя точка", callback_data="meas_custom")])
     rows.append([how_it_works_button("meas_menu")])
+    rows.append([InlineKeyboardButton(text=_TO_PROFILE, callback_data="profile")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -701,12 +775,14 @@ SECTION_INFO_ORIGIN: dict[str, str] = {
     "prog_edit_menu": "edit",
     "library": "share",
     "sess": "session",
+    "sess_go": "session",
     "sess_tmpl_edit": "workout",
     "nutr": "nutrition",
     "hist": "history",
     "wt_menu": "body",
     "meas_menu": "body",
     "pp_menu": "body",
+    "profile": "body",
     "coach_search": "coach",
     "coach_mine": "coach",
     "coach_cab": "cabinet",
@@ -980,8 +1056,11 @@ def program_screen_keyboard(
         rows.append(
             [InlineKeyboardButton(text=f"📅 {label}"[:64], callback_data=f"prog_view_day:{position}")],
         )
+    if has_active:
+        rows.append([InlineKeyboardButton(text="🗓 Сегодня по плану (без старта)", callback_data="sess")])
     rows.append([InlineKeyboardButton(text="✏️ Изменить программу", callback_data="prog_edit_menu")])
     if has_active:
+        rows.append([InlineKeyboardButton(text=FEEL_ADAPT_LABEL, callback_data="feel_adapt_week")])
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1072,19 +1151,12 @@ def session_template_keyboard(
     week_finished: bool = False,
     has_unapplied_wellbeing: bool = False,
 ) -> InlineKeyboardMarkup:
+    start_label = "▶️ Начать с учётом самочувствия" if has_unapplied_wellbeing else "▶️ Начать как в плане"
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="▶️ Начать как в плане", callback_data="sess_plan")],
+        [InlineKeyboardButton(text=start_label, callback_data="sess_plan")],
         [InlineKeyboardButton(text="✏️ Изменить тренировку", callback_data="sess_tmpl_edit")],
+        [InlineKeyboardButton(text=FEEL_ADAPT_LABEL, callback_data="feel_adapt_today")],
     ]
-    if has_unapplied_wellbeing:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text="🙂 Обновить план с учётом самочувствия",
-                    callback_data="sess_feel_adapt",
-                ),
-            ],
-        )
     new_week_label = "🆕 Начать новую тренировочную неделю"
     if week_finished:
         rows.insert(0, [InlineKeyboardButton(text=new_week_label, callback_data="sess_new_week")])
@@ -1117,10 +1189,12 @@ def session_repeat_confirm_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def next_session_actions_keyboard(*, can_approve: bool) -> InlineKeyboardMarkup:
+def next_session_actions_keyboard(*, can_approve: bool, offer_plain_start: bool = False) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if can_approve:
         rows.append([InlineKeyboardButton(text=_CONFIRM, callback_data="sess_gen_ok")])
+    if offer_plain_start:
+        rows.append([InlineKeyboardButton(text="▶️ Начать как в плане, без учёта", callback_data="sess_plan_raw")])
     rows.append([InlineKeyboardButton(text=_CANCEL, callback_data="draft_cancel")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -1139,6 +1213,7 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
 def session_card_keyboard(
     *,
     slots: list[tuple[int, str]] | None = None,
+    has_unapplied_wellbeing: bool = False,
 ) -> InlineKeyboardMarkup:
     """slots: (slot_position, exercise_label)."""
     rows: list[list[InlineKeyboardButton]] = [
@@ -1150,6 +1225,8 @@ def session_card_keyboard(
         ]
         for item in slots or []
     ]
+    if has_unapplied_wellbeing:
+        rows.append([InlineKeyboardButton(text=FEEL_ADAPT_LABEL, callback_data="feel_adapt_today")])
     rows.append([InlineKeyboardButton(text="✏️ Изменить", callback_data="sess_edit")])
     rows.append([InlineKeyboardButton(text="🏁 Выполнить всю тренировку", callback_data="sess_all")])
     rows.append([InlineKeyboardButton(text="🔄 Начать заново", callback_data="sess_restart")])
@@ -1174,17 +1251,63 @@ def slot_actions_keyboard(
     has_actual: bool = False,
     has_technique_video: bool = False,
     has_catalog_guide: bool = False,
+    can_swap: bool = False,
+    swapped_from: tuple[str, str] | None = None,
+    offer_program_swap: bool = False,
 ) -> InlineKeyboardMarkup:
+    """swapped_from: (exercise_id, name) of the exercise replaced just now — offers «Вернуть»."""
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✅ Как в плане → дальше", callback_data=f"slot_plan:{position}")],
         [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
     ]
+    if can_swap:
+        rows.append([InlineKeyboardButton(text=SIMILAR_EXERCISE_LABEL, callback_data=f"slot_alt:{position}")])
+    if offer_program_swap:
+        rows.append(
+            [InlineKeyboardButton(text="📋 Заменить и в программе", callback_data=f"slot_swap_prog:{position}")],
+        )
+    if swapped_from is not None:
+        old_id, old_name = swapped_from
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"↩️ Вернуть «{old_name}»"[:64],
+                    callback_data=f"slot_swap:{position}:{old_id}",
+                ),
+            ],
+        )
     if has_catalog_guide:
         rows.append([InlineKeyboardButton(text="📖 Как делать", callback_data=f"slot_how:{position}")])
     if has_actual:
         label = "🎥 Заменить своё видео" if has_technique_video else "🎥 Загрузить видео упражнения"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"slot_video:{position}")])
     rows.append([InlineKeyboardButton(text="⬅️ Назад к тренировке", callback_data="sess")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def back_to_slot_keyboard(*, position: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К упражнению", callback_data=f"slot:{position}")],
+            [InlineKeyboardButton(text="⬅️ Назад к тренировке", callback_data="sess")],
+        ],
+    )
+
+
+def similar_exercises_keyboard(
+    *,
+    position: int,
+    items: list[tuple[str, str]],
+    next_offset: int | None = None,
+) -> InlineKeyboardMarkup:
+    """items: (exercise_id, name)."""
+    rows = [
+        [InlineKeyboardButton(text=f"💪 {name}"[:64], callback_data=f"slot_swap:{position}:{exercise_id}")]
+        for exercise_id, name in items
+    ]
+    if next_offset is not None:
+        rows.append([InlineKeyboardButton(text="🔁 Ещё варианты", callback_data=f"slot_alt:{position}:{next_offset}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot:{position}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1260,8 +1383,24 @@ def session_no_program_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def session_rest_keyboard(*, week_finished: bool = False) -> InlineKeyboardMarkup:
+def _train_anyway_button(alternative: tuple[int, str]) -> InlineKeyboardButton:
+    weekday, title = alternative
+    day_label = WEEKDAY_LABELS.get(weekday, str(weekday))
+    return InlineKeyboardButton(
+        text=f"💪 Всё равно потренироваться: {day_label} · {title}"[:64],
+        callback_data=f"sess_go_day:{weekday}",
+    )
+
+
+def session_rest_keyboard(
+    *,
+    week_finished: bool = False,
+    alternative: tuple[int, str] | None = None,
+) -> InlineKeyboardMarkup:
+    """alternative: (weekday, day title) of the nearest not-completed program day."""
     rows: list[list[InlineKeyboardButton]] = []
+    if alternative is not None:
+        rows.append([_train_anyway_button(alternative)])
     new_week = [InlineKeyboardButton(text="🆕 Начать новую тренировочную неделю", callback_data="sess_new_week")]
     if week_finished:
         rows.append(new_week)
@@ -1269,7 +1408,33 @@ def session_rest_keyboard(*, week_finished: bool = False) -> InlineKeyboardMarku
     else:
         rows.append([InlineKeyboardButton(text="📜 История", callback_data="hist")])
         rows.append(new_week)
+    rows.append([InlineKeyboardButton(text=FEEL_ADAPT_LABEL, callback_data="feel_adapt_week")])
     rows.append([how_it_works_button("sess")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def session_done_today_keyboard(
+    *,
+    weekday: int | None = None,
+    alternative: tuple[int, str] | None = None,
+) -> InlineKeyboardMarkup:
+    repeat = f"sess_plan_repeat:{weekday}" if weekday else "sess_plan_repeat"
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="🔄 Повторить", callback_data=repeat)],
+    ]
+    if alternative is not None:
+        weekday_alt, title = alternative
+        day_label = WEEKDAY_LABELS.get(weekday_alt, str(weekday_alt))
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"💪 Ещё одну: {day_label} · {title}"[:64],
+                    callback_data=f"sess_go_day:{weekday_alt}",
+                ),
+            ],
+        )
+    rows.append([InlineKeyboardButton(text="📋 План недели", callback_data="prog")])
     rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1413,3 +1578,182 @@ def feedback_author_notice_keyboard(ticket_id: UUID) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
+
+
+def wellbeing_prompt_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📖 История самочувствия", callback_data="feel_hist:0")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def wellbeing_saved_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🏋️ Подстроить сегодняшнюю тренировку", callback_data="feel_adapt_today")],
+            [InlineKeyboardButton(text="📅 Подстроить план недели", callback_data="feel_adapt_week")],
+            [InlineKeyboardButton(text="📖 История самочувствия", callback_data="feel_hist:0")],
+            [InlineKeyboardButton(text="Не надо, в меню", callback_data="home")],
+        ],
+    )
+
+
+def wellbeing_history_keyboard(
+    *,
+    offset: int,
+    has_more: bool,
+    has_fresh_unapplied: bool = False,
+    page_size: int = WELLBEING_HISTORY_PAGE_SIZE,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    nav: list[InlineKeyboardButton] = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ Новее", callback_data=f"feel_hist:{max(0, offset - page_size)}"))
+    if has_more:
+        nav.append(InlineKeyboardButton(text="Старее ➡️", callback_data=f"feel_hist:{offset + page_size}"))
+    if nav:
+        rows.append(nav)
+    if has_fresh_unapplied:
+        rows.append(
+            [InlineKeyboardButton(text="🏋️ Подстроить сегодняшнюю тренировку", callback_data="feel_adapt_today")],
+        )
+        rows.append([InlineKeyboardButton(text="📅 Подстроить план недели", callback_data="feel_adapt_week")])
+    rows.append([InlineKeyboardButton(text="✍️ Отметить самочувствие", callback_data="feel")])
+    rows.append([InlineKeyboardButton(text="📜 К истории", callback_data="hist")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def wellbeing_missing_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✍️ Отметить самочувствие", callback_data="feel")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def wellbeing_rest_day_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📅 Подстроить план недели", callback_data="feel_adapt_week")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
+def library_home_keyboard(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """items: (program_id, button_label)."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=label, callback_data=f"lib_card:{program_id}")] for program_id, label in items
+    ]
+    rows.append([InlineKeyboardButton(text="🔗 Ввести код или ссылку", callback_data="code_link")])
+    rows.append([InlineKeyboardButton(text="➕ Создать через AI", callback_data="prog_setup")])
+    rows.append([how_it_works_button("library")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_card_keyboard(
+    *,
+    program_id: str,
+    status: str,
+    is_author_template: bool,
+    days: list[tuple[int, str]] | None = None,
+    share_url: str | None = None,
+) -> InlineKeyboardMarkup:
+    """days: (day_position, button_label)."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=f"📅 {label}"[:64], callback_data=f"lib_day:{program_id}:{position}")]
+        for position, label in days or []
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="▶️ Сделать активной как есть", callback_data=f"lib_apply:{program_id}:as_is")],
+    )
+    rows.append([InlineKeyboardButton(text="✨ Применить с адаптацией", callback_data=f"lib_apply:{program_id}:adapt")])
+    rows.append([InlineKeyboardButton(text="✏️ Изменить текстом или голосом", callback_data=f"lib_edit:{program_id}")])
+    rows.append([InlineKeyboardButton(text="🏷 Переименовать", callback_data=f"lib_rename:{program_id}")])
+    if status == "draft" and is_author_template:
+        rows.append(
+            [InlineKeyboardButton(text="📤 Опубликовать и получить код", callback_data=f"lib_pub:{program_id}")],
+        )
+    if status == "published":
+        if share_url:
+            rows.append([InlineKeyboardButton(text="📤 Отправить код другу", url=share_url)])
+        rows.append([InlineKeyboardButton(text="Снять с публикации", callback_data=f"lib_unpub:{program_id}")])
+    rows.append([InlineKeyboardButton(text="🗑 Удалить", callback_data=f"lib_del:{program_id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К библиотеке", callback_data="library")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_delete_confirm_keyboard(*, program_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 Да, удалить", callback_data=f"lib_del_ok:{program_id}")],
+            [InlineKeyboardButton(text="⬅️ Нет, к карточке", callback_data=f"lib_card:{program_id}")],
+        ],
+    )
+
+
+def library_day_keyboard(
+    *,
+    program_id: str,
+    day_position: int,
+    slots: list[tuple[int, str]] | None = None,
+) -> InlineKeyboardMarkup:
+    """slots: (slot_position, exercise_label)."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=slot_nav_button_text(position=position, label=label),
+                callback_data=f"lib_slot:{program_id}:{day_position}:{position}",
+            ),
+        ]
+        for position, label in slots or []
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ К карточке", callback_data=f"lib_card:{program_id}")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_slot_keyboard(
+    *,
+    program_id: str,
+    day_position: int,
+    slot_position: int,
+    has_catalog_guide: bool = False,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if has_catalog_guide:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📖 Как делать",
+                    callback_data=f"lib_how:{program_id}:{day_position}:{slot_position}",
+                ),
+            ],
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ К дню", callback_data=f"lib_day:{program_id}:{day_position}")])
+    rows.append([InlineKeyboardButton(text=_MENU, callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_edit_proposal_keyboard(*, program_id: str, can_approve: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_approve:
+        rows.append([InlineKeyboardButton(text="💾 Сохранить в карточку", callback_data=f"lib_edit_ok:{program_id}")])
+    rows.append([InlineKeyboardButton(text="✏️ Изменить ещё", callback_data=f"lib_edit:{program_id}")])
+    rows.append([InlineKeyboardButton(text="❌ Отменить правку", callback_data=f"lib_edit_cancel:{program_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_title_keyboard(*, program_id: str, has_draft: bool = False) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="✅ Оставить это название", callback_data=f"lib_title_keep:{program_id}")],
+        [InlineKeyboardButton(text="📚 Библиотека", callback_data="library")],
+    ]
+    if has_draft:
+        rows.append([InlineKeyboardButton(text="📝 К черновику", callback_data="prog_draft")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

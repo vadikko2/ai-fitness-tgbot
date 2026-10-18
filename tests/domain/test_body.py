@@ -134,3 +134,24 @@ def test_progress_photo_same_angle_replace_clears_file_id() -> None:
     photo_set.upsert_photo(angle=ProgressPhotoAngle.FRONT, content_type="image/jpeg", byte_size=200)
     assert photo_set.photo_for(ProgressPhotoAngle.FRONT).telegram_file_id is None
     assert photo_set.photo_for(ProgressPhotoAngle.FRONT).byte_size == 200
+
+
+def test_wellbeing_fresh_unapplied_respects_window_and_applied() -> None:
+    from datetime import timedelta
+
+    from fitness_bot.domain.body.wellbeing import WELLBEING_FRESHNESS_WINDOW, WellbeingEntry, fresh_unapplied
+
+    now = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
+    user_id = uuid4()
+    fresh = WellbeingEntry.create(user_id=user_id, text="болит колено", now=now - timedelta(hours=3))
+    stale = WellbeingEntry.create(
+        user_id=user_id,
+        text="давно",
+        now=now - WELLBEING_FRESHNESS_WINDOW - timedelta(minutes=1),
+    )
+    applied = WellbeingEntry.create(user_id=user_id, text="учтено", now=now - timedelta(hours=1))
+    applied.mark_applied(now=now)
+
+    assert fresh.is_fresh(now=now)
+    assert not stale.is_fresh(now=now)
+    assert fresh_unapplied([fresh, stale, applied], now=now) == [fresh]

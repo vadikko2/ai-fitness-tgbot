@@ -42,6 +42,7 @@ def test_section_screens_open_matching_how_it_works() -> None:
         how_it_works_button,
         nutrition_current_keyboard,
         parse_how_it_works,
+        profile_hub_keyboard,
         program_edit_menu_keyboard,
         program_screen_keyboard,
         session_template_keyboard,
@@ -55,6 +56,7 @@ def test_section_screens_open_matching_how_it_works() -> None:
         "nutr": nutrition_current_keyboard(),
         "hist": history_menu_keyboard(),
         "wt_menu": weight_menu_keyboard(),
+        "profile": profile_hub_keyboard(),
     }
     for origin, markup in samples.items():
         callbacks = _callback_data(markup)

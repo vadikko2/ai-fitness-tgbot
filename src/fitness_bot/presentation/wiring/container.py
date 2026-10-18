@@ -32,7 +32,10 @@ from fitness_bot.service.handlers.commands.catalog import (
     ApplyCatalogProgramCommandHandler,
     AssignProgramToClientCommandHandler,
     ClaimProgramByCodeCommandHandler,
+    DeleteLibraryProgramCommandHandler,
+    ProposeLibraryProgramEditCommandHandler,
     PublishProgramCommandHandler,
+    RenameLibraryProgramCommandHandler,
     SaveProgramDraftCommandHandler,
     UnpublishProgramCommandHandler,
 )
@@ -65,6 +68,7 @@ from fitness_bot.service.handlers.commands.feedback import (
 )
 from fitness_bot.service.handlers.commands.nutrition import GenerateNutritionCommandHandler
 from fitness_bot.service.handlers.commands.program import (
+    AdaptWeekForWellbeingCommandHandler,
     ApproveProposalCommandHandler,
     ChooseProgramTypeCommandHandler,
     DiscardProposalCommandHandler,
@@ -84,9 +88,18 @@ from fitness_bot.service.handlers.commands.session import (
     ProposeWorkoutChangeCommandHandler,
     RecordSlotActualCommandHandler,
     RememberTechniqueVideoFileIdCommandHandler,
+    ReplaceProgramSlotFromSessionCommandHandler,
     RestartOpenSessionCommandHandler,
     SaveTechniqueVideoCommandHandler,
     StartSessionFromTemplateCommandHandler,
+    StartTodayWorkoutCommandHandler,
+    SwapSessionSlotExerciseCommandHandler,
+)
+from fitness_bot.service.handlers.commands.training_reminder import (
+    DisableTrainingRemindersCommandHandler,
+    MarkTrainingReminderSentCommandHandler,
+    SkipTrainingDayCommandHandler,
+    ToggleTrainingReminderCommandHandler,
 )
 from fitness_bot.service.handlers.commands.users import (
     EnsureUserCommandHandler,
@@ -102,6 +115,7 @@ from fitness_bot.service.handlers.queries.body import (
     GetProgressPhotoSetQueryHandler,
     GetWeightHistoryQueryHandler,
     GetWeightReminderQueryHandler,
+    GetWellbeingHistoryQueryHandler,
     ListDueProgressPhotoRemindersQueryHandler,
     ListDueWeightRemindersQueryHandler,
 )
@@ -138,9 +152,14 @@ from fitness_bot.service.handlers.queries.program import (
 from fitness_bot.service.handlers.queries.session import (
     GetSessionDetailQueryHandler,
     GetSessionHistoryQueryHandler,
+    GetSimilarExercisesQueryHandler,
     GetTodayWorkoutQueryHandler,
     ListClientRecentVideosQueryHandler,
     PrepareTechniqueVideoDeliveryQueryHandler,
+)
+from fitness_bot.service.handlers.queries.training_reminder import (
+    GetTrainingReminderSettingsQueryHandler,
+    ListDueTrainingRemindersQueryHandler,
 )
 from fitness_bot.service.handlers.queries.users import (
     GetHomeQueryHandler,
@@ -169,7 +188,10 @@ from fitness_bot.service.models.commands.catalog import (
     ApplyCatalogProgramCommand,
     AssignProgramToClientCommand,
     ClaimProgramByCodeCommand,
+    DeleteLibraryProgramCommand,
+    ProposeLibraryProgramEditCommand,
     PublishProgramCommand,
+    RenameLibraryProgramCommand,
     SaveProgramDraftCommand,
     UnpublishProgramCommand,
 )
@@ -202,6 +224,7 @@ from fitness_bot.service.models.commands.feedback import (
 )
 from fitness_bot.service.models.commands.nutrition import GenerateNutritionCommand
 from fitness_bot.service.models.commands.program import (
+    AdaptWeekForWellbeingCommand,
     ApproveProposalCommand,
     ChooseProgramTypeCommand,
     DiscardProposalCommand,
@@ -221,9 +244,18 @@ from fitness_bot.service.models.commands.session import (
     ProposeWorkoutChangeCommand,
     RecordSlotActualCommand,
     RememberTechniqueVideoFileIdCommand,
+    ReplaceProgramSlotFromSessionCommand,
     RestartOpenSessionCommand,
     SaveTechniqueVideoCommand,
     StartSessionFromTemplateCommand,
+    StartTodayWorkoutCommand,
+    SwapSessionSlotExerciseCommand,
+)
+from fitness_bot.service.models.commands.training_reminder import (
+    DisableTrainingRemindersCommand,
+    MarkTrainingReminderSentCommand,
+    SkipTrainingDayCommand,
+    ToggleTrainingReminderCommand,
 )
 from fitness_bot.service.models.commands.users import (
     EnsureUserCommand,
@@ -239,6 +271,7 @@ from fitness_bot.service.models.queries.body import (
     GetProgressPhotoSetQuery,
     GetWeightHistoryQuery,
     GetWeightReminderQuery,
+    GetWellbeingHistoryQuery,
     ListDueProgressPhotoRemindersQuery,
     ListDueWeightRemindersQuery,
 )
@@ -269,9 +302,14 @@ from fitness_bot.service.models.queries.program import GetActiveProgramQuery, Ge
 from fitness_bot.service.models.queries.session import (
     GetSessionDetailQuery,
     GetSessionHistoryQuery,
+    GetSimilarExercisesQuery,
     GetTodayWorkoutQuery,
     ListClientRecentVideosQuery,
     PrepareTechniqueVideoDeliveryQuery,
+)
+from fitness_bot.service.models.queries.training_reminder import (
+    GetTrainingReminderSettingsQuery,
+    ListDueTrainingRemindersQuery,
 )
 from fitness_bot.service.models.queries.users import GetHomeQuery, GetProfileQuery, GetWorkflowQuery
 from fitness_bot.shared.settings import Settings, load_settings
@@ -331,6 +369,10 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
     )
     mark_weight_reminder_sent_handler = providers.Factory(MarkWeightReminderSentCommandHandler, uow=uow)
+    toggle_training_reminder_handler = providers.Factory(ToggleTrainingReminderCommandHandler, uow=uow)
+    mark_training_reminder_sent_handler = providers.Factory(MarkTrainingReminderSentCommandHandler, uow=uow)
+    disable_training_reminders_handler = providers.Factory(DisableTrainingRemindersCommandHandler, uow=uow)
+    skip_training_day_handler = providers.Factory(SkipTrainingDayCommandHandler, uow=uow)
     start_progress_photo_capture_handler = providers.Factory(StartProgressPhotoCaptureCommandHandler, uow=uow)
     record_progress_photo_handler = providers.Factory(
         RecordProgressPhotoCommandHandler,
@@ -391,6 +433,12 @@ class Container(containers.DeclarativeContainer):
         language_model=language_model,
         catalog=exercise_catalog,
     )
+    adapt_week_for_wellbeing_handler = providers.Factory(
+        AdaptWeekForWellbeingCommandHandler,
+        uow=uow,
+        language_model=language_model,
+        catalog=exercise_catalog,
+    )
     approve_proposal_handler = providers.Factory(ApproveProposalCommandHandler, uow=uow)
     discard_proposal_handler = providers.Factory(DiscardProposalCommandHandler, uow=uow)
     start_session_from_template_handler = providers.Factory(
@@ -398,6 +446,13 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
         object_storage=object_storage,
     )
+    start_today_workout_handler = providers.Factory(StartTodayWorkoutCommandHandler, uow=uow)
+    swap_session_slot_exercise_handler = providers.Factory(
+        SwapSessionSlotExerciseCommandHandler,
+        uow=uow,
+        catalog=exercise_catalog,
+    )
+    replace_program_slot_from_session_handler = providers.Factory(ReplaceProgramSlotFromSessionCommandHandler, uow=uow)
     propose_workout_change_handler = providers.Factory(
         ProposeWorkoutChangeCommandHandler,
         uow=uow,
@@ -484,6 +539,14 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
     )
     save_program_draft_handler = providers.Factory(SaveProgramDraftCommandHandler, uow=uow)
+    rename_library_program_handler = providers.Factory(RenameLibraryProgramCommandHandler, uow=uow)
+    delete_library_program_handler = providers.Factory(DeleteLibraryProgramCommandHandler, uow=uow)
+    propose_library_program_edit_handler = providers.Factory(
+        ProposeLibraryProgramEditCommandHandler,
+        uow=uow,
+        language_model=language_model,
+        catalog=exercise_catalog,
+    )
     publish_program_handler = providers.Factory(PublishProgramCommandHandler, uow=uow)
     unpublish_program_handler = providers.Factory(UnpublishProgramCommandHandler, uow=uow)
     claim_program_by_code_handler = providers.Factory(ClaimProgramByCodeCommandHandler, uow=uow)
@@ -522,10 +585,13 @@ class Container(containers.DeclarativeContainer):
     get_home_handler = providers.Factory(GetHomeQueryHandler, uow=uow)
     get_workflow_handler = providers.Factory(GetWorkflowQueryHandler, uow=uow)
     get_weight_history_handler = providers.Factory(GetWeightHistoryQueryHandler, uow=uow)
+    get_wellbeing_history_handler = providers.Factory(GetWellbeingHistoryQueryHandler, uow=uow)
     get_weight_reminder_handler = providers.Factory(GetWeightReminderQueryHandler, uow=uow)
     get_measurement_history_handler = providers.Factory(GetMeasurementHistoryQueryHandler, uow=uow)
     get_measurement_guide_handler = providers.Factory(GetMeasurementGuideQueryHandler, uow=uow)
     list_due_weight_reminders_handler = providers.Factory(ListDueWeightRemindersQueryHandler, uow=uow)
+    get_training_reminder_settings_handler = providers.Factory(GetTrainingReminderSettingsQueryHandler, uow=uow)
+    list_due_training_reminders_handler = providers.Factory(ListDueTrainingRemindersQueryHandler, uow=uow)
     get_progress_photo_history_handler = providers.Factory(GetProgressPhotoHistoryQueryHandler, uow=uow)
     get_progress_photo_set_handler = providers.Factory(
         GetProgressPhotoSetQueryHandler,
@@ -540,6 +606,11 @@ class Container(containers.DeclarativeContainer):
     get_active_program_handler = providers.Factory(GetActiveProgramQueryHandler, uow=uow)
     get_pending_proposal_handler = providers.Factory(GetPendingProposalQueryHandler, uow=uow)
     get_today_workout_handler = providers.Factory(GetTodayWorkoutQueryHandler, uow=uow)
+    get_similar_exercises_handler = providers.Factory(
+        GetSimilarExercisesQueryHandler,
+        uow=uow,
+        catalog=exercise_catalog,
+    )
     get_session_history_handler = providers.Factory(GetSessionHistoryQueryHandler, uow=uow)
     get_session_detail_handler = providers.Factory(
         GetSessionDetailQueryHandler,
@@ -574,6 +645,10 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(SetWeightReminderCommand, SetWeightReminderCommandHandler)
     request_map.bind(EnsureDefaultWeightReminderCommand, EnsureDefaultWeightReminderCommandHandler)
     request_map.bind(MarkWeightReminderSentCommand, MarkWeightReminderSentCommandHandler)
+    request_map.bind(ToggleTrainingReminderCommand, ToggleTrainingReminderCommandHandler)
+    request_map.bind(MarkTrainingReminderSentCommand, MarkTrainingReminderSentCommandHandler)
+    request_map.bind(DisableTrainingRemindersCommand, DisableTrainingRemindersCommandHandler)
+    request_map.bind(SkipTrainingDayCommand, SkipTrainingDayCommandHandler)
     request_map.bind(StartProgressPhotoCaptureCommand, StartProgressPhotoCaptureCommandHandler)
     request_map.bind(RecordProgressPhotoCommand, RecordProgressPhotoCommandHandler)
     request_map.bind(CancelProgressPhotoCaptureCommand, CancelProgressPhotoCaptureCommandHandler)
@@ -591,9 +666,13 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(SelectExerciseForProposalCommand, SelectExerciseForProposalCommandHandler)
     request_map.bind(UpdateProposalSlotPlannedCommand, UpdateProposalSlotPlannedCommandHandler)
     request_map.bind(GenerateNextWeekCommand, GenerateNextWeekCommandHandler)
+    request_map.bind(AdaptWeekForWellbeingCommand, AdaptWeekForWellbeingCommandHandler)
     request_map.bind(ApproveProposalCommand, ApproveProposalCommandHandler)
     request_map.bind(DiscardProposalCommand, DiscardProposalCommandHandler)
     request_map.bind(StartSessionFromTemplateCommand, StartSessionFromTemplateCommandHandler)
+    request_map.bind(StartTodayWorkoutCommand, StartTodayWorkoutCommandHandler)
+    request_map.bind(SwapSessionSlotExerciseCommand, SwapSessionSlotExerciseCommandHandler)
+    request_map.bind(ReplaceProgramSlotFromSessionCommand, ReplaceProgramSlotFromSessionCommandHandler)
     request_map.bind(ProposeWorkoutChangeCommand, ProposeWorkoutChangeCommandHandler)
     request_map.bind(ConfirmExerciseAsPlannedCommand, ConfirmExerciseAsPlannedCommandHandler)
     request_map.bind(RecordSlotActualCommand, RecordSlotActualCommandHandler)
@@ -610,10 +689,13 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(GetHomeQuery, GetHomeQueryHandler)
     request_map.bind(GetWorkflowQuery, GetWorkflowQueryHandler)
     request_map.bind(GetWeightHistoryQuery, GetWeightHistoryQueryHandler)
+    request_map.bind(GetWellbeingHistoryQuery, GetWellbeingHistoryQueryHandler)
     request_map.bind(GetWeightReminderQuery, GetWeightReminderQueryHandler)
     request_map.bind(GetMeasurementHistoryQuery, GetMeasurementHistoryQueryHandler)
     request_map.bind(GetMeasurementGuideQuery, GetMeasurementGuideQueryHandler)
     request_map.bind(ListDueWeightRemindersQuery, ListDueWeightRemindersQueryHandler)
+    request_map.bind(GetTrainingReminderSettingsQuery, GetTrainingReminderSettingsQueryHandler)
+    request_map.bind(ListDueTrainingRemindersQuery, ListDueTrainingRemindersQueryHandler)
     request_map.bind(GetProgressPhotoHistoryQuery, GetProgressPhotoHistoryQueryHandler)
     request_map.bind(GetProgressPhotoSetQuery, GetProgressPhotoSetQueryHandler)
     request_map.bind(GetProgressPhotoReminderQuery, GetProgressPhotoReminderQueryHandler)
@@ -621,6 +703,7 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(GetActiveProgramQuery, GetActiveProgramQueryHandler)
     request_map.bind(GetPendingProposalQuery, GetPendingProposalQueryHandler)
     request_map.bind(GetTodayWorkoutQuery, GetTodayWorkoutQueryHandler)
+    request_map.bind(GetSimilarExercisesQuery, GetSimilarExercisesQueryHandler)
     request_map.bind(GetSessionHistoryQuery, GetSessionHistoryQueryHandler)
     request_map.bind(GetSessionDetailQuery, GetSessionDetailQueryHandler)
     request_map.bind(PrepareTechniqueVideoDeliveryQuery, PrepareTechniqueVideoDeliveryQueryHandler)
@@ -654,6 +737,9 @@ def build_request_map() -> cqrs.RequestMap:
     request_map.bind(GetMyFeedbackQuery, GetMyFeedbackQueryHandler)
     request_map.bind(StartCoachClientProgramEditCommand, StartCoachClientProgramEditCommandHandler)
     request_map.bind(SaveProgramDraftCommand, SaveProgramDraftCommandHandler)
+    request_map.bind(RenameLibraryProgramCommand, RenameLibraryProgramCommandHandler)
+    request_map.bind(DeleteLibraryProgramCommand, DeleteLibraryProgramCommandHandler)
+    request_map.bind(ProposeLibraryProgramEditCommand, ProposeLibraryProgramEditCommandHandler)
     request_map.bind(PublishProgramCommand, PublishProgramCommandHandler)
     request_map.bind(UnpublishProgramCommand, UnpublishProgramCommandHandler)
     request_map.bind(ClaimProgramByCodeCommand, ClaimProgramByCodeCommandHandler)

@@ -26,6 +26,7 @@ from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.proposal import Proposal
 from fitness_bot.domain.workout.session import Session
 from fitness_bot.domain.workout.technique_video import TechniqueVideo
+from fitness_bot.domain.workout.training_reminder import TrainingReminderPrefs
 
 
 class IUsersRepository(abc.ABC):
@@ -123,6 +124,20 @@ class IProgressPhotoRepository(abc.ABC):
         limit: int = 30,
         offset: int = 0,
     ) -> list[ProgressPhotoSet]:
+        raise NotImplementedError
+
+
+class ITrainingReminderRepository(abc.ABC):
+    @abc.abstractmethod
+    async def get(self, user_id: UUID) -> TrainingReminderPrefs | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def save(self, prefs: TrainingReminderPrefs) -> TrainingReminderPrefs:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def list_all(self) -> list[TrainingReminderPrefs]:
         raise NotImplementedError
 
 
@@ -537,6 +552,23 @@ class IWellbeingRepository(abc.ABC):
     async def mark_applied(self, entry_ids: list[UUID], *, applied_at: datetime | None = None) -> None:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    async def list_page(self, user_id: UUID, *, offset: int = 0, limit: int = 10) -> list[WellbeingEntry]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def link_to_proposal(self, entry_ids: list[UUID], proposal_id: UUID) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def mark_applied_for_proposal(
+        self,
+        proposal_id: UUID,
+        *,
+        applied_at: datetime | None = None,
+    ) -> list[UUID]:
+        raise NotImplementedError
+
 
 class IUowRepositories(abc.ABC):
     @property
@@ -552,6 +584,11 @@ class IUowRepositories(abc.ABC):
     @property
     @abc.abstractmethod
     def weight_reminders(self) -> IWeightReminderRepository:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def training_reminders(self) -> ITrainingReminderRepository:
         raise NotImplementedError
 
     @property
@@ -646,6 +683,7 @@ __all__ = [
     "IProposalsRepository",
     "ISessionsRepository",
     "ITechniqueVideosRepository",
+    "ITrainingReminderRepository",
     "IUow",
     "IUowRepositories",
     "IUsersRepository",
@@ -662,6 +700,7 @@ __all__ = [
     "Proposal",
     "Session",
     "TechniqueVideo",
+    "TrainingReminderPrefs",
     "User",
     "WeightEntry",
     "WeightReminder",

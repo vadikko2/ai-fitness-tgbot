@@ -13,12 +13,13 @@ from fitness_bot.domain.body.reminder import DEFAULT_WEIGHT_REMINDER_TIME, DEFAU
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.presentation.flow_helpers import weekdays_label
 from fitness_bot.presentation.keyboards import (
-    back_to_menu_keyboard,
+    body_saved_keyboard,
     measurement_sites_keyboard,
     weight_menu_keyboard,
     weight_reminder_menu_keyboard,
     weight_reminder_time_keyboard,
     weight_reminder_weekdays_keyboard,
+    wellbeing_prompt_keyboard,
 )
 from fitness_bot.presentation.measurement_guide_images import (
     caption_fits_telegram,
@@ -118,14 +119,14 @@ def create_body_router(*, jinja_env: Environment, mediator: RequestMediator) -> 
             ),
         )
         text = jinja_env.get_template("onboarding_prompt.j2").render(field="wellbeing")
-        await _answer(callback, text)
+        await _answer(callback, text, reply_markup=wellbeing_prompt_keyboard())
 
     @router.callback_query(F.data == "wt_hist")
     async def handle_wt_hist(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         history = await mediator.send(GetWeightHistoryQuery(telegram_user_id=callback.from_user.id))
         text = jinja_env.get_template("weight_history.j2").render(items=history.items)
-        await _answer(callback, text, reply_markup=back_to_menu_keyboard())
+        await _answer(callback, text, reply_markup=body_saved_keyboard(back_callback="wt_menu", back_label="⬅️ К весу"))
 
     @router.callback_query(F.data == "wt_remind")
     async def handle_wt_remind(callback: CallbackQuery) -> None:
@@ -318,7 +319,11 @@ def create_body_router(*, jinja_env: Environment, mediator: RequestMediator) -> 
         )
         site_name = next((site.name for site in history.sites if site.id == site_id), None)
         text = jinja_env.get_template("history.j2").render(entries=history.entries, site_name=site_name)
-        await _answer(callback, text, reply_markup=back_to_menu_keyboard())
+        await _answer(
+            callback,
+            text,
+            reply_markup=body_saved_keyboard(back_callback="meas_menu", back_label="⬅️ К обхватам"),
+        )
 
     return router
 
