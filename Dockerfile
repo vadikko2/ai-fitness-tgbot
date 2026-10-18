@@ -12,7 +12,9 @@ RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.
     && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg bzip2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.8 /uv /usr/local/bin/uv
+# ghcr.io/astral-sh/uv crawls from Timeweb builders (~25 KB/s) and the
+# 1680s buildctl limit kills the build. The same 0.12.8 wheel from PyPI is fast.
+RUN pip install --no-cache-dir "uv==0.12.8"
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
