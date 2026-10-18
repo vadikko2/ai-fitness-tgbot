@@ -152,19 +152,22 @@ async def test_one_tap_sends_exercise_pack_then_one_log_button() -> None:
     texts = [text for text, _markup in message.answers]
     assert len(texts) == 3
     assert sleeps == [EXERCISE_PACK_PAUSE_SECONDS, EXERCISE_PACK_PAUSE_SECONDS]
-    assert "<b>Жим лёжа</b>" in texts[0]
-    assert "<b>Тяга штанги</b>" in texts[1]
+    assert texts[0].split("\n", 1)[0] == "<b>Жим лёжа</b>"
+    assert texts[1].split("\n", 1)[0] == "<b>Тяга штанги</b>"
+    assert "<i>Мышцы:</i> грудь" in texts[0]
+    assert "<i>Подходы:</i> 3" in texts[0]
     assert "Тренировка сегодня" not in "\n".join(texts)
-    prompt, markup = message.answers[-1]
-    assert "Поехали" in prompt
-    assert "&lt;болит&gt; спина" in prompt
-    callbacks = _callbacks(markup)
-    assert callbacks == ["slot:1", "home"]
-    labels = [button.text for row in markup.inline_keyboard for button in row]
-    assert labels[0] == "Жим лёжа"
-    forbidden = {"sess_edit", "sess_all", "sess_restart", "ihow:sess", "feel_adapt_today", "slot_plan:1"}
-    assert forbidden.isdisjoint(callbacks)
-    assert all(markup is None for _text, markup in message.answers[:-1])
+    assert "Поехали" not in "\n".join(texts)
+    assert "Продолжаем" not in "\n".join(texts)
+    assert "&lt;болит&gt; спина" in texts[-1]
+    assert _callbacks(message.answers[0][1]) == ["slot_plan:1", "slot_fact:1", "slot_alt:1"]
+    assert _callbacks(message.answers[1][1]) == ["slot_plan:2", "slot_fact:2", "slot_alt:2"]
+    assert _callbacks(message.answers[-1][1]) == ["sess_plan_all", "sess_fin", "home"]
+    labels = [button.text for row in message.answers[-1][1].inline_keyboard for button in row]
+    assert labels == ["Выполнить все", "Завершить тренировку", "🏠 В меню"]
+    every = [callback for _text, markup in message.answers for callback in _callbacks(markup)]
+    forbidden = {"sess_edit", "sess_all", "sess_restart", "ihow:sess", "feel_adapt_today", "slot:1", "slot:2"}
+    assert forbidden.isdisjoint(every)
 
 
 async def test_one_tap_on_rest_day_renders_train_anyway() -> None:

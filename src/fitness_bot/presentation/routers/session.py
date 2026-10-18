@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from cqrs import RequestMediator
 from jinja2 import Environment
 
@@ -31,9 +31,10 @@ from fitness_bot.presentation.keyboards import (
     match_session_exercises_keyboard,
     next_session_actions_keyboard,
     performance_actions_keyboard,
-    session_continue_keyboard,
     session_done_today_keyboard,
+    session_exercise_actions_keyboard,
     session_no_program_keyboard,
+    session_pack_closer_keyboard,
     session_repeat_confirm_keyboard,
     session_rest_keyboard,
     session_restart_confirm_keyboard,
@@ -46,7 +47,7 @@ from fitness_bot.presentation.keyboards import (
     workout_edit_actions_keyboard,
 )
 from fitness_bot.presentation.message_draft import assistant_parse_failure_text, message_draft_scope
-from fitness_bot.presentation.muscle_emoji import build_slot_nav_items, slot_button_label
+from fitness_bot.presentation.muscle_emoji import build_slot_nav_items
 from fitness_bot.presentation.planned_day_pack import (
     format_day_cooldown_message,
     format_day_warmup_message,
@@ -205,12 +206,17 @@ def _slot_button_items(
     return build_slot_nav_items(open_slots, names=names)
 
 
-def _first_open_slot(document: WorkoutDocument) -> ExerciseSlot | None:
-    for day in document.days:
-        for slot in sorted(day.slots, key=lambda item: item.position):
-            if slot.actual is None:
-                return slot
-    return None
+_SESSION_PACK_CHEER = frozenset({"Продолжаем 💪", "Поехали! 💪"})
+_SESSION_PACK_CLOSER = "Можно закрыть тренировку."
+
+
+def _session_pack_closer_text(status_line: str | None) -> str:
+    if not status_line:
+        return _SESSION_PACK_CLOSER
+    kept = [part for part in status_line.split("\n\n") if part and part not in _SESSION_PACK_CHEER]
+    if not kept:
+        return _SESSION_PACK_CLOSER
+    return "\n\n".join(kept)
 
 
 async def _load_session_guides(mediator: RequestMediator, document: WorkoutDocument):
@@ -407,14 +413,16 @@ async def _show_session_card(
     offer_log: bool = True,
     sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> None:
-    """One calm message per exercise, then a single next-step keyboard. Not the old button wall."""
+    """One message per exercise, with that slot's actions, then one closer. Not the old button wall."""
     names, primary_muscles = await _load_catalog_maps(mediator)
     guides = await _load_session_guides(mediator, document)
     parts: list[str] = []
+    markups: list[InlineKeyboardMarkup | None] = []
     for day in document.days:
         warmup = format_day_warmup_message(day.warmup)
         if warmup:
             parts.append(warmup)
+            markups.append(None)
         for slot in sorted(day.slots, key=lambda item: item.position):
             parts.append(
                 format_planned_slot_message(
@@ -424,27 +432,17 @@ async def _show_session_card(
                     primary_muscles=primary_muscles,
                 ),
             )
+            if offer_log:
+                markups.append(session_exercise_actions_keyboard(position=slot.position))
+            else:
+                markups.append(None)
         cooldown = format_day_cooldown_message(day.cooldown)
         if cooldown:
             parts.append(cooldown)
-    next_slot = _first_open_slot(document) if offer_log else None
-    if status_line:
-        prompt = status_line
-    elif next_slot is not None:
-        prompt = "Записать подход"
-    else:
-        prompt = "Все упражнения отмечены. Можно завершить тренировку."
-    parts.append(prompt)
-    if not offer_log:
-        markup = back_to_menu_keyboard()
-    elif next_slot is None:
-        markup = session_continue_keyboard()
-    else:
-        markup = session_continue_keyboard(
-            next_position=next_slot.position,
-            next_label=slot_button_label(next_slot, names),
-        )
-    await send_planned_day_pack(message, parts, reply_markup=markup, sleep=sleep)
+            markups.append(None)
+    parts.append(_session_pack_closer_text(status_line))
+    markups.append(session_pack_closer_keyboard() if offer_log else back_to_menu_keyboard())
+    await send_planned_day_pack(message, parts, markups=markups, sleep=sleep)
 
 
 async def _advance_after_slot(
@@ -1681,8 +1679,7 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         )
         await callback.answer()
 
-    @router.callback_query(F.data == "sess_fin")
-    async def handle_sess_fin(callback: CallbackQuery) -> None:
+    async def _finalize_and_report(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         try:
             result = await mediator.send(FinalizeSessionCommand(telegram_user_id=callback.from_user.id))
@@ -1698,9 +1695,39 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 template_name="session_completed.j2",
                 document=result.document,
             )
+            await callback.message.answer(text, reply_markup=home_keyboard())
+        await callback.answer()
+
+    @router.callback_query(F.data == "sess_plan_all")
+    async def handle_sess_plan_all(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        today = await mediator.send(GetTodayWorkoutQuery(telegram_user_id=callback.from_user.id))
+        if today.document is None:
             if callback.message:
-                await callback.message.answer(text, reply_markup=home_keyboard())
+                await callback.message.answer("Нет открытой тренировки.")
             await callback.answer()
+            return
+        try:
+            for day in today.document.days:
+                for slot in sorted(day.slots, key=lambda item: item.position):
+                    if slot.actual is not None:
+                        continue
+                    await mediator.send(
+                        ConfirmExerciseAsPlannedCommand(
+                            telegram_user_id=callback.from_user.id,
+                            slot_position=slot.position,
+                        ),
+                    )
+        except DomainError as exc:
+            if callback.message:
+                await callback.message.answer(f"Не удалось отметить: {exc}")
+            await callback.answer()
+            return
+        await _finalize_and_report(callback)
+
+    @router.callback_query(F.data == "sess_fin")
+    async def handle_sess_fin(callback: CallbackQuery) -> None:
+        await _finalize_and_report(callback)
 
     @router.callback_query(F.data == "sess_fin_ok")
     async def handle_sess_fin_ok(callback: CallbackQuery) -> None:

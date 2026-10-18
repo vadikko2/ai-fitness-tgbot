@@ -1224,6 +1224,28 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def session_exercise_actions_keyboard(*, position: int) -> InlineKeyboardMarkup:
+    """Actions on one exercise message. The guide button is omitted: technique is in the text."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Как в плане → дальше", callback_data=f"slot_plan:{position}")],
+            [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
+            [InlineKeyboardButton(text=SIMILAR_EXERCISE_LABEL, callback_data=f"slot_alt:{position}")],
+        ],
+    )
+
+
+def session_pack_closer_keyboard() -> InlineKeyboardMarkup:
+    """After the exercise pack: log the rest as planned, or finish only what is already logged."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Выполнить все", callback_data="sess_plan_all")],
+            [InlineKeyboardButton(text="Завершить тренировку", callback_data="sess_fin")],
+            [InlineKeyboardButton(text=_MENU, callback_data="home")],
+        ],
+    )
+
+
 def session_continue_keyboard(
     *,
     next_position: int | None = None,

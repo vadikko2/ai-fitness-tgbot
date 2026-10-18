@@ -22,6 +22,7 @@ EXERCISE_PACK_PAUSE_SECONDS = 0.3
 _LINK_PREVIEW_OFF = LinkPreviewOptions(is_disabled=True)
 _PLATFORM_LABELS = {"youtube": "YouTube", "rutube": "Rutube"}
 _PARAGRAPHS = re.compile(r"\n\s*\n")
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[A-ZА-ЯЁ«\"(])")
 
 
 class AnswerableMessage(Protocol):
@@ -37,13 +38,16 @@ def format_planned_exercise_message(
     secondary_muscles: Sequence[str] = (),
     videos: Sequence[tuple[str, str, str]] = (),
 ) -> str:
-    """Catalog text that exists, plus the slot's sets / reps / weight."""
+    """Catalog text that exists, plus the slot's sets / reps / weight.
+
+    The name is its own line. Muscles and the plan are labeled lines. Technique
+    is a blockquote of one or two sentences. Video links come last.
+    """
     blocks = [f"<b>{html.escape(name.strip() or 'Упражнение')}</b>"]
-    muscles = _muscles_line(primary_muscles, secondary_muscles)
-    if muscles:
-        blocks.append(muscles)
-    blocks.append(f"План: <b>{html.escape(_prescription(slot))}</b>")
-    technique_text = _technique_block(technique)
+    meta = _meta_lines(slot, primary_muscles, secondary_muscles)
+    if meta:
+        blocks.append(meta)
+    technique_text = _technique_blocks(technique)
     if technique_text:
         blocks.append(technique_text)
     links = _video_links(videos)
@@ -108,19 +112,27 @@ async def send_planned_day_pack(
     message: AnswerableMessage,
     parts: Sequence[str],
     *,
-    reply_markup: InlineKeyboardMarkup,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    markups: Sequence[InlineKeyboardMarkup | None] | None = None,
     pause_seconds: float = EXERCISE_PACK_PAUSE_SECONDS,
     sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> None:
-    """Send parts in order. Sleep between messages, never before the first."""
+    """Send parts in order. Sleep between messages, never before the first.
+
+    ``markups`` is one keyboard per part. Without it, ``reply_markup`` sits on the last message.
+    """
     pause = asyncio.sleep if sleep is None else sleep
     last = len(parts) - 1
     for index, text in enumerate(parts):
         if index:
             await pause(pause_seconds)
+        if markups is not None:
+            markup = markups[index]
+        else:
+            markup = reply_markup if index == last else None
         await message.answer(
             text,
-            reply_markup=reply_markup if index == last else None,
+            reply_markup=markup,
             link_preview_options=_LINK_PREVIEW_OFF,
         )
 
@@ -183,21 +195,29 @@ def _exercise_message(
     )
 
 
-def _prescription(slot: ExerciseSlot) -> str:
+def _meta_lines(
+    slot: ExerciseSlot,
+    primary: Sequence[str],
+    secondary: Sequence[str],
+) -> str | None:
+    lines: list[str] = []
+    muscles = _muscle_names(primary, secondary)
+    if muscles:
+        lines.append("<i>Мышцы:</i> " + ", ".join(html.escape(item) for item in muscles))
+    lines.append(f"<i>Подходы:</i> {slot.sets}")
     if slot.reps is not None:
-        load = f"{slot.sets}×{slot.reps}"
-    else:
-        load = f"{slot.sets}×{slot.duration_seconds}с"
+        lines.append(f"<i>Повторы:</i> {slot.reps}")
+    elif slot.duration_seconds is not None:
+        lines.append(f"<i>Время:</i> {slot.duration_seconds} с")
     if slot.weight_kg is not None:
-        load = f"{load} · {_format_kg(slot.weight_kg)} кг"
-    extras: list[str] = []
+        lines.append(f"<i>Вес:</i> {html.escape(_format_kg(slot.weight_kg))} кг")
     if slot.rest_seconds:
-        extras.append(f"отдых {slot.rest_seconds}с")
+        lines.append(f"<i>Отдых:</i> {slot.rest_seconds} с")
     if slot.rpe:
-        extras.append(f"RPE {slot.rpe}")
-    if extras:
-        load = f"{load} · " + " · ".join(extras)
-    return load
+        lines.append(f"<i>RPE:</i> {slot.rpe}")
+    if not lines:
+        return None
+    return "\n".join(lines)
 
 
 def _format_kg(weight: Decimal) -> str:
@@ -207,7 +227,7 @@ def _format_kg(weight: Decimal) -> str:
     return text
 
 
-def _muscles_line(primary: Sequence[str], secondary: Sequence[str]) -> str | None:
+def _muscle_names(primary: Sequence[str], secondary: Sequence[str]) -> list[str]:
     seen: list[str] = []
     folded = set()
     for item in (*primary, *secondary):
@@ -217,16 +237,30 @@ def _muscles_line(primary: Sequence[str], secondary: Sequence[str]) -> str | Non
             continue
         folded.add(key)
         seen.append(text)
-    if not seen:
-        return None
-    return "Мышцы: " + ", ".join(html.escape(item) for item in seen)
+    return seen
 
 
-def _technique_block(technique: str) -> str | None:
-    paragraphs = [html.escape(part.strip()) for part in _PARAGRAPHS.split(technique) if part.strip()]
-    if not paragraphs:
+def _technique_blocks(technique: str) -> str | None:
+    raw = technique.strip()
+    if not raw:
         return None
-    return "\n\n".join(paragraphs)
+    paragraphs = [part.strip() for part in _PARAGRAPHS.split(raw) if part.strip()]
+    groups = [_sentences(paragraph) for paragraph in paragraphs]
+    split = len(paragraphs) > 1 and bool(re.search(r"[.!?…]", raw))
+    split = split or any(len(sentences) > 1 for sentences in groups)
+    if not split:
+        return f"<blockquote>{html.escape(raw)}</blockquote>"
+    chunks: list[str] = []
+    for sentences in groups:
+        for index in range(0, len(sentences), 2):
+            chunk = " ".join(sentences[index : index + 2])
+            chunks.append(f"<blockquote>{html.escape(chunk)}</blockquote>")
+    return "\n\n".join(chunks)
+
+
+def _sentences(paragraph: str) -> list[str]:
+    pieces = [piece.strip() for piece in _SENTENCE_SPLIT.split(paragraph) if piece.strip()]
+    return pieces or [paragraph]
 
 
 def _video_links(videos: Sequence[tuple[str, str, str]]) -> str | None:
@@ -237,8 +271,11 @@ def _video_links(videos: Sequence[tuple[str, str, str]]) -> str | None:
             continue
         platform_label = _PLATFORM_LABELS.get(platform, platform.strip() or "Видео")
         title_text = title.strip()
-        label = f"{platform_label}: {title_text}" if title_text else platform_label
-        lines.append(f'<a href="{html.escape(href, quote=True)}">{html.escape(label)}</a>')
+        href_html = html.escape(href, quote=True)
+        if title_text:
+            lines.append(f'{html.escape(platform_label)}: <a href="{href_html}">{html.escape(title_text)}</a>')
+        else:
+            lines.append(f'<a href="{href_html}">{html.escape(platform_label)}</a>')
     if not lines:
         return None
     return "\n".join(lines)

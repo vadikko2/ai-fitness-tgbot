@@ -41,12 +41,16 @@ def test_exercise_message_shows_catalog_fields_and_escapes() -> None:
             ("rutube", "javascript:alert(1)", "мимо"),
         ],
     )
-    assert "<b>Жим &lt;лёжа&gt;</b>" in text
-    assert "Мышцы: грудь, трицепс" in text
-    assert "План: <b>4×8 · 60 кг · отдых 90с · RPE 7</b>" in text
-    assert "Лягте на скамью." in text
-    assert "Не бросайте гриф." in text
-    assert '<a href="https://youtu.be/abc">YouTube: Жим &lt;демо&gt;</a>' in text
+    assert text.split("\n", 1)[0] == "<b>Жим &lt;лёжа&gt;</b>"
+    assert "<i>Мышцы:</i> грудь, трицепс" in text
+    assert "<i>Подходы:</i> 4" in text
+    assert "<i>Повторы:</i> 8" in text
+    assert "<i>Вес:</i> 60 кг" in text
+    assert "<i>Отдых:</i> 90 с" in text
+    assert "<i>RPE:</i> 7" in text
+    assert "<blockquote>Лягте на скамью.</blockquote>" in text
+    assert "<blockquote>Не бросайте гриф.</blockquote>" in text
+    assert 'YouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in text
     assert "javascript:" not in text
     assert "мимо" not in text
 
@@ -67,12 +71,34 @@ def test_sparse_exercise_keeps_name_and_prescription() -> None:
         name="Планка",
         primary_muscles=["кор"],
     )
-    assert "<b>Планка</b>" in text
-    assert "Мышцы: кор" in text
-    assert "3×40с" in text
+    assert text.split("\n", 1)[0] == "<b>Планка</b>"
+    assert "<i>Мышцы:</i> кор" in text
+    assert "<i>Подходы:</i> 3" in text
+    assert "<i>Время:</i> 40 с" in text
+    assert "<i>Отдых:</i> 45 с" in text
+    assert "<i>RPE:</i> 6" in text
+    assert "Повторы" not in text
     assert "кг" not in text
     assert "техник" not in text.casefold()
+    assert "<blockquote>" not in text
     assert "<a " not in text
+
+
+def test_technique_is_split_on_sentences_and_left_whole_without_them() -> None:
+    grouped = format_planned_exercise_message(
+        _slot(position=1, exercise_id=uuid4()),
+        name="Присед",
+        technique="Встань прямо. Смотри вперёд. Выдох на усилии.",
+    )
+    assert "<blockquote>Встань прямо. Смотри вперёд.</blockquote>" in grouped
+    assert "<blockquote>Выдох на усилии.</blockquote>" in grouped
+    whole = format_planned_exercise_message(
+        _slot(position=1, exercise_id=uuid4()),
+        name="Планка",
+        technique="держи корпус ровно и не прогибай поясницу",
+    )
+    assert whole.count("<blockquote>") == 1
+    assert "<blockquote>держи корпус ровно и не прогибай поясницу</blockquote>" in whole
 
 
 async def test_pack_sends_in_order_and_sleeps_between_messages() -> None:
@@ -132,7 +158,7 @@ async def test_pack_sends_in_order_and_sleeps_between_messages() -> None:
     assert "Суставы &lt;плеч&gt;" in texts[0]
     assert "<b>Жим лёжа</b>" in texts[1]
     assert "Лягте на скамью." in texts[1]
-    assert "Rutube: Демо" in texts[1]
+    assert 'Rutube: <a href="https://rutube.ru/video/demo/">Демо</a>' in texts[1]
     assert "<b>Планка</b>" in texts[2]
     assert texts[3] == "К программе или в меню."
     markups = [item[2] for item in calls if item[0] == "send"]
@@ -213,10 +239,12 @@ async def test_prog_view_day_pack_and_old_slot_callbacks() -> None:
     assert callback.answered == 1
     assert [item[0] for item in calls] == ["send", "sleep", "send", "sleep", "send"]
     assert calls[1] == ("sleep", EXERCISE_PACK_PAUSE_SECONDS)
-    assert "<b>Присед</b>" in message.answers[1]
-    assert "Мышцы: квадрицепс, ягодицы" in message.answers[1]
-    assert "4×8 · 40 кг" in message.answers[1]
-    assert "Стопы на ширине плеч." in message.answers[1]
+    assert message.answers[1].split("\n", 1)[0] == "<b>Присед</b>"
+    assert "<i>Мышцы:</i> квадрицепс, ягодицы" in message.answers[1]
+    assert "<i>Подходы:</i> 4" in message.answers[1]
+    assert "<i>Повторы:</i> 8" in message.answers[1]
+    assert "<i>Вес:</i> 40 кг" in message.answers[1]
+    assert "<blockquote>Стопы на ширине плеч.</blockquote>" in message.answers[1]
     labels = [button.callback_data for row in calls[-1][2].inline_keyboard for button in row]
     assert "prog_view_slot" not in " ".join(labels)
     assert labels == ["prog", "home"]
