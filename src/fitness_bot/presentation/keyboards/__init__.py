@@ -25,6 +25,7 @@ from fitness_bot.domain.program_catalog import (
     PROGRAM_TYPE_SPLITS,
     TRAINING_STYLE_COPY,
 )
+from fitness_bot.presentation.callback_tokens import pack_uuids
 from fitness_bot.presentation.muscle_emoji import slot_nav_button_text
 
 WEEKDAY_LABELS = {
@@ -613,7 +614,12 @@ def coach_session_history_keyboard(
     has_more: bool,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text=f"📌 {title}"[:64], callback_data=f"coach_hist_one:{client_user_id}:{session_id}")]
+        [
+            InlineKeyboardButton(
+                text=f"📌 {title}"[:64],
+                callback_data=f"coach_hist_one:{pack_uuids(UUID(client_user_id), UUID(session_id))}",
+            ),
+        ]
         for session_id, title in items
     ]
     nav: list[InlineKeyboardButton] = []
@@ -647,7 +653,7 @@ def coach_history_session_keyboard(
         [
             InlineKeyboardButton(
                 text=f"🎥 Посмотреть видео · {label}"[:64],
-                callback_data=f"coach_hist_vid:{client_user_id}:{slot_id}",
+                callback_data=f"coach_hist_vid:{pack_uuids(UUID(client_user_id), UUID(slot_id))}",
             ),
         ]
         for slot_id, label in watch_items
@@ -666,7 +672,7 @@ def coach_recent_videos_keyboard(
         [
             InlineKeyboardButton(
                 text=f"🎥 {label}"[:64],
-                callback_data=f"coach_hist_vid:{client_user_id}:{slot_id}",
+                callback_data=f"coach_hist_vid:{pack_uuids(UUID(client_user_id), UUID(slot_id))}",
             ),
         ]
         for slot_id, label in items

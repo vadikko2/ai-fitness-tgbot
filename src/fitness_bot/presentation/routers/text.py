@@ -8,6 +8,7 @@ from jinja2 import Environment
 from fitness_bot.domain.body.wellbeing import WELLBEING_FRESHNESS_WINDOW
 from fitness_bot.domain.enums import ExpectedInput, ProfileField, Supplement, WeightSource
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.presentation.chat_pages import remember_incoming
 from fitness_bot.presentation.flow_helpers import (
     finish_profile_edit_if_active,
     show_info_offer,
@@ -101,6 +102,8 @@ async def handle_user_utterance(
     if workflow.expected_input == ExpectedInput.NONE:
         await message.answer("Открой нужный раздел через меню.")
         return
+
+    remember_incoming(message)
 
     try:
         if await handle_feedback_utterance(

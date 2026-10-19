@@ -20,6 +20,7 @@ from fitness_bot.domain.workout.document import (
     is_matchable_custom_request,
     unresolved_slot_refs,
 )
+from fitness_bot.presentation.chat_pages import remember_incoming
 from fitness_bot.presentation.keyboards import (
     INTENSITY_LABELS,
     PROGRAM_TYPE_LABELS,
@@ -2006,6 +2007,7 @@ async def handle_slot_weight_utterance(
     focus_slot: int | None,
 ) -> None:
     assert message.from_user is not None
+    remember_incoming(message)
     if focus_slot is None:
         await message.answer("Сначала открой упражнение в тренировке.")
         return
@@ -2035,6 +2037,7 @@ async def handle_slot_load_utterance(
     draft_weight: str | None,
 ) -> None:
     assert message.from_user is not None
+    remember_incoming(message)
     if focus_slot is None:
         await message.answer("Сначала открой упражнение в тренировке.")
         return

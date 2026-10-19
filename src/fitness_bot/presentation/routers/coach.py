@@ -9,6 +9,7 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import CoachApplicationStatus, ExpectedInput
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.presentation.callback_tokens import pack_uuids, unpack_uuids
 from fitness_bot.presentation.keyboards import (
     coach_app_detail_keyboard,
     coach_apply_menu_keyboard,
@@ -660,6 +661,8 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data.startswith("coach_assign:"))
     async def coach_assign(callback: CallbackQuery) -> None:
+        from uuid import UUID
+
         from fitness_bot.service.models.queries.coach import ListProgramCatalogQuery
 
         client_id = callback.data.split(":", 1)[1]
@@ -673,7 +676,7 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 [
                     InlineKeyboardButton(
                         text=item.title,
-                        callback_data=f"coach_assign_do:{client_id}:{item.program_id}",
+                        callback_data=f"coach_assign_do:{pack_uuids(UUID(client_id), item.program_id)}",
                     ),
                 ]
                 for item in catalog.items[:10]
@@ -685,17 +688,16 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data.startswith("coach_assign_do:"))
     async def coach_assign_do(callback: CallbackQuery) -> None:
-        from uuid import UUID
-
         from fitness_bot.service.models.commands.catalog import AssignProgramToClientCommand
 
-        _, client_raw, program_raw = callback.data.split(":", 2)
+        _, token = callback.data.split(":", 1)
+        client_id, program_id = unpack_uuids(token, 2)
         try:
             result = await mediator.send(
                 AssignProgramToClientCommand(
                     telegram_user_id=callback.from_user.id,
-                    client_user_id=UUID(client_raw),
-                    program_id=UUID(program_raw),
+                    client_user_id=client_id,
+                    program_id=program_id,
                     mode="as_is",
                 ),
             )
@@ -758,13 +760,10 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data.startswith("coach_hist_one:"))
     async def coach_hist_one(callback: CallbackQuery) -> None:
-        from uuid import UUID
-
         from fitness_bot.service.models.queries.session import GetSessionDetailQuery
 
-        _, client_raw, session_raw = callback.data.split(":", 2)
-        client_id = UUID(client_raw)
-        session_id = UUID(session_raw)
+        _, token = callback.data.split(":", 1)
+        client_id, session_id = unpack_uuids(token, 2)
         try:
             detail = await mediator.send(
                 GetSessionDetailQuery(
@@ -801,15 +800,12 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
 
     @router.callback_query(F.data.startswith("coach_hist_vid:"))
     async def coach_hist_vid(callback: CallbackQuery) -> None:
-        from uuid import UUID
-
         from aiogram.types import BufferedInputFile
 
         from fitness_bot.service.models.queries.session import PrepareTechniqueVideoDeliveryQuery
 
-        _, client_raw, slot_raw = callback.data.split(":", 2)
-        client_id = UUID(client_raw)
-        slot_id = UUID(slot_raw)
+        _, token = callback.data.split(":", 1)
+        client_id, slot_id = unpack_uuids(token, 2)
         delivery = await mediator.send(
             PrepareTechniqueVideoDeliveryQuery(
                 telegram_user_id=callback.from_user.id,
