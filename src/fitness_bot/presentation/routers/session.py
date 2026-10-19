@@ -325,19 +325,38 @@ def _weight_step_text(name: str, planned_kg: str | None) -> str:
     return f"Вес для «{name}». Напиши число или выбери."
 
 
-def _load_step_text(name: str, *, timed: bool, planned: str | None) -> str:
+def _load_step_text(
+    name: str,
+    *,
+    timed: bool,
+    planned: str | None,
+    chosen_kg: str | None,
+) -> str:
+    """Reps or time. The kilogram, when shown, is the weight just chosen — not another one."""
     label = "Время" if timed else "Повторы"
+    chosen = f"Вес: {chosen_kg} кг." if chosen_kg else "Без веса."
     if planned:
-        return f"{label} для «{name}». В плане: {planned}. Напиши число или выбери."
-    return f"{label} для «{name}». Напиши число или выбери."
+        return f"{label} для «{name}». {chosen} В плане: {planned}. Напиши число или выбери."
+    return f"{label} для «{name}». {chosen} Напиши число или выбери."
 
 
 def _planned_load_choice(slot: ExerciseSlot) -> str | None:
     if slot.duration_seconds is not None:
         return f"{slot.duration_seconds} с"
     if slot.reps is not None:
-        return str(slot.reps)
+        return f"{slot.reps} повт"
     return None
+
+
+def _parse_plan_weight_callback(data: str) -> tuple[int, Decimal | None]:
+    """slot_w_plan:<position>[:<kg printed on the button>]."""
+    body = data.split(":", 1)[1]
+    position_raw, sep, weight_raw = body.partition(":")
+    if not position_raw.isdigit():
+        raise ValueError(data)
+    if not sep or not weight_raw:
+        return int(position_raw), None
+    return int(position_raw), Decimal(weight_raw)
 
 
 async def _find_session_slot(
@@ -691,7 +710,12 @@ async def _ask_slot_load(
     )
     await _edit_stored_card(
         message,
-        _load_step_text(_exercise_quote(slot, names), timed=timed, planned=planned),
+        _load_step_text(
+            _exercise_quote(slot, names),
+            timed=timed,
+            planned=planned,
+            chosen_kg=_format_kg(weight_kg),
+        ),
         slot_load_keyboard(position=position, planned_label=planned),
         card_message_id=target_id,
     )
@@ -1698,7 +1722,11 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
     async def handle_slot_w_plan(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         assert callback.data is not None
-        position = int(callback.data.split(":", 1)[1])
+        try:
+            position, button_weight = _parse_plan_weight_callback(callback.data)
+        except (ValueError, InvalidOperation):
+            await callback.answer()
+            return
         if callback.message is None:
             await callback.answer()
             return
@@ -1720,7 +1748,7 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             message=callback.message,
             telegram_user_id=callback.from_user.id,
             position=position,
-            weight_kg=slot.weight_kg,
+            weight_kg=button_weight if button_weight is not None else slot.weight_kg,
             card_message_id=card_message_id,
         )
         await callback.answer()

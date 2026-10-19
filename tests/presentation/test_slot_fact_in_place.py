@@ -189,7 +189,7 @@ async def test_weight_step_edits_the_same_card() -> None:
     text, markup = card.edits[0]
     assert text == f"Вес для «{_QUOTED}». В плане: 16 кг. Напиши число или выбери."
     assert _texts(markup) == ["Как в плане · 16 кг", "Без веса", "⬅️ Назад"]
-    assert _callbacks(markup) == ["slot_w_plan:2", "slot_w_none:2", "slot_card:2"]
+    assert _callbacks(markup) == ["slot_w_plan:2:16", "slot_w_none:2", "slot_card:2"]
     assert not _legacy(markup)
     assert flow.expected_input == ExpectedInput.SLOT_WEIGHT
     assert flow.expected_field == "@15"
@@ -226,8 +226,8 @@ async def test_plan_weight_then_back_returns_to_the_weight_step() -> None:
 
     assert card.answers == []
     text, markup = card.edits[-1]
-    assert text == f"Повторы для «{_QUOTED}». В плане: 10. Напиши число или выбери."
-    assert _texts(markup) == ["Как в плане · 10", "⬅️ Назад"]
+    assert text == f"Повторы для «{_QUOTED}». Вес: 16 кг. В плане: 10 повт. Напиши число или выбери."
+    assert _texts(markup) == ["Как в плане · 10 повт", "⬅️ Назад"]
     assert _callbacks(markup) == ["slot_r_plan:2", "slot_fact:2"]
     assert flow.expected_input == ExpectedInput.SLOT_LOAD
     assert flow.expected_field == "16@15"
@@ -281,8 +281,8 @@ async def test_typed_numbers_edit_the_stored_card_and_fill_the_fact() -> None:
     assert len(bot.edits) == 1
     chat_id, message_id, text, markup, parse_mode = bot.edits[0]
     assert (chat_id, message_id, parse_mode) == (9, 15, "HTML")
-    assert text == f"Повторы для «{_QUOTED}». В плане: 10. Напиши число или выбери."
-    assert _texts(markup) == ["Как в плане · 10", "⬅️ Назад"]
+    assert text == f"Повторы для «{_QUOTED}». Вес: 20.5 кг. В плане: 10 повт. Напиши число или выбери."
+    assert _texts(markup) == ["Как в плане · 10 повт", "⬅️ Назад"]
 
     await handle_slot_load_utterance(
         mediator=flow,  # type: ignore[arg-type]
@@ -315,9 +315,56 @@ async def test_timed_slot_asks_for_time_on_the_same_card() -> None:
 
     assert card.answers == []
     text, markup = card.edits[-1]
-    assert text == f"Время для «{_QUOTED}». В плане: 45 с. Напиши число или выбери."
+    assert text == f"Время для «{_QUOTED}». Вес: 16 кг. В плане: 45 с. Напиши число или выбери."
     assert _texts(markup) == ["Как в плане · 45 с", "⬅️ Назад"]
     assert _callbacks(markup) == ["slot_r_plan:2", "slot_fact:2"]
+
+
+async def test_plan_weight_button_keeps_that_weight_on_the_same_message() -> None:
+    """«Как в плане · N кг» must not open another weight confirm with a different number."""
+    flow = _Flow(_slot(weight_kg=Decimal("22.5"), reps=8))
+    card = _Card()
+    router = _router(flow)
+    await _handler(router, "handle_slot_fact")(_Tap("slot_fact:2", card))
+    _, weight_markup = card.edits[-1]
+    assert _texts(weight_markup)[0] == "Как в плане · 22.5 кг"
+    plan_callback = _callbacks(weight_markup)[0]
+
+    replaced = flow.slot.model_copy(update={"weight_kg": Decimal("30")})
+    flow.slot = replaced
+    flow.document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Грудь", position=1, slots=[replaced])],
+    )
+    await _handler(router, "handle_slot_w_plan")(_Tap(plan_callback, card))
+
+    assert card.answers == []
+    assert len(card.edits) == 2
+    text, markup = card.edits[-1]
+    labels = _texts(markup)
+    assert text == f"Повторы для «{_QUOTED}». Вес: 22.5 кг. В плане: 8 повт. Напиши число или выбери."
+    assert "30" not in text
+    assert "Вес для" not in text
+    assert "Укажи" not in text
+    assert labels == ["Как в плане · 8 повт", "⬅️ Назад"]
+    assert not any("кг" in label for label in labels)
+    assert flow.expected_input == ExpectedInput.SLOT_LOAD
+    assert flow.expected_field == "22.5@15"
+    assert flow.recorded == []
+
+    await _handler(router, "handle_slot_r_plan")(_Tap("slot_r_plan:2", card))
+
+    assert card.answers == []
+    assert len(flow.recorded) == 1
+    assert flow.recorded[0].weight_kg == Decimal("22.5")
+    assert flow.recorded[0].reps == 8
+    done_text, done_markup = card.edits[-1]
+    assert "Повторы для" not in done_text
+    assert "Вес для" not in done_text
+    assert "Факт: 3×8 · 22.5 кг" in done_text
+    assert "30" not in done_text.split("Факт:", 1)[1]
+    assert _texts(done_markup)[0] == "✅ Выполнено"
+    assert card.parse_modes[-1] == "HTML"
 
 
 async def test_missing_plan_weight_omits_the_plan_button() -> None:

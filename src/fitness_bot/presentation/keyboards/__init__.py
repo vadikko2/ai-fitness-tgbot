@@ -1415,7 +1415,7 @@ def slot_weight_keyboard(*, position: int, planned_weight_kg: str | None = None)
             [
                 InlineKeyboardButton(
                     text=f"Как в плане · {planned_weight_kg} кг",
-                    callback_data=f"slot_w_plan:{position}",
+                    callback_data=f"slot_w_plan:{position}:{planned_weight_kg}",
                 ),
             ],
         )
