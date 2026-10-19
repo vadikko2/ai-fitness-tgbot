@@ -41,12 +41,14 @@ class _Message:
     def __init__(self) -> None:
         self.answers: list[tuple[str, object]] = []
         self.edits: list[tuple[str, object]] = []
+        self.edit_modes: list[object] = []
 
     async def answer(self, text: str, reply_markup=None, **_: object) -> None:
         self.answers.append((text, reply_markup))
 
-    async def edit_text(self, text: str, reply_markup=None, **_: object) -> None:
+    async def edit_text(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.edits.append((text, reply_markup))
+        self.edit_modes.append(kwargs.get("parse_mode"))
 
 
 class _Mediator:
@@ -134,6 +136,7 @@ async def test_similar_screen_lists_alternatives_and_wraps_paging() -> None:
     assert message.answers == []
     text, markup = message.edits[0]
     assert text == "Вместо «Жим &lt;лёжа&gt;»"
+    assert message.edit_modes == ["HTML"]
     assert "Можно сделать" not in text
     assert "slot_alt:1:0" in _callbacks(markup)
     assert "slot_card:1" in _callbacks(markup)
@@ -172,14 +175,16 @@ class _Card:
         self.answers: list[tuple[str, object]] = []
         self.edits: list[tuple[str, object]] = []
         self.reply_markup = session_exercise_actions_keyboard(position=position)
-        self.html_text = "<b>Жим штанги</b>\n<blockquote>Лягте на скамью.</blockquote>"
+        self.html_text = "<b>Жим штанги</b>\n\n✍️ <b>Техника</b>\nЛягте на скамью."
         self.text = self.html_text
+        self.parse_modes: list[object] = []
 
     async def answer(self, text: str, reply_markup=None, **_: object) -> None:
         self.answers.append((text, reply_markup))
 
-    async def edit_text(self, text: str, reply_markup=None, **_: object) -> None:
+    async def edit_text(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.edits.append((text, reply_markup))
+        self.parse_modes.append(kwargs.get("parse_mode"))
         self.html_text = text
         self.text = text
         self.reply_markup = reply_markup
@@ -295,6 +300,7 @@ async def test_similar_picker_edits_the_same_card() -> None:
 
     assert card.answers == []
     assert len(card.edits) == 1
+    assert card.parse_modes == ["HTML"]
     text, markup = card.edits[0]
     assert text == "Вместо «Жим штанги»"
     assert "Лягте" not in text
@@ -311,12 +317,17 @@ async def test_picking_alternative_swaps_into_the_same_card() -> None:
     await _handler(router, "handle_slot_swap")(_Tap(f"slot_swap:2:{flow.alt_id}", card))
 
     assert card.answers == []
+    assert card.parse_modes == ["HTML", "HTML"]
     text, markup = card.edits[-1]
     assert text.count("Держи гантели.") == 1
     assert "<b>Жим гантелей</b>" in text
-    assert "<i>Подходы:</i> 4" in text
-    assert "<i>Повторы:</i> 8" in text
-    assert "<i>Вес:</i> 22 кг" in text
+    assert "💪 <b>Мышцы</b>\nгрудь" in text
+    assert "📋 <b>План</b>\nПовторы: 4 × 8\nВес: 22 кг\nОтдых: 90 с\nУсилие: 7" in text
+    assert "✍️ <b>Техника</b>\nДержи гантели." in text
+    assert "<blockquote>" not in text
+    assert "<i>" not in text
+    assert "<code>" not in text
+    assert "<pre>" not in text
     assert "Вернуть" not in text
     assert "программе" not in text
     assert _texts(markup) == ["✅ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
@@ -335,8 +346,15 @@ async def test_back_restores_the_original_card_without_swapping() -> None:
     await _handler(router, "handle_slot_card")(_Tap("slot_card:2", card))
 
     assert card.answers == []
+    assert card.parse_modes == ["HTML", "HTML"]
     text, markup = card.edits[-1]
     assert "<b>Жим штанги</b>" in text
+    assert "💪 <b>Мышцы</b>\nгрудь" in text
+    assert "✍️ <b>Техника</b>\nЛягте на скамью." in text
+    assert "<blockquote>" not in text
+    assert "<i>" not in text
+    assert "<code>" not in text
+    assert "<pre>" not in text
     assert text.count("Лягте на скамью.") == 1
     assert _texts(markup) == ["✅ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
     assert not any(isinstance(item, SwapSessionSlotExerciseCommand) for item in flow.requests)
@@ -350,6 +368,7 @@ async def test_more_button_edits_the_next_names() -> None:
     await _handler(router, "handle_slot_alt")(_Tap("slot_alt:2:3", card))
 
     assert card.answers == []
+    assert card.parse_modes == ["HTML", "HTML"]
     text, markup = card.edits[-1]
     assert text == "Вместо «Жим штанги»"
     assert _texts(markup) == ["Жим в тренажёре", "Отжимания на брусьях", "Ещё", "⬅️ Назад"]

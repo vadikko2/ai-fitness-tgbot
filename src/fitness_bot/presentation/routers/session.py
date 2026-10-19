@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from aiogram import F, Router
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, LinkPreviewOptions, Message
 from cqrs import RequestMediator
@@ -92,7 +93,7 @@ from fitness_bot.service.models.queries.users import GetWorkflowQuery
 
 WELLBEING_ADAPT_EDIT_UTTERANCE = "Подстрой сегодняшнюю тренировку под моё самочувствие."
 _NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
-_FACT_MARK = "<i>Факт:</i>"
+_FACT_MARK = "Факт:"
 
 
 def _chat_message(message: object) -> Message | None:
@@ -397,7 +398,12 @@ async def _edit_in_place(message: object, text: str, reply_markup: InlineKeyboar
     if editor is None:
         return
     try:
-        await editor(text, reply_markup=reply_markup, link_preview_options=_NO_PREVIEW)
+        await editor(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML,
+            link_preview_options=_NO_PREVIEW,
+        )
     except TelegramBadRequest:
         return
 
@@ -532,7 +538,12 @@ async def _edit_exercise_card(
         )
         try:
             if text is not None and getattr(message, "edit_text", None) is not None:
-                await message.edit_text(text, reply_markup=markup, link_preview_options=_NO_PREVIEW)
+                await message.edit_text(
+                    text,
+                    reply_markup=markup,
+                    parse_mode=ParseMode.HTML,
+                    link_preview_options=_NO_PREVIEW,
+                )
                 return
             editor = getattr(message, "edit_reply_markup", None)
             if editor is not None:
@@ -554,6 +565,7 @@ async def _edit_exercise_card(
                 chat_id=chat_id,
                 message_id=card_message_id,
                 reply_markup=markup,
+                parse_mode=ParseMode.HTML,
                 link_preview_options=_NO_PREVIEW,
             )
             return

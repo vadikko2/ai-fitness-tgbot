@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
+from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardMarkup, LinkPreviewOptions
 
 from fitness_bot.domain.program_catalog import training_style_label
@@ -40,20 +41,24 @@ def format_planned_exercise_message(
 ) -> str:
     """Catalog text that exists, plus the slot's sets / reps / weight.
 
-    The name is its own line. Muscles and the plan are labeled lines. Technique
-    is a blockquote of one or two sentences. Video links come last.
+    Bold name, then emoji sections for muscles, the plan, technique, and videos.
+    One newline between sections, plan rows, technique paragraphs, and video
+    links. A section is left out when it has nothing to show.
     """
     blocks = [f"<b>{html.escape(name.strip() or 'Упражнение')}</b>"]
-    meta = _meta_lines(slot, primary_muscles, secondary_muscles)
-    if meta:
-        blocks.append(meta)
+    muscles = _muscle_section(primary_muscles, secondary_muscles)
+    if muscles:
+        blocks.append(muscles)
+    plan = _plan_section(slot)
+    if plan:
+        blocks.append(plan)
     technique_text = _technique_blocks(technique)
     if technique_text:
         blocks.append(technique_text)
-    links = _video_links(videos)
+    links = _video_section(videos)
     if links:
         blocks.append(links)
-    return "\n\n".join(blocks)
+    return "\n".join(blocks)
 
 
 def format_day_warmup_message(warmup: str) -> str | None:
@@ -133,6 +138,7 @@ async def send_planned_day_pack(
         await message.answer(
             text,
             reply_markup=markup,
+            parse_mode=ParseMode.HTML,
             link_preview_options=_LINK_PREVIEW_OFF,
         )
 
@@ -209,31 +215,54 @@ def slot_actual_differs_from_plan(slot: ExerciseSlot) -> bool:
     )
 
 
-def _meta_lines(
-    slot: ExerciseSlot,
-    primary: Sequence[str],
-    secondary: Sequence[str],
-) -> str | None:
-    lines: list[str] = []
+def _section(emoji: str, title: str, body: str) -> str:
+    return f"{emoji} <b>{title}</b>\n{body}"
+
+
+def _muscle_section(primary: Sequence[str], secondary: Sequence[str]) -> str | None:
     muscles = _muscle_names(primary, secondary)
-    if muscles:
-        lines.append("<i>Мышцы:</i> " + ", ".join(html.escape(item) for item in muscles))
-    lines.append(f"<i>Подходы:</i> {slot.sets}")
-    if slot.reps is not None:
-        lines.append(f"<i>Повторы:</i> {slot.reps}")
-    elif slot.duration_seconds is not None:
-        lines.append(f"<i>Время:</i> {slot.duration_seconds} с")
-    if slot.weight_kg is not None:
-        lines.append(f"<i>Вес:</i> {html.escape(_format_kg(slot.weight_kg))} кг")
+    if not muscles:
+        return None
+    body = ", ".join(html.escape(item) for item in muscles)
+    return _section("💪", "Мышцы", body)
+
+
+def _plan_section(slot: ExerciseSlot) -> str | None:
+    lines: list[str] = []
+    reps = _format_reps_line(slot)
+    if reps:
+        lines.append(reps)
+    load = _format_load_line(slot)
+    if load:
+        lines.append(load)
     if slot.rest_seconds:
-        lines.append(f"<i>Отдых:</i> {slot.rest_seconds} с")
+        lines.append(f"Отдых: {slot.rest_seconds} с")
     if slot.rpe:
-        lines.append(f"<i>RPE:</i> {slot.rpe}")
+        lines.append(f"Усилие: {slot.rpe}")
     if slot.actual is not None and slot_actual_differs_from_plan(slot):
-        lines.append("<i>Факт:</i> " + html.escape(_format_actual_load(slot.actual)))
+        lines.append("Факт: " + html.escape(_format_actual_load(slot.actual)))
     if not lines:
         return None
-    return "\n".join(lines)
+    return _section("📋", "План", "\n".join(lines))
+
+
+def _format_reps_line(slot: ExerciseSlot) -> str | None:
+    if slot.reps is None:
+        return None
+    if slot.sets:
+        return f"Повторы: {slot.sets} × {slot.reps}"
+    return f"Повторы: {slot.reps}"
+
+
+def _format_load_line(slot: ExerciseSlot) -> str | None:
+    """Weight for a loaded slot, duration when the slot is timed. Never both."""
+    if slot.duration_seconds is not None:
+        if slot.sets:
+            return f"Время: {slot.sets} × {slot.duration_seconds} с"
+        return f"Время: {slot.duration_seconds} с"
+    if slot.weight_kg is not None:
+        return f"Вес: {html.escape(_format_kg(slot.weight_kg))} кг"
+    return None
 
 
 def _format_actual_load(actual: SlotActual) -> str:
@@ -278,18 +307,28 @@ def _technique_blocks(technique: str) -> str | None:
     split = len(paragraphs) > 1 and bool(re.search(r"[.!?…]", raw))
     split = split or any(len(sentences) > 1 for sentences in groups)
     if not split:
-        return f"<blockquote>{html.escape(raw)}</blockquote>"
-    chunks: list[str] = []
-    for sentences in groups:
-        for index in range(0, len(sentences), 2):
-            chunk = " ".join(sentences[index : index + 2])
-            chunks.append(f"<blockquote>{html.escape(chunk)}</blockquote>")
-    return "\n\n".join(chunks)
+        parts = [part.strip() for part in _PARAGRAPHS.split(raw) if part.strip()]
+        body = html.escape("\n".join(parts))
+    else:
+        chunks: list[str] = []
+        for sentences in groups:
+            for index in range(0, len(sentences), 2):
+                chunk = " ".join(sentences[index : index + 2])
+                chunks.append(html.escape(chunk))
+        body = "\n".join(chunks)
+    return _section("✍️", "Техника", body)
 
 
 def _sentences(paragraph: str) -> list[str]:
     pieces = [piece.strip() for piece in _SENTENCE_SPLIT.split(paragraph) if piece.strip()]
     return pieces or [paragraph]
+
+
+def _video_section(videos: Sequence[tuple[str, str, str]]) -> str | None:
+    links = _video_links(videos)
+    if not links:
+        return None
+    return _section("▶️", "Видео", links)
 
 
 def _video_links(videos: Sequence[tuple[str, str, str]]) -> str | None:

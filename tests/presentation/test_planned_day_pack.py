@@ -42,17 +42,48 @@ def test_exercise_message_shows_catalog_fields_and_escapes() -> None:
         ],
     )
     assert text.split("\n", 1)[0] == "<b>Жим &lt;лёжа&gt;</b>"
-    assert "<i>Мышцы:</i> грудь, трицепс" in text
-    assert "<i>Подходы:</i> 4" in text
-    assert "<i>Повторы:</i> 8" in text
-    assert "<i>Вес:</i> 60 кг" in text
-    assert "<i>Отдых:</i> 90 с" in text
-    assert "<i>RPE:</i> 7" in text
-    assert "<blockquote>Лягте на скамью.</blockquote>" in text
-    assert "<blockquote>Не бросайте гриф.</blockquote>" in text
-    assert 'YouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in text
+    assert "\n\n" not in text
+    assert "💪 <b>Мышцы</b>\nгрудь, трицепс" in text
+    assert "📋 <b>План</b>\nПовторы: 4 × 8\nВес: 60 кг\nОтдых: 90 с\nУсилие: 7" in text
+    assert "✍️ <b>Техника</b>\nЛягте на скамью.\nНе бросайте гриф." in text
+    assert '▶️ <b>Видео</b>\nYouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in text
+    assert "<i>" not in text
+    assert "<blockquote>" not in text
+    assert "<code>" not in text
+    assert "<pre>" not in text
     assert "javascript:" not in text
     assert "мимо" not in text
+
+
+def test_cable_extension_card_is_one_line_between_labeled_rows() -> None:
+    text = format_planned_exercise_message(
+        _slot(
+            position=1,
+            exercise_id=uuid4(),
+            sets=3,
+            reps=12,
+            weight_kg=Decimal("20"),
+            rest_seconds=60,
+            rpe=6,
+        ),
+        name="Разгибание на блоке с V-рукоятью",
+        primary_muscles=["трицепс"],
+    )
+    assert text == (
+        "<b>Разгибание на блоке с V-рукоятью</b>\n"
+        "💪 <b>Мышцы</b>\n"
+        "трицепс\n"
+        "📋 <b>План</b>\n"
+        "Повторы: 3 × 12\n"
+        "Вес: 20 кг\n"
+        "Отдых: 60 с\n"
+        "Усилие: 6"
+    )
+    assert "<blockquote>" not in text
+    assert "<i>" not in text
+    assert "<code>" not in text
+    assert "<pre>" not in text
+    assert "Если в каталоге" not in text
 
 
 def test_exercise_message_shows_fact_only_when_it_differs() -> None:
@@ -66,8 +97,12 @@ def test_exercise_message_shows_fact_only_when_it_differs() -> None:
         name="Жим",
     )
     assert "Факт" not in same
-    assert "<i>Вес:</i> 60 кг" in changed
-    assert "<i>Факт:</i> 4×6 · 70 кг" in changed
+    assert "Мышцы" not in same
+    assert "Повторы: 4 × 8" in changed
+    assert "Вес: 60 кг" in changed
+    assert "Усилие: 7\nФакт: 4×6 · 70 кг" in changed
+    assert "\n\n" not in changed
+    assert "<i>" not in changed
 
 
 def test_sparse_exercise_keeps_name_and_prescription() -> None:
@@ -87,15 +122,16 @@ def test_sparse_exercise_keeps_name_and_prescription() -> None:
         primary_muscles=["кор"],
     )
     assert text.split("\n", 1)[0] == "<b>Планка</b>"
-    assert "<i>Мышцы:</i> кор" in text
-    assert "<i>Подходы:</i> 3" in text
-    assert "<i>Время:</i> 40 с" in text
-    assert "<i>Отдых:</i> 45 с" in text
-    assert "<i>RPE:</i> 6" in text
+    assert "💪 <b>Мышцы</b>\nкор" in text
+    assert "📋 <b>План</b>\nВремя: 3 × 40 с\nОтдых: 45 с\nУсилие: 6" in text
     assert "Повторы" not in text
+    assert "Вес" not in text
     assert "кг" not in text
-    assert "техник" not in text.casefold()
+    assert "\n\n" not in text
+    assert "Техника" not in text
+    assert "Видео" not in text
     assert "<blockquote>" not in text
+    assert "<i>" not in text
     assert "<a " not in text
 
 
@@ -105,15 +141,16 @@ def test_technique_is_split_on_sentences_and_left_whole_without_them() -> None:
         name="Присед",
         technique="Встань прямо. Смотри вперёд. Выдох на усилии.",
     )
-    assert "<blockquote>Встань прямо. Смотри вперёд.</blockquote>" in grouped
-    assert "<blockquote>Выдох на усилии.</blockquote>" in grouped
+    assert "✍️ <b>Техника</b>\nВстань прямо. Смотри вперёд.\nВыдох на усилии." in grouped
+    assert "<blockquote>" not in grouped
     whole = format_planned_exercise_message(
         _slot(position=1, exercise_id=uuid4()),
         name="Планка",
         technique="держи корпус ровно и не прогибай поясницу",
     )
-    assert whole.count("<blockquote>") == 1
-    assert "<blockquote>держи корпус ровно и не прогибай поясницу</blockquote>" in whole
+    assert whole.count("✍️") == 1
+    assert "✍️ <b>Техника</b>\nдержи корпус ровно и не прогибай поясницу" in whole
+    assert "<blockquote>" not in whole
 
 
 async def test_pack_sends_in_order_and_sleeps_between_messages() -> None:
@@ -142,7 +179,9 @@ async def test_pack_sends_in_order_and_sleeps_between_messages() -> None:
 
     class _Message:
         async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
-            calls.append(("send", text, reply_markup, kwargs.get("link_preview_options")))
+            calls.append(
+                ("send", text, reply_markup, kwargs.get("link_preview_options"), kwargs.get("parse_mode")),
+            )
 
     async def _sleep(seconds: float) -> None:
         calls.append(("sleep", seconds))
@@ -173,14 +212,16 @@ async def test_pack_sends_in_order_and_sleeps_between_messages() -> None:
     assert "Суставы &lt;плеч&gt;" in texts[0]
     assert "<b>Жим лёжа</b>" in texts[1]
     assert "Лягте на скамью." in texts[1]
-    assert 'Rutube: <a href="https://rutube.ru/video/demo/">Демо</a>' in texts[1]
+    assert '▶️ <b>Видео</b>\nRutube: <a href="https://rutube.ru/video/demo/">Демо</a>' in texts[1]
     assert "<b>Планка</b>" in texts[2]
     assert texts[3] == "К программе или в меню."
     markups = [item[2] for item in calls if item[0] == "send"]
     assert markups[0] is None and markups[1] is None and markups[2] is None
     callbacks = [button.callback_data for row in markups[3].inline_keyboard for button in row]
     assert callbacks == ["prog", "home"]
-    assert all(item[3] is not None and item[3].is_disabled for item in calls if item[0] == "send")
+    sends = [item for item in calls if item[0] == "send"]
+    assert all(item[3] is not None and item[3].is_disabled for item in sends)
+    assert all(item[4] == "HTML" for item in sends)
 
 
 async def test_prog_view_day_pack_and_old_slot_callbacks() -> None:
@@ -203,9 +244,11 @@ async def test_prog_view_day_pack_and_old_slot_callbacks() -> None:
     class _Message:
         def __init__(self) -> None:
             self.answers: list[str] = []
+            self.parse_modes: list[object] = []
 
         async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
             self.answers.append(text)
+            self.parse_modes.append(kwargs.get("parse_mode"))
             calls.append(("send", text, reply_markup))
 
     class _User:
@@ -255,11 +298,14 @@ async def test_prog_view_day_pack_and_old_slot_callbacks() -> None:
     assert [item[0] for item in calls] == ["send", "sleep", "send", "sleep", "send"]
     assert calls[1] == ("sleep", EXERCISE_PACK_PAUSE_SECONDS)
     assert message.answers[1].split("\n", 1)[0] == "<b>Присед</b>"
-    assert "<i>Мышцы:</i> квадрицепс, ягодицы" in message.answers[1]
-    assert "<i>Подходы:</i> 4" in message.answers[1]
-    assert "<i>Повторы:</i> 8" in message.answers[1]
-    assert "<i>Вес:</i> 40 кг" in message.answers[1]
-    assert "<blockquote>Стопы на ширине плеч.</blockquote>" in message.answers[1]
+    assert "💪 <b>Мышцы</b>\nквадрицепс, ягодицы" in message.answers[1]
+    assert "📋 <b>План</b>\nПовторы: 4 × 8\nВес: 40 кг\nОтдых: 90 с\nУсилие: 7" in message.answers[1]
+    assert "✍️ <b>Техника</b>\nСтопы на ширине плеч." in message.answers[1]
+    assert "<blockquote>" not in message.answers[1]
+    assert "<i>" not in message.answers[1]
+    assert "<code>" not in message.answers[1]
+    assert "<pre>" not in message.answers[1]
+    assert message.parse_modes == ["HTML", "HTML", "HTML"]
     labels = [button.callback_data for row in calls[-1][2].inline_keyboard for button in row]
     assert "prog_view_slot" not in " ".join(labels)
     assert labels == ["prog", "home"]

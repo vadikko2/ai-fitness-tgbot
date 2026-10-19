@@ -61,9 +61,11 @@ class _Mediator:
 class _Message:
     def __init__(self) -> None:
         self.answers: list[tuple[str, object]] = []
+        self.parse_modes: list[object] = []
 
-    async def answer(self, text: str, reply_markup=None, **_: object) -> None:
+    async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.answers.append((text, reply_markup))
+        self.parse_modes.append(kwargs.get("parse_mode"))
 
 
 async def _seed(uow: InMemoryUow, *, weekday: int) -> None:
@@ -154,8 +156,16 @@ async def test_one_tap_sends_exercise_pack_then_one_log_button() -> None:
     assert sleeps == [EXERCISE_PACK_PAUSE_SECONDS, EXERCISE_PACK_PAUSE_SECONDS]
     assert texts[0].split("\n", 1)[0] == "<b>Жим лёжа</b>"
     assert texts[1].split("\n", 1)[0] == "<b>Тяга штанги</b>"
-    assert "<i>Мышцы:</i> грудь" in texts[0]
-    assert "<i>Подходы:</i> 3" in texts[0]
+    assert "💪 <b>Мышцы</b>\nгрудь" in texts[0]
+    assert "📋 <b>План</b>\nПовторы: 3 × 8\nОтдых: 90 с\nУсилие: 7" in texts[0]
+    assert "Вес:" not in texts[0]
+    assert "\n\n" not in texts[0]
+    assert message.parse_modes == ["HTML", "HTML", "HTML"]
+    for text in texts[:2]:
+        assert "<blockquote>" not in text
+        assert "<i>" not in text
+        assert "<code>" not in text
+        assert "<pre>" not in text
     assert "Тренировка сегодня" not in "\n".join(texts)
     assert "Поехали" not in "\n".join(texts)
     assert "Продолжаем" not in "\n".join(texts)

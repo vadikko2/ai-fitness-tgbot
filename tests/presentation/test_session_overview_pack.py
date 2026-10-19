@@ -64,9 +64,11 @@ _CLOSER_LABELS = ["Выполнить все", "Завершить тренир�
 class _Message:
     def __init__(self) -> None:
         self.answers: list[tuple[str, object]] = []
+        self.parse_modes: list[object] = []
 
     async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.answers.append((text, reply_markup))
+        self.parse_modes.append(kwargs.get("parse_mode"))
 
 
 class _User:
@@ -168,12 +170,16 @@ async def test_session_pack_is_calm_messages_then_one_next_exercise() -> None:
     assert sleeps == [EXERCISE_PACK_PAUSE_SECONDS] * (len(texts) - 1)
     assert texts[0] == "<b>Разминка</b>\nСуставы &lt;плеч&gt;"
     assert texts[2].split("\n", 1)[0] == "<b>Жим &lt;лёжа&gt;</b>"
-    assert "<i>Мышцы:</i> грудь" in texts[2]
-    assert "<i>Подходы:</i> 4" in texts[2]
-    assert "<blockquote>Лягте на скамью.</blockquote>" in texts[2]
-    assert "<blockquote>Не бросайте гриф.</blockquote>" in texts[2]
-    assert 'YouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in texts[2]
+    assert "💪 <b>Мышцы</b>\nгрудь" in texts[2]
+    assert "📋 <b>План</b>\nПовторы: 4 × 8\nВес: 60 кг\nОтдых: 90 с\nУсилие: 7" in texts[2]
+    assert "✍️ <b>Техника</b>\nЛягте на скамью.\nНе бросайте гриф." in texts[2]
+    assert '▶️ <b>Видео</b>\nYouTube: <a href="https://youtu.be/abc">Жим &lt;демо&gt;</a>' in texts[2]
+    assert "<blockquote>" not in texts[2]
+    assert "<i>" not in texts[2]
+    assert "<code>" not in texts[2]
+    assert "<pre>" not in texts[2]
     assert "javascript:" not in texts[2]
+    assert message.parse_modes == ["HTML"] * len(texts)
     assert "мимо" not in texts[2]
     assert "!" not in texts[2]
     assert texts[3] == "<b>Заминка</b>\nДыхание &lt;спокойное&gt;"
@@ -375,12 +381,14 @@ class _EditableMessage(_Message):
         self.html_text = html_text
         self.text = html_text
         self.edited_text: str | None = None
+        self.edit_parse_mode: object = None
 
     async def edit_reply_markup(self, reply_markup=None, **kwargs: object) -> None:
         self.reply_markup = reply_markup
 
     async def edit_text(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.edited_text = text
+        self.edit_parse_mode = kwargs.get("parse_mode")
         self.html_text = text
         self.text = text
         self.reply_markup = reply_markup
@@ -456,14 +464,24 @@ async def test_done_button_undoes_custom_fact_and_drops_it_from_the_card() -> No
     )
     mediator = _ToggleMediator(document)
     router = create_session_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
-    message = _EditableMessage(position=2, html_text="<b>Жим</b>\n<i>Факт:</i> 4×6 · 70 кг")
+    message = _EditableMessage(
+        position=2,
+        html_text="<b>Жим</b>\n\n📋 <b>План</b>\n4 × 8 · 60 кг\nФакт: 4×6 · 70 кг",
+    )
     message.reply_markup = session_exercise_actions_keyboard(position=2, confirmed=True)
 
     await _handler(router, "handle_slot_undo")(_Callback("slot_undo:2", message))
 
     assert message.answers == []
     assert message.edited_text is not None
-    assert "<i>Факт:</i>" not in message.edited_text
+    assert message.edit_parse_mode == "HTML"
+    assert message.edited_text.startswith("<b>")
+    assert "📋 <b>План</b>" in message.edited_text
+    assert "<blockquote>" not in message.edited_text
+    assert "<i>" not in message.edited_text
+    assert "<code>" not in message.edited_text
+    assert "<pre>" not in message.edited_text
+    assert "Факт:" not in message.edited_text
     assert _button_texts(message.reply_markup) == _OPEN_LABELS
     assert any(isinstance(item, ClearSlotActualCommand) for item in mediator.requests)
 
@@ -471,6 +489,7 @@ async def test_done_button_undoes_custom_fact_and_drops_it_from_the_card() -> No
 class _Bot:
     def __init__(self) -> None:
         self.text_edits: list[tuple[object, ...]] = []
+        self.text_parse_modes: list[object] = []
         self.markup_edits: list[tuple[object, ...]] = []
 
     async def edit_message_text(
@@ -483,6 +502,7 @@ class _Bot:
         **kwargs: object,
     ) -> None:
         self.text_edits.append((chat_id, message_id, text, reply_markup))
+        self.text_parse_modes.append(kwargs.get("parse_mode"))
 
     async def edit_message_reply_markup(
         self,
@@ -551,8 +571,17 @@ async def test_custom_log_marks_the_same_card_done_without_a_new_bubble() -> Non
     assert len(bot.text_edits) == 1
     chat_id, message_id, text, markup = bot.text_edits[0]
     assert (chat_id, message_id) == (9, 15)
-    assert "<i>Вес:</i> 60 кг" in text
-    assert "<i>Факт:</i> 4×8 · 70 кг" in text
+    assert bot.text_parse_modes == ["HTML"]
+    assert text.startswith("<b>")
+    assert "📋 <b>План</b>" in text
+    assert "<blockquote>" not in text
+    assert "<i>" not in text
+    assert "<code>" not in text
+    assert "<pre>" not in text
+    assert "Повторы: 4 × 8" in text
+    assert "Вес: 60 кг" in text
+    assert "Факт: 4×8 · 70 кг" in text
+    assert "\n\n" not in text
     assert _button_texts(markup) == _DONE_LABELS
     assert _callbacks(markup) == _exercise_actions(1, confirmed=True)
     recorded = [item for item in mediator.requests if isinstance(item, RecordSlotActualCommand)]
