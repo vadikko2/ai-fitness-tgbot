@@ -312,10 +312,32 @@ def _message_html(message: object) -> str:
     return f"{html_text or ''}{plain or ''}"
 
 
-def _planned_load_label(slot: ExerciseSlot) -> str:
+def _exercise_quote(slot: ExerciseSlot, names: dict[UUID, str]) -> str:
+    raw = names.get(slot.exercise_id) if slot.exercise_id else None
+    if not raw:
+        raw = slot.custom_request or "упражнение"
+    return html.escape(raw.strip() or "упражнение")
+
+
+def _weight_step_text(name: str, planned_kg: str | None) -> str:
+    if planned_kg:
+        return f"Вес для «{name}». В плане: {planned_kg} кг. Напиши число или выбери."
+    return f"Вес для «{name}». Напиши число или выбери."
+
+
+def _load_step_text(name: str, *, timed: bool, planned: str | None) -> str:
+    label = "Время" if timed else "Повторы"
+    if planned:
+        return f"{label} для «{name}». В плане: {planned}. Напиши число или выбери."
+    return f"{label} для «{name}». Напиши число или выбери."
+
+
+def _planned_load_choice(slot: ExerciseSlot) -> str | None:
     if slot.duration_seconds is not None:
-        return f"{slot.duration_seconds}с"
-    return f"{slot.reps} повт."
+        return f"{slot.duration_seconds} с"
+    if slot.reps is not None:
+        return str(slot.reps)
+    return None
 
 
 async def _find_session_slot(
@@ -406,6 +428,35 @@ async def _edit_in_place(message: object, text: str, reply_markup: InlineKeyboar
         )
     except TelegramBadRequest:
         return
+
+
+async def _edit_stored_card(
+    message: object,
+    text: str,
+    reply_markup: InlineKeyboardMarkup,
+    *,
+    card_message_id: int | None,
+) -> None:
+    """Edit the live card. A typed number arrives on another message, so follow the stored id."""
+    current_id = _card_message_id(message)
+    if card_message_id is not None and card_message_id != current_id:
+        bot = getattr(message, "bot", None)
+        chat_id = getattr(getattr(message, "chat", None), "id", None)
+        if bot is None or chat_id is None:
+            return
+        try:
+            await bot.edit_message_text(
+                text,
+                chat_id=chat_id,
+                message_id=card_message_id,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.HTML,
+                link_preview_options=_NO_PREVIEW,
+            )
+        except TelegramBadRequest:
+            return
+        return
+    await _edit_in_place(message, text, reply_markup)
 
 
 async def _edit_live_exercise_card(message: object, *, mediator: RequestMediator, slot: ExerciseSlot) -> None:
@@ -580,13 +631,13 @@ async def _edit_exercise_card(
 
 async def _ask_slot_weight(
     *,
-    jinja_env: Environment,
     mediator: RequestMediator,
     message: Message,
     telegram_user_id: int,
     position: int,
     card_message_id: int | None = None,
 ) -> None:
+    """Weight step of the live card. The card stays the same message."""
     found = await _find_session_slot(mediator, telegram_user_id=telegram_user_id, position=position)
     if found is None:
         await message.answer("Упражнение не найдено.")
@@ -594,25 +645,25 @@ async def _ask_slot_weight(
     _, slot = found
     names = await _load_exercise_names(mediator)
     planned_weight = _format_kg(slot.weight_kg)
+    target_id = card_message_id if card_message_id is not None else _card_message_id(message)
     await mediator.send(
         ExpectInputCommand(
             telegram_user_id=telegram_user_id,
             expected_input=ExpectedInput.SLOT_WEIGHT,
-            expected_field=_draft_field(None, card_message_id),
+            expected_field=_draft_field(None, target_id),
             focus_slot=position,
         ),
     )
-    text = jinja_env.get_template("slot_ask_weight.j2").render(
-        position=position,
-        exercise_name=names.get(slot.exercise_id) if slot.exercise_id else slot.custom_request,
-        planned_weight_kg=planned_weight,
+    await _edit_stored_card(
+        message,
+        _weight_step_text(_exercise_quote(slot, names), planned_weight),
+        slot_weight_keyboard(position=position, planned_weight_kg=planned_weight),
+        card_message_id=target_id,
     )
-    await message.answer(text, reply_markup=slot_weight_keyboard(position=position, planned_weight_kg=planned_weight))
 
 
 async def _ask_slot_load(
     *,
-    jinja_env: Environment,
     mediator: RequestMediator,
     message: Message,
     telegram_user_id: int,
@@ -620,30 +671,30 @@ async def _ask_slot_load(
     weight_kg: Decimal | None,
     card_message_id: int | None = None,
 ) -> None:
+    """Reps or time step on the same card. Weight is already chosen."""
     found = await _find_session_slot(mediator, telegram_user_id=telegram_user_id, position=position)
     if found is None:
         await message.answer("Упражнение не найдено.")
         return
     _, slot = found
     names = await _load_exercise_names(mediator)
-    uses_duration = slot.duration_seconds is not None
-    planned_label = _planned_load_label(slot)
+    timed = slot.duration_seconds is not None
+    planned = _planned_load_choice(slot)
+    target_id = card_message_id if card_message_id is not None else _card_message_id(message)
     await mediator.send(
         ExpectInputCommand(
             telegram_user_id=telegram_user_id,
             expected_input=ExpectedInput.SLOT_LOAD,
-            expected_field=_draft_field(weight_kg, card_message_id),
+            expected_field=_draft_field(weight_kg, target_id),
             focus_slot=position,
         ),
     )
-    text = jinja_env.get_template("slot_ask_load.j2").render(
-        position=position,
-        exercise_name=names.get(slot.exercise_id) if slot.exercise_id else slot.custom_request,
-        uses_duration=uses_duration,
-        planned_label=planned_label,
-        weight_kg=_format_kg(weight_kg),
+    await _edit_stored_card(
+        message,
+        _load_step_text(_exercise_quote(slot, names), timed=timed, planned=planned),
+        slot_load_keyboard(position=position, planned_label=planned),
+        card_message_id=target_id,
     )
-    await message.answer(text, reply_markup=slot_load_keyboard(position=position, planned_label=planned_label))
 
 
 async def _record_slot_actual(
@@ -672,14 +723,15 @@ async def _record_slot_actual(
             weight_kg=weight_kg,
         ),
     )
-    if card_message_id is None:
+    target_id = card_message_id if card_message_id is not None else _card_message_id(message)
+    if target_id is None:
         return
-    await _edit_exercise_card(
+    text = await _render_pack_slot(mediator, result.slot)
+    await _edit_stored_card(
         message,
-        mediator=mediator,
-        slot=result.slot,
-        confirmed=True,
-        card_message_id=card_message_id,
+        text,
+        session_exercise_actions_keyboard(position=result.slot.position, confirmed=True),
+        card_message_id=target_id,
     )
 
 
@@ -1445,6 +1497,12 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         if found is None:
             await callback.answer("Упражнение не найдено.", show_alert=True)
             return
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=callback.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
         _, slot = found
         await _edit_live_exercise_card(callback.message, mediator=mediator, slot=slot)
         await callback.answer()
@@ -1628,7 +1686,6 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         await _ask_slot_weight(
-            jinja_env=jinja_env,
             mediator=mediator,
             message=callback.message,
             telegram_user_id=callback.from_user.id,
@@ -1659,7 +1716,6 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=callback.from_user.id))
         _, card_message_id = _parse_draft_field(workflow.expected_field)
         await _ask_slot_load(
-            jinja_env=jinja_env,
             mediator=mediator,
             message=callback.message,
             telegram_user_id=callback.from_user.id,
@@ -1680,7 +1736,6 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=callback.from_user.id))
         _, card_message_id = _parse_draft_field(workflow.expected_field)
         await _ask_slot_load(
-            jinja_env=jinja_env,
             mediator=mediator,
             message=callback.message,
             telegram_user_id=callback.from_user.id,
@@ -1917,7 +1972,6 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
 
 async def handle_slot_weight_utterance(
     *,
-    jinja_env: Environment,
     mediator: RequestMediator,
     message: Message,
     text: str,
@@ -1935,7 +1989,6 @@ async def handle_slot_weight_utterance(
     workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
     _, card_message_id = _parse_draft_field(workflow.expected_field)
     await _ask_slot_load(
-        jinja_env=jinja_env,
         mediator=mediator,
         message=message,
         telegram_user_id=message.from_user.id,

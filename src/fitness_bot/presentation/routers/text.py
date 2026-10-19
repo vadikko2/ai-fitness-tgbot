@@ -378,7 +378,6 @@ async def handle_user_utterance(
                 )
                 return
             await handle_slot_weight_utterance(
-                jinja_env=jinja_env,
                 mediator=mediator,
                 message=message,
                 text=text,

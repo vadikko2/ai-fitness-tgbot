@@ -1224,7 +1224,7 @@ def nutrition_no_program_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-EXERCISE_DO_LABEL = "✅ Выполнить"
+EXERCISE_DO_LABEL = "▶️ Выполнить"
 EXERCISE_DONE_LABEL = "✅ Выполнено"
 
 
@@ -1408,18 +1408,19 @@ def similar_exercises_keyboard(
 
 
 def slot_weight_keyboard(*, position: int, planned_weight_kg: str | None = None) -> InlineKeyboardMarkup:
+    """Weight step on the live card. «Назад» restores that card."""
     rows: list[list[InlineKeyboardButton]] = []
     if planned_weight_kg:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"✅ Как в плане · {planned_weight_kg} кг",
+                    text=f"Как в плане · {planned_weight_kg} кг",
                     callback_data=f"slot_w_plan:{position}",
                 ),
             ],
         )
-    rows.append([InlineKeyboardButton(text="⚪ Без веса", callback_data=f"slot_w_none:{position}")])
-    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot:{position}")])
+    rows.append([InlineKeyboardButton(text="Без веса", callback_data=f"slot_w_none:{position}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot_card:{position}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1428,17 +1429,18 @@ def slot_load_keyboard(
     position: int,
     planned_label: str | None = None,
 ) -> InlineKeyboardMarkup:
+    """Reps or time step on the same card. «Назад» returns to the weight step."""
     rows: list[list[InlineKeyboardButton]] = []
     if planned_label:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"✅ Как в плане · {planned_label}",
+                    text=f"Как в плане · {planned_label}",
                     callback_data=f"slot_r_plan:{position}",
                 ),
             ],
         )
-    rows.append([InlineKeyboardButton(text="⬅️ К весу", callback_data=f"slot_fact:{position}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot_fact:{position}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

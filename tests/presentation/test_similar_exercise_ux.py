@@ -18,6 +18,7 @@ from fitness_bot.service.models.commands.session import (
     SwapSessionSlotExerciseCommand,
     SwapSessionSlotExerciseCommandResult,
 )
+from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import (
     GetExerciseGuideQuery,
     GetExerciseGuideResult,
@@ -217,6 +218,8 @@ class _Flow:
 
     async def send(self, request: object):
         self.requests.append(request)
+        if isinstance(request, ExpectInputCommand):
+            return None
         if isinstance(request, GetSimilarExercisesQuery):
             if self._blocked == "logged":
                 return GetSimilarExercisesQueryResult(slot_position=request.slot_position, blocked_reason="logged")
@@ -330,7 +333,7 @@ async def test_picking_alternative_swaps_into_the_same_card() -> None:
     assert "<pre>" not in text
     assert "Вернуть" not in text
     assert "программе" not in text
-    assert _texts(markup) == ["✅ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+    assert _texts(markup) == ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
     assert _callbacks(markup) == ["slot_plan:2", "slot_fact:2", "slot_alt:2"]
     swaps = [item for item in flow.requests if isinstance(item, SwapSessionSlotExerciseCommand)]
     assert len(swaps) == 1
@@ -356,7 +359,7 @@ async def test_back_restores_the_original_card_without_swapping() -> None:
     assert "<code>" not in text
     assert "<pre>" not in text
     assert text.count("Лягте на скамью.") == 1
-    assert _texts(markup) == ["✅ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+    assert _texts(markup) == ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
     assert not any(isinstance(item, SwapSessionSlotExerciseCommand) for item in flow.requests)
 
 
