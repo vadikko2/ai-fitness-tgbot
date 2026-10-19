@@ -55,8 +55,8 @@ def _exercise_actions(position: int, *, confirmed: bool = False) -> list[str]:
     return [first, f"slot_fact:{position}", f"slot_alt:{position}"]
 
 
-_OPEN_LABELS = ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
-_DONE_LABELS = ["✅ Выполнено", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+_OPEN_LABELS = ["▶️ Выполнить", "✏️ Изменить вес и повторы", "🔄 Заменить на похожее упражнение"]
+_DONE_LABELS = ["✅ Выполнено", "✏️ Изменить вес и повторы", "🔄 Заменить на похожее упражнение"]
 _CLOSER_ACTIONS = ["sess_plan_all", "sess_fin", "home"]
 _CLOSER_LABELS = ["Выполнить все", "Завершить тренировку", "🏠 В меню"]
 

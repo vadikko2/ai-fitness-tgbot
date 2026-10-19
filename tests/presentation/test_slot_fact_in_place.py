@@ -210,7 +210,7 @@ async def test_weight_back_restores_the_live_card() -> None:
     assert "📋 <b>План</b>\nПовторы: 3 × 10\nВес: 16 кг\nОтдых: 60 с\nУсилие: 7" in text
     assert "\n\n" not in text
     assert "Факт:" not in text
-    assert _texts(markup) == ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+    assert _texts(markup) == ["▶️ Выполнить", "✏️ Изменить вес и повторы", "🔄 Заменить на похожее упражнение"]
     assert _callbacks(markup) == ["slot_plan:2", "slot_fact:2", "slot_alt:2"]
     assert not _legacy(markup)
     assert flow.expected_input == ExpectedInput.NONE

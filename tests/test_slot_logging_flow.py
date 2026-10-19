@@ -134,5 +134,5 @@ def test_slot_actions_keyboard_labels() -> None:
     done_callbacks = [button.callback_data for row in done.inline_keyboard for button in row]
     assert "✅ Выполнено" in done_labels
     assert "slot_undo:3" in done_callbacks
-    assert "✏️ Вес и повторы" in labels
+    assert "✏️ Изменить вес и повторы" in labels
     assert "📖 Как делать" in labels

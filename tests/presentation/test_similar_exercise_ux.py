@@ -333,7 +333,7 @@ async def test_picking_alternative_swaps_into_the_same_card() -> None:
     assert "<pre>" not in text
     assert "Вернуть" not in text
     assert "программе" not in text
-    assert _texts(markup) == ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+    assert _texts(markup) == ["▶️ Выполнить", "✏️ Изменить вес и повторы", "🔄 Заменить на похожее упражнение"]
     assert _callbacks(markup) == ["slot_plan:2", "slot_fact:2", "slot_alt:2"]
     swaps = [item for item in flow.requests if isinstance(item, SwapSessionSlotExerciseCommand)]
     assert len(swaps) == 1
@@ -359,7 +359,7 @@ async def test_back_restores_the_original_card_without_swapping() -> None:
     assert "<code>" not in text
     assert "<pre>" not in text
     assert text.count("Лягте на скамью.") == 1
-    assert _texts(markup) == ["▶️ Выполнить", "✏️ Вес и повторы", "🔄 Похожее упражнение"]
+    assert _texts(markup) == ["▶️ Выполнить", "✏️ Изменить вес и повторы", "🔄 Заменить на похожее упражнение"]
     assert not any(isinstance(item, SwapSessionSlotExerciseCommand) for item in flow.requests)
 
 

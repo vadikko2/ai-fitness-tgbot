@@ -142,7 +142,7 @@ _DONE = "✅ Готово"
 _EDIT_TEXT = "✏️ Изменить текстом"
 FEEL_ADAPT_LABEL = "🙂 Подстроить под самочувствие"
 START_WORKOUT_LABEL = "▶️ Начать тренировку"
-SIMILAR_EXERCISE_LABEL = "🔄 Похожее упражнение"
+SIMILAR_EXERCISE_LABEL = "🔄 Заменить на похожее упражнение"
 WELLBEING_HISTORY_PAGE_SIZE = 10
 
 
@@ -954,7 +954,7 @@ def proposal_slot_keyboard(
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text="✏️ Вес и повторы",
+                text="✏️ Изменить вес и повторы",
                 callback_data=f"pdraft_edit:{day_position}:{slot_position}",
             ),
         ],
@@ -1239,7 +1239,7 @@ def session_exercise_actions_keyboard(*, position: int, confirmed: bool = False)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [exercise_confirm_button(position=position, confirmed=confirmed)],
-            [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
+            [InlineKeyboardButton(text="✏️ Изменить вес и повторы", callback_data=f"slot_fact:{position}")],
             [InlineKeyboardButton(text=SIMILAR_EXERCISE_LABEL, callback_data=f"slot_alt:{position}")],
         ],
     )
@@ -1349,7 +1349,7 @@ def slot_actions_keyboard(
     """swapped_from: (exercise_id, name) of the exercise replaced just now — offers «Вернуть»."""
     rows: list[list[InlineKeyboardButton]] = [
         [exercise_confirm_button(position=position, confirmed=has_actual)],
-        [InlineKeyboardButton(text="✏️ Вес и повторы", callback_data=f"slot_fact:{position}")],
+        [InlineKeyboardButton(text="✏️ Изменить вес и повторы", callback_data=f"slot_fact:{position}")],
     ]
     if can_swap:
         rows.append([InlineKeyboardButton(text=SIMILAR_EXERCISE_LABEL, callback_data=f"slot_alt:{position}")])
