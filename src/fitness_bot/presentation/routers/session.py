@@ -381,52 +381,72 @@ _SIMILAR_BLOCKED_TEXT = {
 }
 
 
-def _swap_weight_line(weight_source: str, weight_kg: Decimal | None) -> str:
-    if weight_source == "program":
-        return "Вес — как в плане."
-    if weight_source == "history":
-        if weight_kg is None:
-            return "В прошлый раз делал без веса."
-        return f"Вес из твоей истории: <b>{_format_kg(weight_kg)} кг</b>."
-    return "Рабочего веса по этому упражнению ещё нет — подбери на первом подходе и запиши через «Вес и повторы»."
+def _parse_slot_swap(data: str) -> tuple[int, UUID] | None:
+    """slot_swap:<position>:<exercise_id>. Incomplete or legacy payloads return None."""
+    parts = data.split(":")
+    if len(parts) != 3 or not parts[1].isdigit() or not parts[2]:
+        return None
+    try:
+        return int(parts[1]), UUID(parts[2])
+    except ValueError:
+        return None
+
+
+async def _edit_in_place(message: object, text: str, reply_markup: InlineKeyboardMarkup) -> None:
+    editor = getattr(message, "edit_text", None)
+    if editor is None:
+        return
+    try:
+        await editor(text, reply_markup=reply_markup, link_preview_options=_NO_PREVIEW)
+    except TelegramBadRequest:
+        return
+
+
+async def _edit_live_exercise_card(message: object, *, mediator: RequestMediator, slot: ExerciseSlot) -> None:
+    """Normal exercise card: catalog text and the three live buttons."""
+    text = await _render_pack_slot(mediator, slot)
+    await _edit_in_place(
+        message,
+        text,
+        session_exercise_actions_keyboard(position=slot.position, confirmed=slot.actual is not None),
+    )
 
 
 async def show_similar_exercises(
     *,
     jinja_env: Environment,
     mediator: RequestMediator,
-    message: Message,
+    message: object,
     telegram_user_id: int,
     position: int,
     offset: int = 0,
-) -> None:
+) -> str | None:
+    """Edit this message into the similar-exercise picker. Return alert text when swap is blocked."""
     result = await mediator.send(
-        GetSimilarExercisesQuery(telegram_user_id=telegram_user_id, slot_position=position, offset=offset),
+        GetSimilarExercisesQuery(
+            telegram_user_id=telegram_user_id,
+            slot_position=position,
+            offset=offset,
+            limit=3,
+        ),
     )
     if result.blocked_reason is not None:
-        await message.answer(
-            _SIMILAR_BLOCKED_TEXT[result.blocked_reason],
-            reply_markup=back_to_slot_keyboard(position=position),
-        )
-        return
-    text = jinja_env.get_template("slot_similar.j2").render(
-        exercise_name=result.exercise_name,
-        primary_muscles=result.primary_muscles,
-        secondary_muscles=result.secondary_muscles,
-        items=result.items,
-    )
+        return _SIMILAR_BLOCKED_TEXT[result.blocked_reason]
+    text = jinja_env.get_template("slot_similar.j2").render(exercise_name=result.exercise_name or "упражнение").strip()
     if result.has_more:
         next_offset: int | None = result.offset + len(result.items)
     else:
         next_offset = 0 if result.offset > 0 else None
-    await message.answer(
+    await _edit_in_place(
+        message,
         text,
-        reply_markup=similar_exercises_keyboard(
+        similar_exercises_keyboard(
             position=position,
             items=[(str(item.exercise_id), item.name) for item in result.items],
             next_offset=next_offset,
         ),
     )
+    return None
 
 
 async def _show_session_card(
@@ -1375,7 +1395,11 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
     async def handle_slot(callback: CallbackQuery) -> None:
         assert callback.from_user is not None
         assert callback.data is not None
-        position = int(callback.data.split(":", 1)[1])
+        position_raw = callback.data.split(":", 1)[1]
+        if not position_raw.isdigit():
+            await callback.answer()
+            return
+        position = int(position_raw)
         await mediator.send(
             ExpectInputCommand(
                 telegram_user_id=callback.from_user.id,
@@ -1394,15 +1418,34 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         )
         await callback.answer()
 
+    @router.callback_query(F.data.startswith("slot_card:"))
+    async def handle_slot_card(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None and callback.data is not None
+        position_raw = callback.data.split(":", 1)[1]
+        if not position_raw.isdigit() or callback.message is None:
+            await callback.answer()
+            return
+        found = await _find_session_slot(
+            mediator,
+            telegram_user_id=callback.from_user.id,
+            position=int(position_raw),
+        )
+        if found is None:
+            await callback.answer("Упражнение не найдено.", show_alert=True)
+            return
+        _, slot = found
+        await _edit_live_exercise_card(callback.message, mediator=mediator, slot=slot)
+        await callback.answer()
+
     @router.callback_query(F.data.startswith("slot_alt:"))
     async def handle_slot_alt(callback: CallbackQuery) -> None:
         assert callback.from_user is not None and callback.data is not None
-        await callback.answer()
         parts = callback.data.split(":")
-        if not isinstance(callback.message, Message) or len(parts) < 2 or not parts[1].isdigit():
+        if callback.message is None or len(parts) < 2 or not parts[1].isdigit():
+            await callback.answer()
             return
         offset = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
-        await show_similar_exercises(
+        alert = await show_similar_exercises(
             jinja_env=jinja_env,
             mediator=mediator,
             message=callback.message,
@@ -1410,52 +1453,42 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             position=int(parts[1]),
             offset=offset,
         )
+        if alert is not None:
+            await callback.answer(alert, show_alert=True)
+            return
+        await callback.answer()
 
     @router.callback_query(F.data.startswith("slot_swap:"))
     async def handle_slot_swap(callback: CallbackQuery) -> None:
         assert callback.from_user is not None and callback.data is not None
-        await callback.answer()
-        if not isinstance(callback.message, Message):
+        parsed = _parse_slot_swap(callback.data)
+        if parsed is None or callback.message is None or getattr(callback.message, "edit_text", None) is None:
+            await callback.answer()
             return
-        _, position_s, exercise_s = callback.data.split(":", 2)
-        position = int(position_s)
+        position, exercise_id = parsed
         try:
             result = await mediator.send(
                 SwapSessionSlotExerciseCommand(
                     telegram_user_id=callback.from_user.id,
                     slot_position=position,
-                    exercise_id=UUID(exercise_s),
+                    exercise_id=exercise_id,
                 ),
             )
         except DomainError:
-            await callback.message.answer(
+            found = await _find_session_slot(
+                mediator,
+                telegram_user_id=callback.from_user.id,
+                position=position,
+            )
+            if found is not None:
+                await _edit_live_exercise_card(callback.message, mediator=mediator, slot=found[1])
+            await callback.answer(
                 "Не получилось заменить: замена возможна во время тренировки и до записи подходов.",
-                reply_markup=back_to_slot_keyboard(position=position),
+                show_alert=True,
             )
             return
-        names = await _load_exercise_names(mediator)
-        new_name = html.escape(names.get(result.slot.exercise_id, "упражнение") if result.slot.exercise_id else "")
-        old_name = names.get(result.previous_exercise_id, "") if result.previous_exercise_id else ""
-        weight_line = _swap_weight_line(result.weight_source, result.slot.weight_kg)
-        if result.matches_program:
-            prefix = f"↩️ Вернул «{new_name}», как в плане. {weight_line}"
-            swapped_from = None
-        else:
-            prefix = (
-                f"🔄 Заменил «{html.escape(old_name)}» на «{new_name}» — только в сегодняшней тренировке.\n"
-                f"{weight_line}"
-            )
-            swapped_from = (str(result.previous_exercise_id), old_name) if result.previous_exercise_id else None
-        await _show_slot_screen(
-            jinja_env=jinja_env,
-            mediator=mediator,
-            message=callback.message,
-            telegram_user_id=callback.from_user.id,
-            position=position,
-            prefix=prefix,
-            swapped_from=swapped_from,
-            offer_program_swap=result.can_replace_in_program,
-        )
+        await _edit_live_exercise_card(callback.message, mediator=mediator, slot=result.slot)
+        await callback.answer()
 
     @router.callback_query(F.data.startswith("slot_swap_prog:"))
     async def handle_slot_swap_prog(callback: CallbackQuery) -> None:

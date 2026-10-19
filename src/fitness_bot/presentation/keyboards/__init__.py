@@ -1391,14 +1391,19 @@ def similar_exercises_keyboard(
     items: list[tuple[str, str]],
     next_offset: int | None = None,
 ) -> InlineKeyboardMarkup:
-    """items: (exercise_id, name)."""
+    """items: (exercise_id, name). Names, optional «Ещё», and «Назад» — nothing else."""
     rows = [
-        [InlineKeyboardButton(text=f"💪 {name}"[:64], callback_data=f"slot_swap:{position}:{exercise_id}")]
+        [
+            InlineKeyboardButton(
+                text=(name.strip() or "Упражнение")[:64],
+                callback_data=f"slot_swap:{position}:{exercise_id}",
+            ),
+        ]
         for exercise_id, name in items
     ]
     if next_offset is not None:
-        rows.append([InlineKeyboardButton(text="🔁 Ещё варианты", callback_data=f"slot_alt:{position}:{next_offset}")])
-    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot:{position}")])
+        rows.append([InlineKeyboardButton(text="Ещё", callback_data=f"slot_alt:{position}:{next_offset}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"slot_card:{position}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
