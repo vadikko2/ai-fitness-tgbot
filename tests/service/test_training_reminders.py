@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fitness_bot.domain.enums import ExpectedInput, Goal, ProgramStatus, ProgramType
 from fitness_bot.domain.errors import AgentUnavailable
+from fitness_bot.domain.users.user import local_calendar_date
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay
 from fitness_bot.domain.workout.program import Program
 from fitness_bot.infrastructure.uow.in_memory import InMemoryUow
@@ -49,6 +50,12 @@ MONDAY_EVENING = datetime(2026, 10, 19, 17, 0, tzinfo=UTC)
 MONDAY_MORNING = datetime(2026, 10, 19, 6, 0, tzinfo=UTC)
 MONDAY_LATE = datetime(2026, 10, 19, 18, 0, tzinfo=UTC)
 EXERCISE_ID = uuid4()
+
+
+def _upcoming_monday() -> date:
+    """A Monday that skip still accepts. The handler treats yesterday as already past."""
+    today = local_calendar_date(now=datetime.now(UTC), timezone_offset="+03:00")
+    return today + timedelta(days=(1 - today.isoweekday()) % 7)
 
 
 def _day(weekday: int, title: str) -> WorkoutDay:
@@ -182,7 +189,7 @@ async def test_skip_cascades_the_week_and_reports_the_moves() -> None:
     uow = InMemoryUow()
     await _seed(uow, [(1, "Верх"), (2, "Ноги")])
     result = await SkipTrainingDayCommandHandler(uow).handle(
-        SkipTrainingDayCommand(telegram_user_id=TG, local_date=date(2026, 10, 19)),
+        SkipTrainingDayCommand(telegram_user_id=TG, local_date=_upcoming_monday()),
     )
     assert result.outcome == "shifted"
     assert [(move.title, move.from_weekday, move.to_weekday) for move in result.moves] == [
@@ -201,7 +208,7 @@ async def test_skip_of_a_full_week_leaves_the_plan() -> None:
     uow = InMemoryUow()
     await _seed(uow, [(weekday, f"День {weekday}") for weekday in range(1, 8)])
     result = await SkipTrainingDayCommandHandler(uow).handle(
-        SkipTrainingDayCommand(telegram_user_id=TG, local_date=date(2026, 10, 19)),
+        SkipTrainingDayCommand(telegram_user_id=TG, local_date=_upcoming_monday()),
     )
     assert result.outcome == "cannot_shift"
     async with uow.transaction() as repos:
