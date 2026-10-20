@@ -384,6 +384,13 @@ def training_reminder_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=[[yes, skip]])
 
 
+def reminder_skip_keyboard(callback_data: str) -> InlineKeyboardMarkup:
+    """Skip on a weigh-in or progress-photo nudge. The open screen is left as it is."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🚫 Пропустить", callback_data=callback_data)]],
+    )
+
+
 def body_saved_keyboard(*, back_callback: str, back_label: str) -> InlineKeyboardMarkup:
     """After a weight / measurement save: back to that section, the profile hub, or home."""
     return InlineKeyboardMarkup(

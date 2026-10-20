@@ -9,6 +9,7 @@ from cqrs import RequestMediator
 from fitness_bot.domain.enums import ExpectedInput, FeedbackKind, FeedbackStatus
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.feedback.ticket import FEEDBACK_PAGE_SIZE
+from fitness_bot.presentation.chat_pages import push_scope
 from fitness_bot.presentation.keyboards import (
     feedback_author_notice_keyboard,
     feedback_compose_keyboard,
@@ -236,11 +237,12 @@ async def notify_feedback_status(*, bot: Bot | None, result) -> None:
         return
     notice = author_status_text(kind=result.kind, status=result.status, reply=result.moderator_reply)
     try:
-        await bot.send_message(
-            result.author_chat_id,
-            notice,
-            reply_markup=feedback_author_notice_keyboard(result.ticket_id),
-        )
+        with push_scope(int(result.author_chat_id)):
+            await bot.send_message(
+                result.author_chat_id,
+                notice,
+                reply_markup=feedback_author_notice_keyboard(result.ticket_id),
+            )
     except Exception:
         pass
 

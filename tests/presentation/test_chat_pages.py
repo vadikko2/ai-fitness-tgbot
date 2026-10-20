@@ -11,16 +11,23 @@ from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, Workou
 from fitness_bot.presentation.chat_pages import (
     DELETE_PAUSE_SECONDS,
     ChatPageMiddleware,
+    bind_bot,
+    dismiss_pushes,
     page_message_ids,
+    push_message_ids,
+    push_scope,
     remember,
     remember_incoming,
     reset_chat_pages,
 )
+from fitness_bot.presentation.routers.body import create_body_router
+from fitness_bot.presentation.routers.progress_photo import create_progress_photo_router
 from fitness_bot.presentation.routers.session import (
     create_session_router,
     handle_slot_weight_utterance,
 )
 from fitness_bot.presentation.templates_env import create_jinja_env
+from fitness_bot.service.models.commands.body import CancelProgressPhotoCaptureCommand
 from fitness_bot.service.models.commands.session import FinalizeSessionCommand, FinalizeSessionCommandResult
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import (
@@ -286,4 +293,168 @@ async def test_in_place_weight_edit_does_not_delete_the_page() -> None:
     assert typed.answers == []
     assert bot.edits == [15]
     assert page_message_ids(7) == [10, 11, 99]
+    reset_chat_pages()
+
+
+class _PushBot:
+    def __init__(self) -> None:
+        self.deleted: list[int] = []
+        self._next = 0
+
+    async def send_message(self, chat_id: int, text: str, **kwargs: object) -> _Sent:
+        self._next += 1
+        return _Sent(self._next, chat_id)
+
+    async def send_photo(self, chat_id: int, photo: object = None, **kwargs: object) -> _Sent:
+        self._next += 1
+        return _Sent(self._next, chat_id)
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        self.deleted.append(message_id)
+
+
+async def test_notification_stays_when_another_screen_opens() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    remember(user_id, user_id, 10)
+    with push_scope(user_id):
+        training = await bot.send_message(user_id, "Завтра тренировка. Идёшь?")
+    with push_scope(user_id, dismiss="weight"):
+        weight = await bot.send_message(user_id, "Какой сейчас вес?")
+
+    menu = _Outgoing(bot, chat_id=user_id, user_id=user_id, start_id=100)  # type: ignore[arg-type]
+    opened = _Callback("sess", menu, bot)  # type: ignore[arg-type]
+
+    async def show_workout(callback: _Callback) -> None:
+        await callback.message.answer("Тренировка")
+
+    await _dispatch(opened, show_workout)
+
+    assert 10 in bot.deleted
+    assert training.message_id not in bot.deleted
+    assert weight.message_id not in bot.deleted
+    assert push_message_ids(user_id) == [training.message_id, weight.message_id]
+    assert training.message_id not in page_message_ids(user_id)
+    reset_chat_pages()
+
+
+async def test_notification_is_deleted_only_after_its_button() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    remember(user_id, user_id, 10)
+    with push_scope(user_id):
+        training = await bot.send_message(user_id, "Завтра тренировка. Идёшь?")
+    with push_scope(user_id, dismiss="weight"):
+        weight = await bot.send_message(user_id, "Какой сейчас вес?")
+
+    note = _Outgoing(bot, chat_id=user_id, user_id=user_id, start_id=training.message_id)  # type: ignore[arg-type]
+    choice = _Callback("tr_yes:2026-10-20", note, bot)  # type: ignore[arg-type]
+
+    async def choose(callback: _Callback) -> None:
+        await callback.message.answer("Ок. Вот черновик")
+
+    await _dispatch(choice, choose)
+
+    assert training.message_id in bot.deleted
+    assert weight.message_id not in bot.deleted
+    assert 10 not in bot.deleted
+    assert push_message_ids(user_id) == [weight.message_id]
+    reply_ids = page_message_ids(user_id)
+    assert 10 in reply_ids
+    assert training.message_id not in reply_ids
+    assert "Ок. Вот черновик" in note.answers
+    reset_chat_pages()
+
+
+async def test_weight_notification_is_deleted_when_the_number_is_saved() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    with push_scope(user_id):
+        training = await bot.send_message(user_id, "Завтра тренировка. Идёшь?")
+    with push_scope(user_id, dismiss="weight"):
+        weight = await bot.send_message(user_id, "Какой сейчас вес?")
+        angle = await bot.send_photo(user_id, object())
+
+    await dismiss_pushes(bot, user_id, "weight")
+
+    assert weight.message_id in bot.deleted
+    assert angle.message_id in bot.deleted
+    assert training.message_id not in bot.deleted
+    assert push_message_ids(user_id) == [training.message_id]
+    reset_chat_pages()
+
+
+class _SkipMediator:
+    def __init__(self, expected: ExpectedInput) -> None:
+        self.expected = expected
+        self.sent: list[object] = []
+
+    async def send(self, request: object):
+        self.sent.append(request)
+        if isinstance(request, GetWorkflowQuery):
+            return GetWorkflowQueryResult(
+                user_id=uuid4(),
+                chat_id=21,
+                expected_input=self.expected,
+                expected_field=None,
+                focus_slot=None,
+                profile_complete=True,
+                goal=None,
+            )
+        return None
+
+
+async def test_skip_deletes_the_reminder_and_leaves_the_open_screen() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    remember(user_id, user_id, 10)
+    with push_scope(user_id, dismiss="weight"):
+        weight = await bot.send_message(user_id, "Какой сейчас вес?")
+
+    mediator = _SkipMediator(ExpectedInput.WEIGHT)
+    router = create_body_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    note = _Outgoing(bot, chat_id=user_id, user_id=user_id, start_id=weight.message_id)  # type: ignore[arg-type]
+    choice = _Callback("wt_skip", note, bot)  # type: ignore[arg-type]
+    await _dispatch(choice, _handler(router, "handle_wt_skip"))
+
+    assert weight.message_id in bot.deleted
+    assert 10 not in bot.deleted
+    assert page_message_ids(user_id) == [10]
+    assert note.answers == []
+    cleared = [item for item in mediator.sent if isinstance(item, ExpectInputCommand)]
+    assert len(cleared) == 1
+    assert cleared[0].expected_input == ExpectedInput.NONE
+    reset_chat_pages()
+
+
+async def test_photo_skip_cancels_the_ask_without_clearing_the_screen() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    remember(user_id, user_id, 10)
+    with push_scope(user_id, dismiss="progress_photo"):
+        intro = await bot.send_message(user_id, "Фото прогресса")
+        angle = await bot.send_photo(user_id, object())
+
+    mediator = _SkipMediator(ExpectedInput.PROGRESS_PHOTO)
+    router = create_progress_photo_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    note = _Outgoing(bot, chat_id=user_id, user_id=user_id, start_id=angle.message_id)  # type: ignore[arg-type]
+    choice = _Callback("pp_skip", note, bot)  # type: ignore[arg-type]
+    await _dispatch(choice, _handler(router, "handle_pp_skip"))
+
+    assert intro.message_id in bot.deleted
+    assert angle.message_id in bot.deleted
+    assert 10 not in bot.deleted
+    assert page_message_ids(user_id) == [10]
+    assert note.answers == []
+    assert any(isinstance(item, CancelProgressPhotoCaptureCommand) for item in mediator.sent)
     reset_chat_pages()

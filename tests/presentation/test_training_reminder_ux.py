@@ -6,7 +6,11 @@ from uuid import uuid4
 from aiogram.exceptions import TelegramForbiddenError
 from aiogram.methods import SendMessage
 
-from fitness_bot.presentation.keyboards import profile_reminders_keyboard, training_reminder_keyboard
+from fitness_bot.presentation.keyboards import (
+    profile_reminders_keyboard,
+    reminder_skip_keyboard,
+    training_reminder_keyboard,
+)
 from fitness_bot.presentation.scheduler import handle_training_ask
 from fitness_bot.presentation.templates_env import create_jinja_env
 from fitness_bot.service.models.commands.training_reminder import (
@@ -43,6 +47,13 @@ def test_reminder_buttons_split_morning_start_and_evening_draft() -> None:
     evening = training_reminder_keyboard(kind="evening", target_date=date(2026, 10, 20))
     assert _callbacks(evening) == ["tr_yes:2026-10-20", "tr_skip:2026-10-20"]
     assert _labels(evening) == ["✅ Да, завтра", "🚫 Пропущу"]
+
+
+def test_weight_and_photo_reminders_have_skip() -> None:
+    assert _callbacks(reminder_skip_keyboard("wt_skip")) == ["wt_skip"]
+    assert _labels(reminder_skip_keyboard("wt_skip")) == ["🚫 Пропустить"]
+    assert _callbacks(reminder_skip_keyboard("pp_skip")) == ["pp_skip"]
+    assert _labels(reminder_skip_keyboard("pp_skip")) == ["🚫 Пропустить"]
 
 
 def test_reminder_copy() -> None:

@@ -10,6 +10,7 @@ from jinja2 import Environment
 from fitness_bot.domain.enums import CoachApplicationStatus, ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.callback_tokens import pack_uuids, unpack_uuids
+from fitness_bot.presentation.chat_pages import push_scope
 from fitness_bot.presentation.keyboards import (
     coach_app_detail_keyboard,
     coach_apply_menu_keyboard,
@@ -654,10 +655,11 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
         )
         await callback.message.answer(text, reply_markup=back_kb)
         if result.client_chat_id and callback.bot:
-            await callback.bot.send_message(
-                result.client_chat_id,
-                "Тренер обновил рекомендации по питанию. Откройте раздел «Питание».",
-            )
+            with push_scope(result.client_chat_id):
+                await callback.bot.send_message(
+                    result.client_chat_id,
+                    "Тренер обновил рекомендации по питанию. Откройте раздел «Питание».",
+                )
 
     @router.callback_query(F.data.startswith("coach_assign:"))
     async def coach_assign(callback: CallbackQuery) -> None:
@@ -703,10 +705,11 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             )
             text = f"Назначено «{result.title}»."
             if callback.bot:
-                await callback.bot.send_message(
-                    result.client_chat_id,
-                    f"Тренер назначил «{result.title}». Открыть мой план: /start",
-                )
+                with push_scope(result.client_chat_id):
+                    await callback.bot.send_message(
+                        result.client_chat_id,
+                        f"Тренер назначил «{result.title}». Открыть мой план: /start",
+                    )
         except DomainError as exc:
             text = str(exc)
         if callback.message:
@@ -941,13 +944,14 @@ def create_coach_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             title = result.program_title or "План"
             text = f"План клиента обновлён: «{title}»."
             if result.client_chat_id and callback.bot:
-                await callback.bot.send_message(
-                    result.client_chat_id,
-                    f"Тренер обновил ваш план «{title}». Открыть мой план: /start",
-                    reply_markup=_kb(
-                        [[InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")]],
-                    ),
-                )
+                with push_scope(result.client_chat_id):
+                    await callback.bot.send_message(
+                        result.client_chat_id,
+                        f"Тренер обновил ваш план «{title}». Открыть мой план: /start",
+                        reply_markup=_kb(
+                            [[InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")]],
+                        ),
+                    )
         if callback.message:
             await callback.message.answer(text)
         await callback.answer()

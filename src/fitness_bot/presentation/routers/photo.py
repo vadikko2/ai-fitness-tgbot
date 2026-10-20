@@ -9,6 +9,7 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.presentation.chat_pages import dismiss_pushes
 from fitness_bot.presentation.keyboards import (
     body_saved_keyboard,
     coach_apply_submitted_keyboard,
@@ -136,6 +137,7 @@ async def _record_progress_photo(
         await message.answer(str(exc))
         return
     if result.complete:
+        await dismiss_pushes(message.bot, message.from_user.id, "progress_photo")
         text = jinja_env.get_template("progress_photo_done.j2").render()
         await message.answer(
             text,

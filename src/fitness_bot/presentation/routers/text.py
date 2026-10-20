@@ -8,7 +8,7 @@ from jinja2 import Environment
 from fitness_bot.domain.body.wellbeing import WELLBEING_FRESHNESS_WINDOW
 from fitness_bot.domain.enums import ExpectedInput, ProfileField, Supplement, WeightSource
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.presentation.chat_pages import remember_incoming
+from fitness_bot.presentation.chat_pages import dismiss_pushes, remember_incoming
 from fitness_bot.presentation.flow_helpers import (
     finish_profile_edit_if_active,
     show_info_offer,
@@ -123,6 +123,7 @@ async def handle_user_utterance(
                     source=WeightSource.MANUAL,
                 ),
             )
+            await dismiss_pushes(message.bot, message.from_user.id, "weight")
             await message.answer(
                 "Вес сохранён.",
                 reply_markup=body_saved_keyboard(back_callback="wt_menu", back_label="⬅️ К весу"),
