@@ -10,6 +10,7 @@ from jinja2 import Environment
 
 from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
+from fitness_bot.presentation.chat_pages import push_scope
 from fitness_bot.presentation.keyboards import (
     coach_application_approved_keyboard,
     coach_application_rejected_keyboard,
@@ -63,11 +64,12 @@ async def apply_moderator_resolution_edits(*, bot: Bot | None, result) -> None:
     applicant_chat_id = getattr(result, "applicant_chat_id", None)
     if applicant_chat_id and not getattr(result, "already_processed", False):
         try:
-            await bot.send_message(
-                applicant_chat_id,
-                status_text,
-                reply_markup=applicant_resolution_keyboard(result),
-            )
+            with push_scope(int(applicant_chat_id)):
+                await bot.send_message(
+                    applicant_chat_id,
+                    status_text,
+                    reply_markup=applicant_resolution_keyboard(result),
+                )
         except Exception:
             pass
 

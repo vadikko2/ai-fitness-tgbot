@@ -38,7 +38,7 @@ from fitness_bot.service.models.queries.body import (
     GetWeightHistoryQuery,
     GetWeightReminderQuery,
 )
-from fitness_bot.service.models.queries.users import GetProfileQuery
+from fitness_bot.service.models.queries.users import GetProfileQuery, GetWorkflowQuery
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,19 @@ def create_body_router(*, jinja_env: Environment, mediator: RequestMediator) -> 
             reminder_time=_format_local_time(local_time),
         )
         await _answer(callback, text, reply_markup=weight_menu_keyboard())
+
+    @router.callback_query(F.data == "wt_skip")
+    async def handle_wt_skip(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=callback.from_user.id))
+        if workflow.expected_input == ExpectedInput.WEIGHT:
+            await mediator.send(
+                ExpectInputCommand(
+                    telegram_user_id=callback.from_user.id,
+                    expected_input=ExpectedInput.NONE,
+                ),
+            )
+        await callback.answer("Пропущено")
 
     @router.callback_query(F.data == "wt_log")
     async def handle_wt_log(callback: CallbackQuery) -> None:

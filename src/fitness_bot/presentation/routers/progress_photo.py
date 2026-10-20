@@ -36,6 +36,7 @@ from fitness_bot.presentation.progress_pose_images import (
 )
 from fitness_bot.presentation.routers.body import parse_reminder_time
 from fitness_bot.service.models.commands.body import (
+    CancelProgressPhotoCaptureCommand,
     EnsureDefaultProgressPhotoReminderCommand,
     RememberProgressPhotoFileIdCommand,
     SetProgressPhotoReminderCommand,
@@ -80,6 +81,7 @@ async def send_angle_prompt(
     message: Message | None = None,
     bot=None,
     chat_id: int | None = None,
+    reply_markup=None,
 ) -> None:
     text = jinja_env.get_template("progress_photo_angle.j2").render(angle=angle)
     profile = await mediator.send(GetProfileQuery(telegram_user_id=telegram_user_id))
@@ -87,15 +89,15 @@ async def send_angle_prompt(
 
     async def _send_text() -> None:
         if message is not None:
-            await message.answer(text)
+            await message.answer(text, reply_markup=reply_markup)
         elif bot is not None and chat_id is not None:
-            await bot.send_message(chat_id=chat_id, text=text)
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
 
     async def _send_photo(photo: FSInputFile) -> None:
         if message is not None:
-            await message.answer_photo(photo, caption=text)
+            await message.answer_photo(photo, caption=text, reply_markup=reply_markup)
         elif bot is not None and chat_id is not None:
-            await bot.send_photo(chat_id=chat_id, photo=photo, caption=text)
+            await bot.send_photo(chat_id=chat_id, photo=photo, caption=text, reply_markup=reply_markup)
 
     if image_path is not None:
         try:
@@ -241,6 +243,12 @@ def create_progress_photo_router(*, jinja_env: Environment, mediator: RequestMed
             reminder_time=_format_local_time(local_time),
         )
         await _answer(callback, text, reply_markup=progress_photo_menu_keyboard())
+
+    @router.callback_query(F.data == "pp_skip")
+    async def handle_pp_skip(callback: CallbackQuery) -> None:
+        assert callback.from_user is not None
+        await mediator.send(CancelProgressPhotoCaptureCommand(telegram_user_id=callback.from_user.id))
+        await callback.answer("Пропущено")
 
     @router.callback_query(F.data == "pp_log")
     async def handle_pp_log(callback: CallbackQuery) -> None:
