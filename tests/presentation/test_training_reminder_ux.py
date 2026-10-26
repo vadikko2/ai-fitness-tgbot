@@ -11,11 +11,15 @@ from fitness_bot.presentation.keyboards import (
     reminder_skip_keyboard,
     training_reminder_keyboard,
 )
+from fitness_bot.presentation.routers.training_reminder import create_training_reminder_router
 from fitness_bot.presentation.scheduler import handle_training_ask
 from fitness_bot.presentation.templates_env import create_jinja_env
 from fitness_bot.service.models.commands.training_reminder import (
+    DayMove,
     DisableTrainingRemindersCommand,
     MarkTrainingReminderSentCommand,
+    SkipTrainingDayCommand,
+    SkipTrainingDayCommandResult,
 )
 from fitness_bot.service.models.queries.training_reminder import DueTrainingReminderItem
 
@@ -108,6 +112,63 @@ async def test_training_ask_marks_sent_after_delivery() -> None:
     assert isinstance(mediator.sent[0], MarkTrainingReminderSentCommand)
     assert mediator.sent[0].kind == "evening"
     assert mediator.sent[0].sent_on == date(2026, 10, 19)
+
+
+class _SkipMediator:
+    def __init__(self, result: SkipTrainingDayCommandResult) -> None:
+        self.result = result
+        self.sent: list[object] = []
+
+    async def send(self, request: object) -> SkipTrainingDayCommandResult:
+        self.sent.append(request)
+        return self.result
+
+
+class _User:
+    id = 7
+
+
+class _SkipMessage:
+    def __init__(self) -> None:
+        self.replies: list[tuple[str, object]] = []
+
+    async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
+        self.replies.append((text, reply_markup))
+
+
+class _SkipCallback:
+    def __init__(self, data: str) -> None:
+        self.data = data
+        self.from_user = _User()
+        self.message = _SkipMessage()
+        self.answers: list[object] = []
+
+    async def answer(self, *args: object, **kwargs: object) -> None:
+        self.answers.append(args)
+
+
+def _handler(router, name: str):
+    return next(item.callback for item in router.callback_query.handlers if item.callback.__name__ == name)
+
+
+async def test_skip_reply_has_menu_button() -> None:
+    result = SkipTrainingDayCommandResult(
+        outcome="shifted",
+        moves=[DayMove(title="Ноги", from_weekday=2, to_weekday=3)],
+    )
+    mediator = _SkipMediator(result)
+    router = create_training_reminder_router(jinja_env=create_jinja_env(), mediator=mediator)  # type: ignore[arg-type]
+    callback = _SkipCallback("tr_skip:2026-10-20")
+
+    await _handler(router, "handle_tr_skip")(callback)
+
+    assert isinstance(mediator.sent[0], SkipTrainingDayCommand)
+    assert mediator.sent[0].local_date == date(2026, 10, 20)
+    text, markup = callback.message.replies[0]
+    assert "Ок, перенёс тренировку." in text
+    assert _callbacks(markup) == ["home"]
+    assert _labels(markup) == ["🏠 В меню"]
+    assert callback.answers == [()]
 
 
 async def test_blocked_bot_disables_reminders_without_marking_sent() -> None:

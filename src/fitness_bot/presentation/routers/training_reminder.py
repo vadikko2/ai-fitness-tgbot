@@ -8,7 +8,7 @@ from cqrs import RequestMediator
 from jinja2 import Environment
 
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.presentation.keyboards import WEEKDAY_LABELS, profile_reminders_keyboard
+from fitness_bot.presentation.keyboards import WEEKDAY_LABELS, back_to_menu_keyboard, profile_reminders_keyboard
 from fitness_bot.presentation.message_draft import message_draft_scope
 from fitness_bot.presentation.routers.session import render_next_session_proposal
 from fitness_bot.service.models.commands.session import GenerateNextSessionCommand
@@ -102,7 +102,7 @@ def create_training_reminder_router(*, jinja_env: Environment, mediator: Request
         result = await mediator.send(
             SkipTrainingDayCommand(telegram_user_id=callback.from_user.id, local_date=target),
         )
-        await _answer(callback, _skip_text(result))
+        await _answer(callback, _skip_text(result), reply_markup=back_to_menu_keyboard())
 
     return router
 
