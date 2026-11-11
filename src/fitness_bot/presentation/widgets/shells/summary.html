@@ -1,32 +1,35 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
-<svg viewBox="0 0 120 36" width="100%" height="36"><polyline id="sp" fill="none" stroke="#F5D22D" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points=""></polyline></svg>
+<style>
+#list{margin:4px 0 0}
+#list p{margin:0 0 8px;font-size:15px;line-height:1.35;font-weight:500}
+#list span{display:block;margin-top:2px;font-size:13px;font-weight:400;color:rgba(2,32,70,.55)}
+</style>
+<div id="list"></div>
 <button type="button" class="p" data-op="home">На главную</button>
 <p id="e"></p>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
 function render(d){
 if(!d){return;}
+var rows=d.rows||[],n=d.n!=null?d.n:rows.length,i,html="",parts;
 $("t").textContent="Итог";
-$("s").textContent=(d.sets||0)+" подходов · "+(d.tonnage||0)+" кг";
-var nums=d.spark||[],w=120,h=36,i,min,max,span,pts=[];
-if(!nums.length){$("sp").setAttribute("points","");return;}
-min=nums[0];max=nums[0];
-for(i=1;i<nums.length;i++){if(nums[i]<min){min=nums[i];}if(nums[i]>max){max=nums[i];}}
-span=(max-min)||1;
-for(i=0;i<nums.length;i++){
-var x=nums.length==1?0:i*(w/(nums.length-1));
-var y=h-((nums[i]-min)/span)*(h-4)-2;
-pts.push(x.toFixed(1)+","+y.toFixed(1));
+$("s").textContent=n?(n+" упр."+(d.title?" · "+d.title:"")):(d.title||"Пока пусто");
+for(i=0;i<rows.length;i++){
+parts=String(rows[i]).split(" — ");
+if(parts.length>1){html+="<p>"+esc(parts[0])+"<span>"+esc(parts.slice(1).join(" — "))+"</span></p>";}
+else{html+="<p>"+esc(rows[i])+"</p>";}
 }
-$("sp").setAttribute("points",pts.join(" "));
+if(!rows.length){html='<p class="hint">Сегодня ещё ничего не записано.</p>';}
+$("list").innerHTML=html;
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
 function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
-document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";TelegramWidget.request(op).then(take,fail);});
 function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();

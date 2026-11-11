@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import zlib
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
 from fitness_bot.domain.enums import ProfileField, ProgramType, Sex
-from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
+from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay, WorkoutDocument
 from fitness_bot.presentation.chat_pages import reset_chat_pages
 from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetBindings, WidgetFrame, WidgetScreenId
 from fitness_bot.presentation.widgets.gateway import WidgetGateway, WidgetQuery
@@ -17,6 +18,7 @@ from fitness_bot.presentation.widgets.screens.console import ConsoleScreen
 from fitness_bot.presentation.widgets.screens.home import HomeScreen
 from fitness_bot.presentation.widgets.screens.intake import IntakeScreen
 from fitness_bot.presentation.widgets.screens.load import load_shells
+from fitness_bot.presentation.widgets.screens.summary import SummaryScreen
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 from fitness_bot.presentation.widgets.state import pack_state
 from fitness_bot.service.models.commands.program import ApproveProposalCommand
@@ -27,7 +29,13 @@ from fitness_bot.service.models.commands.session import (
     StartTodayWorkoutCommand,
 )
 from fitness_bot.service.models.commands.users import UpdateProfileCommand
-from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery
+from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
+from fitness_bot.service.models.queries.session import (
+    GetSessionDetailQuery,
+    GetSessionHistoryQuery,
+    GetSimilarExercisesQuery,
+    GetTodayWorkoutQuery,
+)
 from fitness_bot.service.models.queries.users import GetProfileQuery
 
 
@@ -173,14 +181,98 @@ async def test_console_open_and_sync_answer_without_a_companion() -> None:
     reset_chat_pages()
 
 
-async def test_console_technique_stays_inside_the_widget() -> None:
-    screen, _mediator, ctx = _console()
+async def test_console_how_is_text_and_technique_is_a_video_link() -> None:
+    screen, mediator, ctx = _console()
+    guide = SimpleNamespace(
+        technique="Спина ровная, колени в стороны.",
+        videos=[SimpleNamespace(platform="youtube", url="https://youtu.be/abcdefghijk", title="Гакк")],
+    )
+    mediator.replies[GetExerciseGuideQuery] = guide
     frame = await screen.open(ctx)
-    assert "mu" not in json.loads(frame.chat_data)
-    result = await screen.apply(_rebind(ctx, frame), "vid")
-    assert result.video_file_id is None
-    assert result.photo_path is None
-    assert json.loads(result.frame.chat_data)["ph"] == "how"
+    how = await screen.apply(_rebind(ctx, frame), "how")
+    how_body = json.loads(how.frame.chat_data)
+    assert how_body["ph"] == "how"
+    assert "колени" in how_body["tip"]
+    assert "vids" not in how_body
+    video = await screen.apply(_rebind(ctx, frame), "vid")
+    video_body = json.loads(video.frame.chat_data)
+    assert video.video_file_id is None
+    assert video_body["ph"] == "vid"
+    assert video_body["vids"][0]["u"] == "https://youtu.be/abcdefghijk"
+    assert "tip" not in video_body
+
+
+_INCLINE_TECHNIQUE = (
+    "Поставьте скамью под углом 30–45°, сядьте, стопы на полу, лопатки сведены и прижаты. "
+    "Хват чуть шире плеч. Снимите штангу и опускайте к верхней части груди, локти идут слегка ниже плеч, "
+    "а не в стороны. Вдох на опускании, выдох на жиме вверх без отрыва поясницы от скамьи. "
+    "Ключевое: чем больше угол, тем сильнее работает передняя дельта, поэтому 30–45° — рабочий диапазон. "
+    "Частая ошибка — слишком крутой наклон и жим почти как стоя, нагрузка уходит с груди."
+)
+
+
+def _named_console(name: str, technique: str) -> tuple[ConsoleScreen, _Mediator, ScreenContext]:
+    exercise_id = uuid4()
+    slot = ExerciseSlot(
+        position=1,
+        exercise_id=exercise_id,
+        sets=5,
+        reps=5,
+        weight_kg=Decimal("65"),
+        rest_seconds=180,
+        rpe=7,
+    )
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Грудь", position=1, slots=[slot])],
+    )
+    today = SimpleNamespace(document=document, screen="session", technique_video_positions=[], weekday=1)
+    mediator = _Mediator(
+        {
+            GetTodayWorkoutQuery: today,
+            GetExerciseNamesQuery: SimpleNamespace(names={str(exercise_id): name}),
+            GetExerciseGuideQuery: SimpleNamespace(technique=technique, videos=[]),
+        },
+    )
+    screen = ConsoleScreen(_Shell())
+    return screen, mediator, _ctx(mediator, screen=WidgetScreenId.CONSOLE)
+
+
+async def test_how_shows_the_whole_incline_press_technique() -> None:
+    screen, _mediator, ctx = _named_console("Жим штанги лёжа на наклонной скамье", _INCLINE_TECHNIQUE)
+    frame = await screen.open(ctx)
+    how = await screen.apply(_rebind(ctx, frame), "how")
+    body = json.loads(how.frame.chat_data)
+    assert body["tip"] == _INCLINE_TECHNIQUE
+    assert len(how.frame.chat_data.encode()) <= 1024
+
+
+async def test_how_clips_a_technique_on_a_sentence_when_the_card_is_full() -> None:
+    sentence = "Держите лопатки сведёнными и не отрывайте стопы. "
+    screen, _mediator, ctx = _named_console("Ж" * 48, sentence * 40)
+    frame = await screen.open(ctx)
+    how = await screen.apply(_rebind(ctx, frame), "how")
+    body = json.loads(how.frame.chat_data)
+    assert len(how.frame.chat_data.encode()) <= 1024
+    assert len(body["tip"]) < len(sentence * 40)
+    assert body["tip"].endswith(".")
+
+
+async def test_console_exact_weight_is_typed_on_the_card() -> None:
+    screen, mediator, ctx = _console()
+    frame = await screen.open(ctx)
+    exact = await screen.apply(_rebind(ctx, frame), "kg")
+    assert json.loads(exact.frame.chat_data)["ph"] == "kg"
+    assert exact.expect is None
+    typed = exact
+    for key in ("n:4", "n:7", "n:.", "n:5"):
+        typed = await screen.apply(_rebind(ctx, typed.frame), key)
+    assert json.loads(typed.frame.chat_data)["draft"] == "47.5"
+    saved = await screen.apply(_rebind(ctx, typed.frame), "ok")
+    body = json.loads(saved.frame.chat_data)
+    assert body["ph"] == "work"
+    assert body["kg"] == 47.5
+    assert _writes(mediator) == []
 
 
 async def test_workout_widgets_send_no_caption_under_the_interface() -> None:
@@ -283,6 +375,112 @@ async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing()
     assert json.loads(again.frame.chat_data)["ph"] == "rest"
 
 
+async def test_done_on_a_weighted_set_continues_into_rest() -> None:
+    slot = ExerciseSlot(
+        position=1,
+        exercise_id=uuid4(),
+        sets=5,
+        reps=5,
+        weight_kg=Decimal("50"),
+        rest_seconds=180,
+        rpe=7,
+    )
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Ноги", position=1, slots=[slot])],
+    )
+    today = SimpleNamespace(document=document, screen="session", technique_video_positions=[], weekday=1)
+    mediator = _Mediator({GetTodayWorkoutQuery: today})
+    screen = ConsoleScreen(_Shell())
+    ctx = _ctx(mediator, screen=WidgetScreenId.CONSOLE)
+    frame = await screen.open(ctx)
+    done = await screen.apply(_rebind(ctx, frame), "ok")
+    body = json.loads(done.frame.chat_data)
+    assert body["ph"] == "rest"
+    assert body["rest"] == 180
+    assert any(isinstance(item, ConfirmExerciseAsPlannedCommand) for item in mediator.sent)
+
+
+async def test_done_during_rpe_starts_rest_without_another_write() -> None:
+    screen, mediator, ctx = _console()
+    data = {
+        "ph": "rpe",
+        "set": 1,
+        "sets": 3,
+        "i": 1,
+        "n": 1,
+        "pos": 1,
+        "name": "Присед",
+        "plan": "3×8 · 90 с",
+        "kg": 50,
+        "reps": 8,
+        "log": 1,
+        "rest": 90,
+    }
+    frame = WidgetFrame(
+        screen=WidgetScreenId.CONSOLE,
+        chat_data=pack_state(data),
+        caption="",
+        shell_id="console",
+    )
+    result = await screen.apply(_rebind(ctx, frame), "ok")
+    body = json.loads(result.frame.chat_data)
+    assert body["ph"] == "rest"
+    assert _writes(mediator) == []
+
+
+async def test_reopen_leaves_the_effort_step_for_rest() -> None:
+    screen, _mediator, ctx = _console()
+    data = {
+        "ph": "rpe",
+        "set": 1,
+        "sets": 5,
+        "i": 1,
+        "n": 1,
+        "pos": 1,
+        "name": "Жим",
+        "plan": "5×5 · 65 кг · 180 с",
+        "kg": 65,
+        "reps": 5,
+        "log": 1,
+        "rest": 180,
+    }
+    frame = WidgetFrame(
+        screen=WidgetScreenId.CONSOLE,
+        chat_data=pack_state(data),
+        caption="",
+        shell_id="console",
+    )
+    opened = await screen.open(_rebind(ctx, frame))
+    assert json.loads(opened.chat_data)["ph"] == "rest"
+
+
+async def test_replace_lists_similar_exercises() -> None:
+    screen, mediator, ctx = _console()
+    exercise_id = uuid4()
+    mediator.replies[GetSimilarExercisesQuery] = SimpleNamespace(
+        items=[SimpleNamespace(name="Жим гантелей на наклонной", exercise_id=exercise_id)],
+        blocked_reason=None,
+    )
+    frame = await screen.open(ctx)
+    shown = await screen.apply(_rebind(ctx, frame), "alt")
+    body = json.loads(shown.frame.chat_data)
+    assert body["ph"] == "alt"
+    assert body["alts"] == ["Жим гантелей на наклонной"]
+    assert "note" not in body
+
+
+async def test_replace_explains_when_the_exercise_is_already_logged() -> None:
+    screen, mediator, ctx = _console()
+    mediator.replies[GetSimilarExercisesQuery] = SimpleNamespace(items=[], blocked_reason="logged")
+    frame = await screen.open(ctx)
+    shown = await screen.apply(_rebind(ctx, frame), "alt")
+    body = json.loads(shown.frame.chat_data)
+    assert body["ph"] == "alt"
+    assert body["alts"] == []
+    assert "заменить нельзя" in body["note"]
+
+
 async def test_console_sync_after_rest_until_advances_the_phase() -> None:
     screen, mediator, ctx = _console()
     data = {
@@ -351,6 +549,41 @@ async def test_intake_pick_sends_update_profile() -> None:
     assert json.loads(result.frame.chat_data)["step"] == "birth_year"
 
 
+async def test_summary_lists_exercises_with_sets_and_reps() -> None:
+    session_id = uuid4()
+    mediator = _Mediator(
+        {
+            GetSessionHistoryQuery: SimpleNamespace(
+                items=[SimpleNamespace(session_id=session_id, title="Грудь")],
+            ),
+            GetSessionDetailQuery: SimpleNamespace(
+                title="Грудь",
+                slots=[
+                    SimpleNamespace(
+                        exercise_name="Жим штанги лёжа на наклонной скамье",
+                        custom_request=None,
+                        actual=SlotActual(sets=5, reps=5, weight_kg=Decimal("65")),
+                    ),
+                    SimpleNamespace(
+                        exercise_name="Гакк-приседания",
+                        custom_request=None,
+                        actual=SlotActual(sets=5, reps=5, weight_kg=Decimal("50")),
+                    ),
+                ],
+            ),
+        },
+    )
+    screen = SummaryScreen(_Shell(shell_id="summary"))
+    frame = await screen.open(_ctx(mediator, screen=WidgetScreenId.SUMMARY))
+    body = json.loads(frame.chat_data)
+    assert body["title"] == "Грудь"
+    assert body["n"] == 2
+    assert body["rows"][0].startswith("Жим штанги")
+    assert "5×5" in body["rows"][0]
+    assert "4125" not in frame.chat_data
+    assert "tonnage" not in body
+
+
 async def test_week_approve_sends_approve_proposal() -> None:
     mediator = _Mediator()
     screen = WeekScreen(_Shell(shell_id="week"))
@@ -376,6 +609,11 @@ def test_shell_zlib_stays_within_4096() -> None:
     assert "height:140px" not in console
     assert "<footer" not in console
     assert "Готово" in console
+    assert "data-rpe" not in console
+    summary = shells["summary"].html()
+    assert "На главную" in summary
+    assert "tonnage" not in summary
+    assert "spark" not in summary or "d.spark" not in summary
     for shell in shells.values():
         html = shell.html()
         assert "<footer" not in html

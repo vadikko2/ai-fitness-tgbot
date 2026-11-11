@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDocument
 from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.limits import STATE_BYTE_LIMIT
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
@@ -21,12 +22,16 @@ from fitness_bot.service.models.commands.session import (
     RecordSlotActualCommand,
     SwapSessionSlotExerciseCommand,
 )
-from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
 from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery, GetTodayWorkoutQuery
 
 _KG_STEP = Decimal("2.5")
-_KEEP = frozenset({"rest", "rpe", "alt", "how", "done"})
+_KEEP = frozenset({"rest", "alt", "how", "vid", "kg", "done"})
+_ALT_NOTE = {
+    "logged": "Уже записано — заменить нельзя.",
+    "unresolved": "Это упражнение не из каталога.",
+    "no_session": "Замена только во время тренировки.",
+}
 
 
 def _slots(document: WorkoutDocument | None) -> list[ExerciseSlot]:
@@ -55,6 +60,50 @@ def _plan(slot: ExerciseSlot) -> str:
     return " · ".join(parts)
 
 
+def _state_bytes(data: dict[str, object]) -> int:
+    return len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode())
+
+
+def _fit_tip(data: dict[str, object], tip: str) -> None:
+    text = tip.strip()
+    data["tip"] = text
+    if _state_bytes(data) <= STATE_BYTE_LIMIT:
+        return
+    if data.get("timed") in (0, None):
+        data.pop("timed", None)
+    if not int(data.get("log") or 0):
+        data.pop("log", None)
+    if _state_bytes(data) <= STATE_BYTE_LIMIT:
+        return
+    lo = 0
+    hi = len(text)
+    best = 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        data["tip"] = text[:mid]
+        if _state_bytes(data) <= STATE_BYTE_LIMIT:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    data["tip"] = _tip_ending(text, best)
+    while data["tip"] and _state_bytes(data) > STATE_BYTE_LIMIT:
+        data["tip"] = str(data["tip"])[:-1].rstrip()
+
+
+def _tip_ending(text: str, limit: int) -> str:
+    if limit >= len(text):
+        return text
+    chunk = text[:limit].rstrip()
+    sentence = max(chunk.rfind("."), chunk.rfind("!"), chunk.rfind("?"))
+    if sentence >= 40:
+        return chunk[: sentence + 1]
+    space = chunk.rfind(" ")
+    if space >= 40:
+        return chunk[:space].rstrip(" ,;:—-")
+    return chunk
+
+
 def _label(slot: ExerciseSlot, names: dict[str, str]) -> str:
     if slot.exercise_id is not None:
         found = names.get(str(slot.exercise_id))
@@ -63,6 +112,17 @@ def _label(slot: ExerciseSlot, names: dict[str, str]) -> str:
     if slot.custom_request:
         return slot.custom_request[:48]
     return "Упражнение"
+
+
+def _video_rows(guide: object) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for item in list(getattr(guide, "videos", []) or [])[:3]:
+        url = str(getattr(item, "url", "") or "")
+        if not url.startswith("https://") or len(url) > 200:
+            continue
+        title = str(getattr(item, "title", "") or getattr(item, "platform", "") or "Видео")
+        rows.append({"t": title[:28], "u": url})
+    return rows
 
 
 def _matches(data: dict[str, object], slot: ExerciseSlot) -> bool:
@@ -81,6 +141,9 @@ class ConsoleScreen:
 
     async def open(self, ctx: ScreenContext) -> WidgetFrame:
         previous = _read(ctx.binding)
+        if previous.get("ph") == "rpe" and ctx.binding.frame is not None:
+            self._start_rest(previous, None)
+            return self._frame(previous)
         if previous.get("ph") in _KEEP and ctx.binding.frame is not None:
             return ctx.binding.frame
         today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
@@ -110,6 +173,8 @@ class ConsoleScreen:
         if parsed.name == "sync":
             return await self._sync(ctx, data)
         if parsed.name == "ok":
+            if phase == "kg":
+                return self._commit_kg(data)
             return await self._ok(ctx, data, phase)
         if parsed.name in {"w+", "w-"}:
             return self._step_kg(data, phase, 1 if parsed.name == "w+" else -1)
@@ -128,9 +193,11 @@ class ConsoleScreen:
         if parsed.name == "how":
             return await self._how(ctx, data, phase)
         if parsed.name == "vid":
-            return await self._how(ctx, data, phase)
+            return await self._vid(ctx, data, phase)
         if parsed.name == "kg":
-            return self._kg(ctx, data, phase)
+            return self._exact(data, phase)
+        if parsed.name == "n":
+            return self._type_kg(data, phase, parsed.arg or "")
         if parsed.name == "sum":
             return await self._sum(ctx, data, phase)
         return _error(self._frame(data))
@@ -141,6 +208,9 @@ class ConsoleScreen:
         return await self._after_rest(ctx, data)
 
     async def _ok(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
+        if phase == "rpe":
+            self._start_rest(data, None)
+            return self._result(data)
         if phase != "work":
             return self._result(data)
         slot = await self._slot(ctx, data)
@@ -159,10 +229,7 @@ class ConsoleScreen:
         except DomainError:
             return _error(self._frame(data))
         data["log"] = int(data.get("log") or 0) + 1
-        if slot.weight_kg is not None or data.get("kg") not in (None, 0):
-            data["ph"] = "rpe"
-        else:
-            self._start_rest(data, slot)
+        self._start_rest(data, slot)
         return self._result(data)
 
     def _step_kg(self, data: dict[str, object], phase: str, sign: int) -> ScreenResult:
@@ -209,10 +276,17 @@ class ConsoleScreen:
                 limit=3,
             ),
         )
-        items = list(getattr(found, "items", []) or [])[:3]
+        reason = getattr(found, "blocked_reason", None)
+        items = [] if reason else list(getattr(found, "items", []) or [])[:3]
         data["ph"] = "alt"
         data["alts"] = [str(item.name)[:40] for item in items]
         data["ids"] = [str(item.exercise_id) for item in items]
+        if reason:
+            data["note"] = _ALT_NOTE.get(str(reason), "Заменить сейчас нельзя.")
+        elif not items:
+            data["note"] = "Похожих упражнений нет."
+        else:
+            data.pop("note", None)
         return self._result(data)
 
     async def _pick_alt(self, ctx: ScreenContext, data: dict[str, object], phase: str, index: int) -> ScreenResult:
@@ -234,6 +308,7 @@ class ConsoleScreen:
         data["ph"] = "work"
         data.pop("alts", None)
         data.pop("ids", None)
+        data.pop("note", None)
         return await self._refresh_work(ctx, data)
 
     async def _refresh_work(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
@@ -252,12 +327,15 @@ class ConsoleScreen:
         return self._result(rebuilt)
 
     def _back(self, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase not in {"alt", "how"}:
+        if phase not in {"alt", "how", "vid", "kg"}:
             return _error(self._frame(data))
         data["ph"] = "work"
         data.pop("alts", None)
         data.pop("ids", None)
+        data.pop("note", None)
         data.pop("tip", None)
+        data.pop("vids", None)
+        data.pop("draft", None)
         return self._result(data)
 
     async def _how(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
@@ -271,23 +349,59 @@ class ConsoleScreen:
         if not tip and slot is not None:
             tip = slot.technique_note
         data["ph"] = "how"
-        data["tip"] = tip[:180]
+        data.pop("vids", None)
+        _fit_tip(data, tip)
         return self._result(data)
 
-    def _kg(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
+    async def _vid(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "work":
             return _error(self._frame(data))
-        frame = self._frame(data)
-        focus = int(data["pos"]) if data.get("pos") is not None else None
-        return ScreenResult(
-            frame=frame,
-            answer=frame.chat_data,
-            expect=ExpectInputCommand(
-                telegram_user_id=ctx.user_id,
-                expected_input=ExpectedInput.SLOT_WEIGHT,
-                focus_slot=focus,
-            ),
-        )
+        slot = await self._slot(ctx, data)
+        rows: list[dict[str, str]] = []
+        if slot is not None and slot.exercise_id is not None:
+            guide = await ctx.mediator.send(GetExerciseGuideQuery(exercise_id=slot.exercise_id))
+            rows = _video_rows(guide)
+        data["ph"] = "vid"
+        data["vids"] = rows
+        data.pop("tip", None)
+        return self._result(data)
+
+    def _exact(self, data: dict[str, object], phase: str) -> ScreenResult:
+        if phase != "work":
+            return _error(self._frame(data))
+        current = data.get("kg")
+        data["ph"] = "kg"
+        data["draft"] = "" if current in (None, "") else str(current)
+        return self._result(data)
+
+    def _type_kg(self, data: dict[str, object], phase: str, key: str) -> ScreenResult:
+        if phase != "kg" or len(key) != 1:
+            return _error(self._frame(data))
+        draft = str(data.get("draft") or "")
+        if key == "x":
+            draft = draft[:-1]
+        elif key == ".":
+            if "." not in draft:
+                draft = f"{draft}."
+        elif len(draft.replace(".", "")) < 4:
+            draft = f"{draft}{key}"
+        data["draft"] = draft[:7]
+        return self._result(data)
+
+    def _commit_kg(self, data: dict[str, object]) -> ScreenResult:
+        raw = str(data.get("draft") or "").strip().rstrip(".")
+        if not raw:
+            return _error(self._frame(data))
+        try:
+            value = Decimal(raw)
+        except InvalidOperation:
+            return _error(self._frame(data))
+        if value < 0 or value > 500:
+            return _error(self._frame(data))
+        data["kg"] = None if value == 0 else as_number(value)
+        data["ph"] = "work"
+        data.pop("draft", None)
+        return self._result(data)
 
     async def _sum(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "done":
@@ -403,10 +517,11 @@ class ConsoleScreen:
             "log": int(previous.get("log") or 0),
         }
 
-    def _start_rest(self, data: dict[str, object], slot: ExerciseSlot) -> None:
+    def _start_rest(self, data: dict[str, object], slot: ExerciseSlot | None) -> None:
+        seconds = slot.rest_seconds if slot is not None else int(data.get("rest") or 0)
         data["ph"] = "rest"
-        data["rest"] = slot.rest_seconds
-        data["restUntil"] = int(time.time()) + int(slot.rest_seconds)
+        data["rest"] = seconds
+        data["restUntil"] = int(time.time()) + int(seconds)
 
     def _result(self, data: dict[str, object]) -> ScreenResult:
         frame = self._frame(data)
