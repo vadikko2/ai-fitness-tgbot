@@ -323,6 +323,46 @@ async def test_home_open_completed_today_offers_repeat_and_another_day() -> None
     assert "Спина" in body["alt"]
 
 
+async def test_home_open_rest_day_offers_another_program_day() -> None:
+    today = SimpleNamespace(
+        screen="rest",
+        document=None,
+        weekday=4,
+        completed_weekdays=[],
+        planned_weekdays=[1, 3, 5],
+        completed_today=False,
+        alternative_weekday=5,
+        alternative_title="База и акцент на ноги",
+    )
+    frame = await HomeScreen(_Shell(shell_id="home")).open(
+        _ctx(_Mediator({GetTodayWorkoutQuery: today}), screen=WidgetScreenId.HOME),
+    )
+    body = json.loads(frame.chat_data)
+    assert body["mode"] == "rest"
+    assert body["altDay"] == 5
+    assert "База" in body["alt"]
+
+
+async def test_home_open_rest_day_falls_back_to_planned_weekdays() -> None:
+    today = SimpleNamespace(
+        screen="rest",
+        document=None,
+        weekday=4,
+        completed_weekdays=[1],
+        planned_weekdays=[1, 3, 5],
+        completed_today=False,
+        alternative_weekday=None,
+        alternative_title=None,
+    )
+    frame = await HomeScreen(_Shell(shell_id="home")).open(
+        _ctx(_Mediator({GetTodayWorkoutQuery: today}), screen=WidgetScreenId.HOME),
+    )
+    body = json.loads(frame.chat_data)
+    assert body["mode"] == "rest"
+    assert body["altDay"] == 5
+    assert body["cta"] == body["alt"]
+
+
 async def test_home_again_overwrites_today_and_opens_the_console() -> None:
     mediator = _Mediator({StartSessionFromTemplateCommand: SimpleNamespace(document=object())})
     screen = HomeScreen(_Shell(shell_id="home"))
@@ -432,6 +472,34 @@ async def test_menu_train_on_rest_day_starts_alternative_weekday() -> None:
         shell_id="menu",
     )
     mediator = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="started")})
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.MENU), frame), "train")
+    assert result.navigate is WidgetScreenId.CONSOLE
+    command = next(item for item in mediator.sent if isinstance(item, StartTodayWorkoutCommand))
+    assert command.weekday == 1
+
+
+async def test_menu_train_on_rest_day_probes_today_when_alt_missing() -> None:
+    screen = MenuScreen(_Shell(shell_id="menu"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.MENU,
+        chat_data=pack_state({"title": "Главное", "mode": "rest"}),
+        caption="",
+        shell_id="menu",
+    )
+    today = SimpleNamespace(
+        screen="rest",
+        weekday=4,
+        planned_weekdays=[1, 5],
+        completed_weekdays=[],
+        alternative_weekday=1,
+        alternative_title="База",
+    )
+    mediator = _Mediator(
+        {
+            GetTodayWorkoutQuery: today,
+            StartTodayWorkoutCommand: SimpleNamespace(outcome="started"),
+        },
+    )
     result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.MENU), frame), "train")
     assert result.navigate is WidgetScreenId.CONSOLE
     command = next(item for item in mediator.sent if isinstance(item, StartTodayWorkoutCommand))

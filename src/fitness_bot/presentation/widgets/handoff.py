@@ -66,9 +66,18 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 
 async def _profile(bot: object, mediator: RequestMediator, user_id: int, chat_id: int) -> None:
     from fitness_bot.presentation.routers.profile import profile_hub_text
+    from fitness_bot.service.models.queries.users import GetHomeQuery
 
+    home = await mediator.send(GetHomeQuery(telegram_user_id=user_id))
     text = await profile_hub_text(jinja_env=create_jinja_env(), mediator=mediator, telegram_user_id=user_id)
-    await bot.send_message(chat_id, text, reply_markup=profile_hub_keyboard())
+    await bot.send_message(
+        chat_id,
+        text,
+        reply_markup=profile_hub_keyboard(
+            show_coach_cabinet=home.show_coach_badge,
+            active_clients_count=home.active_clients_count,
+        ),
+    )
 
 
 async def _coach_mine(bot: object, mediator: RequestMediator, user_id: int, chat_id: int) -> None:

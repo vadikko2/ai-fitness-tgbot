@@ -2,9 +2,9 @@
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
 <style>
-.card{margin:8px 0 0;padding:14px;border-radius:16px;background:#F7F8FA}
+.card{margin:8px 0 12px;padding:14px;border-radius:16px;background:#F7F8FA}
 .card p{margin:0;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
-#streak:empty{display:none}
+#streak:empty,#note:empty{display:none}
 #streak{margin:0 0 10px}
 </style>
 <p class="hint" id="streak"></p>
@@ -22,24 +22,42 @@ if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=d.when||"";
 $("streak").textContent=d.streak==null?"":("Серия "+d.streak);
-var go=$("go"),alt=$("alt"),mode=d.mode||"go",note=$("note");
-if(mode=="again"){go.textContent="Повторить";go.setAttribute("data-op","again");$("noteText").textContent="Можно пройти день ещё раз.";}
-else if(mode=="live"){go.textContent="Продолжить";go.setAttribute("data-op","go");$("noteText").textContent="Сессия уже открыта.";}
-else if(mode=="rest"){go.textContent="Назад";go.setAttribute("data-op","menu");$("noteText").textContent="Сегодня по плану отдых. Можно взять другой день.";}
-else if(mode=="none"){go.textContent="В меню";go.setAttribute("data-op","menu");$("noteText").textContent="Сначала нужен план тренировок.";}
-else{go.textContent="Начать";go.setAttribute("data-op","go");$("noteText").textContent="";}
-show(go,mode!="rest"&&mode!="none");
-show(note,!!$("noteText").textContent);
-show($("menu"),true);
-if(d.alt&&d.altDay){
-alt.textContent=d.alt;
+var go=$("go"),alt=$("alt"),mode=d.mode||"go",hasAlt=!!(d.alt&&d.altDay);
+if(mode=="again"){
+go.textContent="Повторить";go.setAttribute("data-op","again");
+$("noteText").textContent="Можно пройти день ещё раз или взять другой.";
+}else if(mode=="live"){
+go.textContent="Продолжить";go.setAttribute("data-op","go");
+$("noteText").textContent="Сессия уже открыта.";
+}else if(mode=="rest"){
+go.textContent="Начать";go.setAttribute("data-op","go");
+$("noteText").textContent=hasAlt?"По плану сегодня отдых. Можно пройти другой день недели.":"По плану сегодня отдых. Открытых дней на этой неделе нет.";
+}else if(mode=="none"){
+go.textContent="В меню";go.setAttribute("data-op","menu");
+$("noteText").textContent="Сначала нужен план тренировок.";
+}else{
+go.textContent="Начать";go.setAttribute("data-op","go");
+$("noteText").textContent="";
+}
+show($("note"),!!$("noteText").textContent);
+if(mode=="rest"&&hasAlt){
+alt.textContent="Всё равно потренироваться · "+d.alt;
 alt.setAttribute("data-op","day:"+d.altDay);
+alt.className="p";
 show(alt,true);
-alt.classList.toggle("p",mode=="rest"||mode=="again");
-alt.classList.toggle("back",mode!="rest"&&mode!="again");
-}else{show(alt,false);}
-if(mode=="again"){go.className="p";}
-else if(mode=="live"||mode=="go"){go.className="p";}
+show(go,false);
+}else if(hasAlt){
+alt.textContent=(mode=="again"?"Другой день · ":"")+d.alt;
+alt.setAttribute("data-op","day:"+d.altDay);
+alt.className=(mode=="again")?"p":"back";
+show(alt,true);
+show(go,mode!="none");
+go.className=(mode=="again")?"back":"p";
+}else{
+show(alt,false);
+show(go,mode!="rest"&&mode!="none");
+go.className="p";
+}
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}

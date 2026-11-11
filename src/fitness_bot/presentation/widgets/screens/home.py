@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
+from fitness_bot.presentation.widgets.alt_day import put_alternative
 from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
@@ -66,7 +67,7 @@ class HomeScreen:
         day = getattr(result, "weekday", None)
         if isinstance(day, int):
             data["day"] = day
-        _put_alternative(data, result)
+        put_alternative(data, result, again=outcome == "already_done")
         updated = self._frame(data)
         return ScreenResult(frame=updated, answer=updated.chat_data)
 
@@ -131,19 +132,5 @@ def _payload(today: object) -> dict[str, object]:
     }
     if isinstance(weekday, int):
         data["day"] = weekday
-    _put_alternative(data, today)
+    put_alternative(data, today, again=mode == "again")
     return data
-
-
-def _put_alternative(data: dict[str, object], source: object) -> None:
-    mode = str(data.get("mode") or "")
-    weekday = getattr(source, "alternative_weekday", None)
-    title = getattr(source, "alternative_title", None)
-    if mode not in {"again", "rest"} or not isinstance(weekday, int) or not title:
-        data.pop("alt", None)
-        data.pop("altDay", None)
-        return
-    label = WEEKDAY_LABELS.get(weekday, str(weekday))
-    prefix = "Ещё одну: " if mode == "again" else ""
-    data["alt"] = f"{prefix}{label} · {title}"[:42]
-    data["altDay"] = weekday

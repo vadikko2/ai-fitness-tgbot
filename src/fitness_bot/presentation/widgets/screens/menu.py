@@ -5,6 +5,7 @@ from __future__ import annotations
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.flow_helpers import goal_label
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
+from fitness_bot.presentation.widgets.alt_day import put_alternative, resolve_alternative
 from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
@@ -56,9 +57,14 @@ class MenuScreen:
             return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
         if mode == "none":
             return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
+
         weekday = data.get("altDay") if mode == "rest" else None
         if mode == "rest" and not isinstance(weekday, int):
+            weekday = await self._probe_rest_day(ctx)
+
+        if mode == "rest" and not isinstance(weekday, int):
             return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
+
         try:
             result = await ctx.mediator.send(
                 StartTodayWorkoutCommand(
@@ -71,7 +77,23 @@ class MenuScreen:
         outcome = str(getattr(result, "outcome", "") or "")
         if outcome in {"started", "resumed"}:
             return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.CONSOLE)
+        if outcome == "rest":
+            found = resolve_alternative(result)
+            if found is not None:
+                try:
+                    started = await ctx.mediator.send(
+                        StartTodayWorkoutCommand(telegram_user_id=ctx.user_id, weekday=found[0]),
+                    )
+                except DomainError:
+                    return ScreenResult(frame=frame, answer=PHASE_ERROR)
+                if str(getattr(started, "outcome", "") or "") in {"started", "resumed"}:
+                    return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.CONSOLE)
         return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
+
+    async def _probe_rest_day(self, ctx: ScreenContext) -> int | None:
+        today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
+        found = resolve_alternative(today)
+        return found[0] if found else None
 
     def _frame(self, data: dict[str, object]) -> WidgetFrame:
         return WidgetFrame(
@@ -101,23 +123,24 @@ def _payload(home: object, today: object) -> dict[str, object]:
     mode = _mode(today)
     weekday = getattr(today, "weekday", None)
     when = WEEKDAY_LABELS.get(weekday, "") if isinstance(weekday, int) else ""
+    linked = getattr(home, "linked_coach_user_id", None) is not None
+    coach_name = str(getattr(home, "linked_coach_display_name", "") or "").strip()
     data: dict[str, object] = {
         "title": "Главное",
-        "sub": _subtitle(home),
         "when": when,
         "mode": mode,
-        "coach": "mine" if getattr(home, "linked_coach_user_id", None) is not None else "find",
+        "coach": "mine" if linked else "find",
         "cab": "cab" if getattr(home, "show_coach_badge", False) else "apply",
     }
+    if linked and coach_name:
+        data["coachName"] = coach_name[:36]
+    goal = _goal_line(home)
+    if goal:
+        data["goal"] = goal
     workout = _workout_title(today)
     if workout:
         data["workout"] = workout[:42]
-    alt_day = getattr(today, "alternative_weekday", None)
-    alt_title = getattr(today, "alternative_title", None)
-    if mode in {"rest", "again"} and isinstance(alt_day, int) and alt_title:
-        label = WEEKDAY_LABELS.get(alt_day, str(alt_day))
-        data["altDay"] = alt_day
-        data["cta"] = f"{label} · {alt_title}"[:42]
+    put_alternative(data, today, again=mode == "again")
     if data["cab"] == "cab":
         data["n"] = int(getattr(home, "active_clients_count", 0) or 0)
     if getattr(home, "is_moderator", False):
@@ -146,13 +169,10 @@ def _workout_title(today: object) -> str:
     return ""
 
 
-def _subtitle(home: object) -> str:
-    coach = str(getattr(home, "linked_coach_display_name", "") or "").strip()
-    if coach:
-        return f"Тренер · {coach}"[:48]
+def _goal_line(home: object) -> str:
     label = goal_label(getattr(home, "goal", None))
     if label:
         return f"Цель · {label}"[:48]
     if getattr(home, "coach_status", None) == "pending":
         return "Заявка на проверке"
-    return "Выбери раздел"
+    return ""

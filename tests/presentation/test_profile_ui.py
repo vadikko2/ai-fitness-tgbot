@@ -111,6 +111,7 @@ def test_body_tracking_moved_from_home_to_profile_hub() -> None:
     hub = _callbacks(profile_hub_keyboard())
     assert hub[0] == "prof_form"
     assert hub.index("prog") + 1 == hub.index("library")
+    assert "coach_cab" not in hub
     assert {
         "wt_menu",
         "meas_menu",
@@ -126,6 +127,9 @@ def test_body_tracking_moved_from_home_to_profile_hub() -> None:
         "ihow:profile",
         "home",
     } <= set(hub)
+    coach_hub = _callbacks(profile_hub_keyboard(show_coach_cabinet=True, active_clients_count=2))
+    assert coach_hub.index("library") + 1 == coach_hub.index("coach_cab")
+    assert "coach_cab" not in _callbacks(home_keyboard(show_coach_badge=True, active_clients_count=2))
     assert {"wt_remind", "pp_remind", "profile"} <= set(_callbacks(profile_reminders_keyboard()))
 
 

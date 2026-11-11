@@ -346,8 +346,16 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
         await mediator.send(
             ExpectInputCommand(telegram_user_id=callback.from_user.id, expected_input=ExpectedInput.NONE),
         )
+        home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
         text = await profile_hub_text(jinja_env=jinja_env, mediator=mediator, telegram_user_id=callback.from_user.id)
-        await _answer(callback, text, reply_markup=profile_hub_keyboard())
+        await _answer(
+            callback,
+            text,
+            reply_markup=profile_hub_keyboard(
+                show_coach_cabinet=home.show_coach_badge,
+                active_clients_count=home.active_clients_count,
+            ),
+        )
 
     @router.callback_query(F.data == "prof_form")
     async def handle_prof_form(callback: CallbackQuery) -> None:

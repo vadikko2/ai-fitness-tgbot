@@ -7,16 +7,25 @@ header{display:none}
 .hero{margin:0 0 16px;padding:16px 14px;border-radius:18px;background:linear-gradient(160deg,#FFF4B8 0%,#F7F8FA 58%,#EEF2F7 100%)}
 .hero em{display:block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(2,32,70,.42)}
 .hero b{display:block;margin-top:8px;font-size:24px;font-weight:700;letter-spacing:-.04em;line-height:1.1}
-.hero small{display:block;margin-top:8px;font-size:13px;font-weight:500;color:rgba(2,32,70,.58);line-height:1.35}
-#hint:empty,.sub:empty{display:none}
+.hero .goal{display:block;margin-top:8px;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
+.hero .goal:empty{display:none}
+.hero .coach{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:8px 12px;min-height:0;border-radius:999px;background:rgba(2,32,70,.06);color:#022046;font-size:13px;font-weight:600;line-height:1.2;text-align:left}
+.hero .coach u{font-style:normal;text-decoration:none;border-bottom:1px solid rgba(2,32,70,.28)}
+#hint:empty{display:none}
 #hint{margin:0 0 12px}
 .nav button{display:block;width:100%;box-sizing:border-box;margin:0 0 10px;padding:14px 16px;min-height:52px;background:#F2F4F7;border-radius:16px;text-align:left;font-weight:600;font-size:15px;line-height:1.3;white-space:normal}
 .nav button.p{background:#F5D22D;text-align:center;font-size:17px;letter-spacing:-.02em}
+.nav button.blue{background:#022046;color:#fff;text-align:center}
 .nav button.ghost{background:#fff;border:1px solid rgba(2,32,70,.14);font-weight:500;color:rgba(2,32,70,.82)}
 .nav button:last-child{margin-bottom:0}
 </style>
 <div class="wrap">
-<div class="hero"><em id="tag">Сегодня</em><b id="status">Главное</b><small class="sub" id="sub"></small></div>
+<div class="hero">
+<em id="tag">Сегодня</em>
+<b id="status">Главное</b>
+<span class="goal" id="goal"></span>
+<button type="button" class="coach" id="coach" data-op="cfind"><u id="coachLabel">Найти тренера</u></button>
+</div>
 <p class="hint" id="hint"></p>
 <nav class="nav" id="nav"></nav>
 </div>
@@ -28,15 +37,19 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp
 function statusOf(d){
 if(d.mode=="live"){return "Тренировка идёт";}
 if(d.mode=="again"){return "Уже сделано";}
-if(d.mode=="rest"){return "Выходной";}
+if(d.mode=="rest"){return "Сегодня отдых";}
 if(d.mode=="none"){return "Нужна программа";}
 return d.workout||"Готов к тренировке";
+}
+function restLine(d){
+if(d.cta){return "Можно пройти другой день плана";}
+return "На этой неделе открытых дней нет";
 }
 function ctaOf(d){
 if(d.mode=="live"){return "Продолжить";}
 if(d.mode=="again"){return "К тренировке";}
-if(d.mode=="rest"&&d.cta){return d.cta;}
-if(d.mode=="rest"){return "Выбрать день";}
+if(d.mode=="rest"&&d.cta){return "Всё равно потренироваться · "+d.cta;}
+if(d.mode=="rest"){return "Открытых дней нет";}
 if(d.mode=="none"){return "Открыть план";}
 return "Начать тренировку";
 }
@@ -46,13 +59,15 @@ $("t").textContent="Главное";
 $("s").textContent="";
 $("tag").textContent=d.when||"Меню";
 $("status").textContent=statusOf(d);
-$("sub").textContent=d.sub||"";
+$("goal").textContent=d.mode=="rest"?restLine(d):(d.goal||"");
 $("hint").textContent=d.hint||"";
-var html='<button type="button" class="p" data-op="train">'+esc(ctaOf(d))+'</button>';
-html+='<button type="button" class="ghost" data-op="prof">Профиль</button>';
-html+='<button type="button" class="ghost" data-op="'+(d.coach==="mine"?"cmine":"cfind")+'">'+(d.coach==="mine"?"Мой тренер":"Найти тренера")+'</button>';
-if(d.cab==="cab"){html+='<button type="button" class="ghost" data-op="cab">Кабинет тренера'+(d.n!=null&&d.n!==""?(" · "+esc(d.n)):"")+'</button>';}
-else{html+='<button type="button" class="ghost" data-op="apply">Стать тренером</button>';}
+var mine=d.coach==="mine",coach=$("coach");
+coach.setAttribute("data-op",mine?"cmine":"cfind");
+$("coachLabel").textContent=mine?(d.coachName?("Тренер · "+d.coachName):"Мой тренер"):"Найти тренера";
+var html="",showTrain=!(d.mode=="rest"&&!d.cta);
+if(showTrain){html+='<button type="button" class="p" data-op="train">'+esc(ctaOf(d))+'</button>';}
+html+='<button type="button" class="blue" data-op="prof">Профиль</button>';
+if(d.cab!=="cab"){html+='<button type="button" class="ghost" data-op="apply">Стать тренером</button>';}
 if(d.mod){html+='<button type="button" class="ghost" data-op="mod">Модератор</button>';}
 $("nav").innerHTML=html;
 }

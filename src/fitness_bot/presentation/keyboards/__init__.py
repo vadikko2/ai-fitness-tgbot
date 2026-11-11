@@ -154,6 +154,7 @@ def home_keyboard(
     is_moderator: bool = False,
     has_linked_coach: bool = False,
 ) -> InlineKeyboardMarkup:
+    _ = active_clients_count
     coach_btn = (
         InlineKeyboardButton(text="🧑‍🏫 Мой тренер", callback_data="coach_mine")
         if has_linked_coach
@@ -166,16 +167,7 @@ def home_keyboard(
             coach_btn,
         ],
     ]
-    if show_coach_badge:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"Кабинет тренера ({active_clients_count})",
-                    callback_data="coach_cab",
-                ),
-            ],
-        )
-    else:
+    if not show_coach_badge:
         rows.append([InlineKeyboardButton(text="Стать тренером", callback_data="coach_apply")])
     if is_moderator:
         rows.append([InlineKeyboardButton(text="🛡 Модератор", callback_data="mod")])
@@ -320,29 +312,45 @@ def profile_edit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def profile_hub_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Анкета и цель", callback_data="prof_form")],
+def profile_hub_keyboard(
+    *,
+    show_coach_cabinet: bool = False,
+    active_clients_count: int = 0,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="✏️ Анкета и цель", callback_data="prof_form")],
+        [
+            InlineKeyboardButton(text="⚖️ Вес", callback_data="wt_menu"),
+            InlineKeyboardButton(text=PROFILE_FIELD_LABELS[ProfileField.HEIGHT], callback_data="prof_edit:height"),
+        ],
+        [InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu")],
+        [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="pp_menu")],
+        [InlineKeyboardButton(text="⏰ Напоминания", callback_data="prof_remind")],
+        [
+            InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
+            InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
+        ],
+        [InlineKeyboardButton(text="📜 История", callback_data="hist")],
+        [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
+        [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
+    ]
+    if show_coach_cabinet:
+        rows.append(
             [
-                InlineKeyboardButton(text="⚖️ Вес", callback_data="wt_menu"),
-                InlineKeyboardButton(text=PROFILE_FIELD_LABELS[ProfileField.HEIGHT], callback_data="prof_edit:height"),
+                InlineKeyboardButton(
+                    text=f"Кабинет тренера ({active_clients_count})",
+                    callback_data="coach_cab",
+                ),
             ],
-            [InlineKeyboardButton(text="📏 Обхваты", callback_data="meas_menu")],
-            [InlineKeyboardButton(text="📷 Фото прогресса", callback_data="pp_menu")],
-            [InlineKeyboardButton(text="⏰ Напоминания", callback_data="prof_remind")],
-            [
-                InlineKeyboardButton(text="🥗 Питание", callback_data="nutr"),
-                InlineKeyboardButton(text="🙂 Самочувствие", callback_data="feel"),
-            ],
-            [InlineKeyboardButton(text="📜 История", callback_data="hist")],
-            [InlineKeyboardButton(text="📋 Мой план сейчас", callback_data="prog")],
-            [InlineKeyboardButton(text="📚 Библиотека программ", callback_data="library")],
+        )
+    rows.extend(
+        [
             [InlineKeyboardButton(text="ℹ️ Инфо и связь", callback_data="help_hub")],
             [how_it_works_button("profile")],
             [InlineKeyboardButton(text=_MENU, callback_data="home")],
         ],
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def profile_reminders_keyboard(
