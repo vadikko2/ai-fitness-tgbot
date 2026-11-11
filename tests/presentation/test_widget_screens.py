@@ -535,7 +535,9 @@ async def test_menu_marks_week_done_and_nweek_opens_week_draft() -> None:
         alternative_title=None,
     )
     screen = MenuScreen(_Shell(shell_id="menu"))
-    opened = await screen.open(_ctx(_Mediator({GetHomeQuery: home, GetTodayWorkoutQuery: today}), screen=WidgetScreenId.MENU))
+    opened = await screen.open(
+        _ctx(_Mediator({GetHomeQuery: home, GetTodayWorkoutQuery: today}), screen=WidgetScreenId.MENU)
+    )
     body = json.loads(opened.chat_data)
     assert body["mode"] == "rest"
     assert body["weekDone"] == 1
@@ -563,7 +565,9 @@ async def test_menu_marks_week_done_and_nweek_opens_week_draft() -> None:
     assert full.height is not None
     assert opened.height < full.height <= 520
     draft = _workout()
-    mediator = _Mediator({GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)})
+    mediator = _Mediator(
+        {GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)}
+    )
     result = await screen.apply(_rebind(_ctx(mediator, opened, screen=WidgetScreenId.MENU), opened), "nweek")
     assert result.navigate is WidgetScreenId.WEEK
     assert any(isinstance(item, GenerateNextWeekCommand) for item in mediator.sent)
@@ -587,7 +591,9 @@ async def test_home_rest_week_done_go_starts_next_week() -> None:
     assert body["weekDone"] == 1
     assert body["mode"] == "rest"
     draft = _workout()
-    mediator = _Mediator({GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)})
+    mediator = _Mediator(
+        {GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)}
+    )
     result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.HOME), frame), "go")
     assert result.navigate is WidgetScreenId.WEEK
     assert any(isinstance(item, GenerateNextWeekCommand) for item in mediator.sent)

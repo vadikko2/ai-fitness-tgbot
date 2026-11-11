@@ -39,7 +39,11 @@ class HomeScreen:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
         if parsed.name == "go":
             data = read_state(frame.chat_data)
-            if data.get("weekDone") and str(data.get("mode") or "") == "rest" and not isinstance(data.get("altDay"), int):
+            if (
+                data.get("weekDone")
+                and str(data.get("mode") or "") == "rest"
+                and not isinstance(data.get("altDay"), int)
+            ):
                 return await start_next_week(ctx, frame)
             return await self._start(ctx, frame, weekday=None)
         if parsed.name == "again":
