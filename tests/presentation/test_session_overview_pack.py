@@ -65,6 +65,7 @@ class _Message:
     def __init__(self) -> None:
         self.answers: list[tuple[str, object]] = []
         self.parse_modes: list[object] = []
+        self.chat = type("Chat", (), {"id": 9})()
 
     async def answer(self, text: str, reply_markup=None, **kwargs: object) -> None:
         self.answers.append((text, reply_markup))

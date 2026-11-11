@@ -113,7 +113,7 @@ def _console() -> tuple[ConsoleScreen, _Mediator, ScreenContext]:
 
 def _writes(mediator: _Mediator) -> list[object]:
     return [
-        item for item in mediator.sent if isinstance(item, (RecordSlotActualCommand, ConfirmExerciseAsPlannedCommand))
+        item for item in mediator.sent if isinstance(item, RecordSlotActualCommand | ConfirmExerciseAsPlannedCommand)
     ]
 
 
