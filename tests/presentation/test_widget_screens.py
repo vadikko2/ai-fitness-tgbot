@@ -22,7 +22,7 @@ from fitness_bot.presentation.widgets.screens.menu import MenuScreen
 from fitness_bot.presentation.widgets.screens.summary import SummaryScreen
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 from fitness_bot.presentation.widgets.state import pack_state
-from fitness_bot.service.models.commands.program import ApproveProposalCommand
+from fitness_bot.service.models.commands.program import ApproveProposalCommand, GenerateNextWeekCommand
 from fitness_bot.service.models.commands.session import (
     ConfirmExerciseAsPlannedCommand,
     FinalizeSessionCommand,
@@ -521,6 +521,78 @@ async def test_menu_profile_and_coach_use_handoff() -> None:
     assert (await screen.apply(ctx, "mod")).handoff == "mod"
 
 
+async def test_menu_marks_week_done_and_nweek_opens_week_draft() -> None:
+    home = _home_query_result()
+    today = SimpleNamespace(
+        screen="rest",
+        document=None,
+        weekday=4,
+        completed_weekdays=[1, 3, 5, 6],
+        planned_weekdays=[1, 3, 5, 6],
+        completed_today=False,
+        week_finished=True,
+        alternative_weekday=None,
+        alternative_title=None,
+    )
+    screen = MenuScreen(_Shell(shell_id="menu"))
+    opened = await screen.open(_ctx(_Mediator({GetHomeQuery: home, GetTodayWorkoutQuery: today}), screen=WidgetScreenId.MENU))
+    body = json.loads(opened.chat_data)
+    assert body["mode"] == "rest"
+    assert body["weekDone"] == 1
+    assert "cta" not in body
+    assert opened.height is not None
+    assert opened.height < 440
+    full = await screen.open(
+        _ctx(
+            _Mediator(
+                {
+                    GetHomeQuery: _home_query_result(show_coach_badge=False, is_moderator=True),
+                    GetTodayWorkoutQuery: SimpleNamespace(
+                        screen="template",
+                        document=SimpleNamespace(days=[SimpleNamespace(title="Грудь")]),
+                        weekday=1,
+                        completed_weekdays=[1, 3, 5, 6],
+                        completed_today=False,
+                        week_finished=True,
+                    ),
+                },
+            ),
+            screen=WidgetScreenId.MENU,
+        ),
+    )
+    assert full.height is not None
+    assert opened.height < full.height <= 520
+    draft = _workout()
+    mediator = _Mediator({GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)})
+    result = await screen.apply(_rebind(_ctx(mediator, opened, screen=WidgetScreenId.MENU), opened), "nweek")
+    assert result.navigate is WidgetScreenId.WEEK
+    assert any(isinstance(item, GenerateNextWeekCommand) for item in mediator.sent)
+
+
+async def test_home_rest_week_done_go_starts_next_week() -> None:
+    today = SimpleNamespace(
+        screen="rest",
+        document=None,
+        weekday=4,
+        completed_weekdays=[1, 3, 5, 6],
+        planned_weekdays=[1, 3, 5, 6],
+        completed_today=False,
+        week_finished=True,
+        alternative_weekday=None,
+        alternative_title=None,
+    )
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = await screen.open(_ctx(_Mediator({GetTodayWorkoutQuery: today}), screen=WidgetScreenId.HOME))
+    body = json.loads(frame.chat_data)
+    assert body["weekDone"] == 1
+    assert body["mode"] == "rest"
+    draft = _workout()
+    mediator = _Mediator({GenerateNextWeekCommand: SimpleNamespace(document=draft, agent_unavailable=False, schema_failed=False)})
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.HOME), frame), "go")
+    assert result.navigate is WidgetScreenId.WEEK
+    assert any(isinstance(item, GenerateNextWeekCommand) for item in mediator.sent)
+
+
 async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing() -> None:
     screen, mediator, ctx = _console()
     frame = await screen.open(ctx)
@@ -932,6 +1004,11 @@ def test_shell_zlib_stays_within_4096() -> None:
     home = shells["home"].html()
     assert 'data-op="menu"' in home
     assert "В меню" in home
+    assert "weekDone" in home
+    assert "Новая неделя" in home
+    menu = shells["menu"].html()
+    assert 'data-op="nweek"' in menu
+    assert "Новая неделя" in menu
     for shell in shells.values():
         html = shell.html()
         assert "<footer" not in html

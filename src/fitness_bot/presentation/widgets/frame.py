@@ -22,7 +22,7 @@ WIDGET_HEIGHT: dict[WidgetScreenId, int] = {
     WidgetScreenId.WEEK: 420,
     WidgetScreenId.HOME: 260,
     WidgetScreenId.SUMMARY: 300,
-    WidgetScreenId.MENU: 440,
+    WidgetScreenId.MENU: 360,
 }
 
 
@@ -32,6 +32,36 @@ class WidgetFrame:
     chat_data: str
     caption: str
     shell_id: str
+    height: int | None = None
+
+
+def widget_height(frame: WidgetFrame) -> int:
+    if frame.height is not None:
+        return frame.height
+    return WIDGET_HEIGHT[frame.screen]
+
+
+def menu_height(data: dict[str, object]) -> int:
+    """Fit the menu bubble to the hero + visible buttons; no tall empty card."""
+    total = 24  # body + wrap padding
+    total += 128  # hero with coach chip
+    if data.get("mode") == "rest" or data.get("goal") or data.get("weekDone"):
+        total += 26
+    buttons = 1  # profile
+    if data.get("weekDone"):
+        buttons += 1
+    show_train = not (str(data.get("mode") or "") == "rest" and not data.get("cta"))
+    if show_train:
+        buttons += 1
+        total += 10  # long CTA may wrap
+    if data.get("cab") != "cab":
+        buttons += 1
+    if data.get("mod"):
+        buttons += 1
+    total += buttons * 52 + max(0, buttons - 1) * 8
+    if data.get("hint"):
+        total += 28
+    return min(520, max(220, total))
 
 
 @dataclass(frozen=True, slots=True)

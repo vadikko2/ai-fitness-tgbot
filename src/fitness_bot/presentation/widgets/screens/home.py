@@ -6,6 +6,7 @@ from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
 from fitness_bot.presentation.widgets.alt_day import put_alternative
 from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.next_week import start_next_week
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
@@ -37,6 +38,9 @@ class HomeScreen:
         if isinstance(parsed, OpcodeRejection) or parsed.screen is not WidgetScreenId.HOME:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
         if parsed.name == "go":
+            data = read_state(frame.chat_data)
+            if data.get("weekDone") and str(data.get("mode") or "") == "rest" and not isinstance(data.get("altDay"), int):
+                return await start_next_week(ctx, frame)
             return await self._start(ctx, frame, weekday=None)
         if parsed.name == "again":
             return await self._repeat(ctx, frame)
@@ -133,4 +137,6 @@ def _payload(today: object) -> dict[str, object]:
     if isinstance(weekday, int):
         data["day"] = weekday
     put_alternative(data, today, again=mode == "again")
+    if getattr(today, "week_finished", False):
+        data["weekDone"] = 1
     return data

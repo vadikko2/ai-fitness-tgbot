@@ -4,10 +4,11 @@
 <style>
 .card{margin:8px 0 12px;padding:14px;border-radius:16px;background:#F7F8FA}
 .card p{margin:0;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
-#streak:empty,#note:empty{display:none}
-#streak{margin:0 0 10px}
+#streak:empty,#note:empty,#hint:empty{display:none}
+#streak,#hint{margin:0 0 10px}
 </style>
 <p class="hint" id="streak"></p>
+<p class="hint" id="hint"></p>
 <div class="card hide" id="note"><p id="noteText"></p></div>
 <button type="button" class="p" id="go" data-op="go">Начать</button>
 <button type="button" class="back hide" id="alt" data-op="go">Ещё одну</button>
@@ -22,13 +23,17 @@ if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=d.when||"";
 $("streak").textContent=d.streak==null?"":("Серия "+d.streak);
-var go=$("go"),alt=$("alt"),mode=d.mode||"go",hasAlt=!!(d.alt&&d.altDay);
+$("hint").textContent=d.hint||"";
+var go=$("go"),alt=$("alt"),mode=d.mode||"go",hasAlt=!!(d.alt&&d.altDay),fresh=!!d.weekDone&&mode=="rest"&&!hasAlt;
 if(mode=="again"){
 go.textContent="Повторить";go.setAttribute("data-op","again");
 $("noteText").textContent="Можно пройти день ещё раз или взять другой.";
 }else if(mode=="live"){
 go.textContent="Продолжить";go.setAttribute("data-op","go");
 $("noteText").textContent="Сессия уже открыта.";
+}else if(fresh){
+go.textContent="Новая неделя";go.setAttribute("data-op","go");
+$("noteText").textContent="Неделя закрыта. Можно сразу собрать следующую.";
 }else if(mode=="rest"){
 go.textContent="Начать";go.setAttribute("data-op","go");
 $("noteText").textContent=hasAlt?"По плану сегодня отдых. Можно пройти другой день недели.":"По плану сегодня отдых. Открытых дней на этой неделе нет.";
@@ -37,7 +42,7 @@ go.textContent="В меню";go.setAttribute("data-op","menu");
 $("noteText").textContent="Сначала нужен план тренировок.";
 }else{
 go.textContent="Начать";go.setAttribute("data-op","go");
-$("noteText").textContent="";
+$("noteText").textContent=d.weekDone?"Неделя уже закрыта — новую соберём из меню.":"";
 }
 show($("note"),!!$("noteText").textContent);
 if(mode=="rest"&&hasAlt){
@@ -55,7 +60,7 @@ show(go,mode!="none");
 go.className=(mode=="again")?"back":"p";
 }else{
 show(alt,false);
-show(go,mode!="rest"&&mode!="none");
+show(go,fresh||(mode!="rest"&&mode!="none"));
 go.className="p";
 }
 }

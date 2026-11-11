@@ -313,6 +313,7 @@ def test_opcode_grammar() -> None:
         "cab": WidgetScreenId.MENU,
         "apply": WidgetScreenId.MENU,
         "mod": WidgetScreenId.MENU,
+        "nweek": WidgetScreenId.MENU,
     }
     for raw, screen in samples.items():
         item = parse_opcode(raw)

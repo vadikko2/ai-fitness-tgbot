@@ -18,11 +18,11 @@ from fitness_bot.presentation.chat_pages import (
     wipe_chat,
 )
 from fitness_bot.presentation.widgets.frame import (
-    WIDGET_HEIGHT,
     WidgetBinding,
     WidgetBindings,
     WidgetFrame,
     WidgetScreenId,
+    widget_height,
 )
 from fitness_bot.presentation.widgets.limits import WidgetLimitError
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
@@ -127,7 +127,7 @@ class WidgetGateway:
                 html=html,
                 chat_data=frame.chat_data,
                 caption=frame.caption,
-                height=WIDGET_HEIGHT[frame.screen],
+                height=widget_height(frame),
             )
         except (WidgetLimitError, TelegramAPIError, RuntimeError):
             logger.warning("widget open failed; caller should draw the keyboard", exc_info=True)

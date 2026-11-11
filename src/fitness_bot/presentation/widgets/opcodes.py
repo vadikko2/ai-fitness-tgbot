@@ -50,6 +50,7 @@ _EXACT: dict[str, WidgetScreenId] = {
     "cab": WidgetScreenId.MENU,
     "apply": WidgetScreenId.MENU,
     "mod": WidgetScreenId.MENU,
+    "nweek": WidgetScreenId.MENU,
 }
 
 

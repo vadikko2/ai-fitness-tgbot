@@ -6,7 +6,8 @@ from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.flow_helpers import goal_label
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
 from fitness_bot.presentation.widgets.alt_day import put_alternative, resolve_alternative
-from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId, menu_height
+from fitness_bot.presentation.widgets.next_week import start_next_week
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
@@ -43,6 +44,8 @@ class MenuScreen:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
         if parsed.name == "train":
             return await self._train(ctx, frame)
+        if parsed.name == "nweek":
+            return await start_next_week(ctx, frame)
         target = _HANDOFF.get(parsed.name)
         if target is None:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
@@ -101,6 +104,7 @@ class MenuScreen:
             chat_data=pack_state(data),
             caption="",
             shell_id="menu",
+            height=menu_height(data),
         )
 
 
@@ -116,6 +120,7 @@ def with_hint(frame: WidgetFrame, hint: str) -> WidgetFrame:
         chat_data=pack_state(data),
         caption=frame.caption,
         shell_id=frame.shell_id,
+        height=menu_height(data) if frame.screen is WidgetScreenId.MENU else frame.height,
     )
 
 
@@ -141,6 +146,8 @@ def _payload(home: object, today: object) -> dict[str, object]:
     if workout:
         data["workout"] = workout[:42]
     put_alternative(data, today, again=mode == "again")
+    if getattr(today, "week_finished", False):
+        data["weekDone"] = 1
     if data["cab"] == "cab":
         data["n"] = int(getattr(home, "active_clients_count", 0) or 0)
     if getattr(home, "is_moderator", False):
