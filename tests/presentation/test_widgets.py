@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from aiogram import Dispatcher
@@ -19,6 +20,7 @@ from fitness_bot.presentation.chat_pages import (
     remember,
     reset_chat_pages,
 )
+from fitness_bot.presentation.keyboards import START_WORKOUT_LABEL
 from fitness_bot.presentation.routers.widget import (
     create_widget_router,
     extract_widget_query,
@@ -42,6 +44,7 @@ from fitness_bot.presentation.widgets.transport import (
     _EditWidgetData,
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
+from fitness_bot.service.models.queries.users import GetHomeQuery, GetHomeQueryResult
 from fitness_bot.shared.settings import Settings
 
 
@@ -51,11 +54,13 @@ class _Flags:
 
 
 class _Mediator:
-    def __init__(self) -> None:
+    def __init__(self, replies: dict[type, object] | None = None) -> None:
         self.sent: list[object] = []
+        self.replies = replies or {}
 
-    async def send(self, request: object) -> None:
+    async def send(self, request: object) -> object | None:
         self.sent.append(request)
+        return self.replies.get(type(request))
 
 
 class _Transport:
@@ -135,9 +140,21 @@ class _Screen:
 class _DeleteBot:
     def __init__(self) -> None:
         self.deleted: list[int] = []
+        self.sent: list[tuple[object, ...]] = []
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
         self.deleted.append(message_id)
+
+    async def delete_messages(self, chat_id: int, message_ids: list[int]) -> None:
+        self.deleted.extend(message_ids)
+
+    async def send_message(self, chat_id: int, text: str, reply_markup: object = None) -> Message:
+        self.sent.append(("send_message", chat_id, text, reply_markup))
+        return Message(
+            message_id=90,
+            date=datetime.now(UTC),
+            chat=Chat(id=chat_id, type="private"),
+        )
 
 
 def _gateway(
@@ -145,20 +162,21 @@ def _gateway(
     *,
     enabled: bool = True,
     bot: object | None = None,
+    mediator: _Mediator | None = None,
 ) -> tuple[WidgetGateway, _Transport, _Screen, _Mediator]:
     transport = _Transport(calls)
     screen = _Screen(calls)
-    mediator = _Mediator()
+    resolved = mediator if mediator is not None else _Mediator()
     gateway = WidgetGateway(
         transport=transport,
         media=_Media(calls),
         bindings=WidgetBindings(),
-        mediator=mediator,  # type: ignore[arg-type]
+        mediator=resolved,  # type: ignore[arg-type]
         settings=_Flags(enabled),
         bot=bot,
     )
     gateway.register_screen(screen)
-    return gateway, transport, screen, mediator
+    return gateway, transport, screen, resolved
 
 
 def _query(data: str, *, user_id: int = 7, message_id: int = 15) -> WidgetQuery:
@@ -266,8 +284,6 @@ def test_opcode_grammar() -> None:
         "back": WidgetScreenId.CONSOLE,
         "how": WidgetScreenId.CONSOLE,
         "vid": WidgetScreenId.CONSOLE,
-        "kg": WidgetScreenId.CONSOLE,
-        "n:5": WidgetScreenId.CONSOLE,
         "sum": WidgetScreenId.CONSOLE,
         "view": WidgetScreenId.CONSOLE,
         "end": WidgetScreenId.CONSOLE,
@@ -286,6 +302,7 @@ def test_opcode_grammar() -> None:
         "approve": WidgetScreenId.WEEK,
         "go": WidgetScreenId.HOME,
         "again": WidgetScreenId.HOME,
+        "menu": WidgetScreenId.HOME,
         "day:3": WidgetScreenId.HOME,
         "home": WidgetScreenId.SUMMARY,
     }
@@ -303,7 +320,9 @@ def test_opcode_grammar() -> None:
         ("rpe:5", "unknown"),
         ("rpe:11", "unknown"),
         ("alt:3", "unknown"),
-        ("n:a", "unknown"),
+        ("kg", "unknown"),
+        ("n:5", "unknown"),
+        ("k:52.5", "unknown"),
         ("day:0", "unknown"),
         ("day:8", "unknown"),
         ("preset:20", "unknown"),
@@ -343,7 +362,8 @@ async def test_gateway_edits_then_answers_and_rejects_a_bad_opcode() -> None:
     opened = await gateway.open(7, WidgetScreenId.CONSOLE, chat_id=7)
     assert opened.use_keyboard is False
     assert opened.message_id == 15
-    assert bot.deleted == [3]
+    assert 3 in bot.deleted
+    assert 15 not in bot.deleted
     assert page_message_ids(7) == [15]
     assert ("send", 7, "<b>ok</b>", '{"ph":"work"}', "work", 480) in calls
 
@@ -407,6 +427,42 @@ async def test_query_exception_still_answers() -> None:
     screen.apply = boom  # type: ignore[method-assign]
     await gateway.on_query(_query("sync"))
     assert calls == [("answer", "q1", None)]
+
+
+async def test_gateway_leave_to_menu_clears_widget_and_posts_home_keyboard() -> None:
+    reset_chat_pages()
+    calls: list[tuple[object, ...]] = []
+    bot = _DeleteBot()
+    home = GetHomeQueryResult(
+        user_id=uuid4(),
+        profile_complete=True,
+        goal=None,
+        age=None,
+        weight_kg=None,
+    )
+    mediator = _Mediator({GetHomeQuery: home})
+    gateway, _transport, screen, _ = _gateway(calls, bot=bot, mediator=mediator)
+    await gateway.open(7, WidgetScreenId.CONSOLE, chat_id=7)
+    calls.clear()
+    screen.pending.append(
+        ScreenResult(frame=_frame("work", '{"ph":"work"}'), answer='{"ph":"work"}', leave_to_menu=True),
+    )
+    await gateway.on_query(_query("sync"))
+    assert calls == [("apply", "sync"), ("answer", "q1", '{"ph":"work"}')]
+    assert gateway.bindings.get(7) is None
+    assert 15 in bot.deleted
+    assert 90 not in bot.deleted
+    assert len(bot.sent) == 1
+    assert bot.sent[0][0] == "send_message"
+    assert bot.sent[0][1] == 7
+    assert "Главное меню" in str(bot.sent[0][2])
+    markup = bot.sent[0][3]
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert START_WORKOUT_LABEL in labels
+    assert page_message_ids(7) == [90]
+    assert any(isinstance(item, ExpectInputCommand) for item in mediator.sent)
+    assert any(isinstance(item, GetHomeQuery) for item in mediator.sent)
+    reset_chat_pages()
 
 
 async def test_disabled_widgets_ask_the_caller_to_draw_the_keyboard() -> None:

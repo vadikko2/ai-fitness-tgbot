@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import replace
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from uuid import UUID
 
 from fitness_bot.domain.errors import DomainError
@@ -26,7 +26,7 @@ from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQ
 from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery, GetTodayWorkoutQuery
 
 _KG_STEP = Decimal("2.5")
-_KEEP = frozenset({"rest", "alt", "how", "vid", "kg", "done", "view"})
+_KEEP = frozenset({"rest", "alt", "how", "vid", "done", "view"})
 _ALT_NOTE = {
     "logged": "Уже записано — заменить нельзя.",
     "unresolved": "Это упражнение не из каталога.",
@@ -96,14 +96,31 @@ def _state_bytes(data: dict[str, object]) -> int:
 def _fit_tip(data: dict[str, object], tip: str) -> None:
     text = tip.strip()
     data["tip"] = text
-    if _state_bytes(data) <= STATE_BYTE_LIMIT:
-        return
+    data.pop("restUntil", None)
+    data.pop("rows", None)
+    data.pop("pct", None)
+    data.pop("title", None)
+    data.pop("alts", None)
+    data.pop("ids", None)
+    data.pop("note", None)
+    data.pop("draft", None)
+    data.pop("vids", None)
     if data.get("timed") in (0, None):
         data.pop("timed", None)
     if not int(data.get("log") or 0):
         data.pop("log", None)
     if _state_bytes(data) <= STATE_BYTE_LIMIT:
         return
+    plan = data.get("plan")
+    if plan is not None:
+        data["plan"] = str(plan)[:24]
+        if _state_bytes(data) <= STATE_BYTE_LIMIT:
+            return
+    name = data.get("name")
+    if name is not None:
+        data["name"] = str(name)[:28]
+        if _state_bytes(data) <= STATE_BYTE_LIMIT:
+            return
     lo = 0
     hi = len(text)
     best = 0
@@ -143,15 +160,60 @@ def _label(slot: ExerciseSlot, names: dict[str, str]) -> str:
     return "Упражнение"
 
 
+_PLATFORMS = {
+    "youtube": "YouTube",
+    "rutube": "Rutube",
+    "vk": "VK",
+}
+
+
 def _video_rows(guide: object) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for item in list(getattr(guide, "videos", []) or [])[:3]:
         url = str(getattr(item, "url", "") or "")
         if not url.startswith("https://") or len(url) > 200:
             continue
-        title = str(getattr(item, "title", "") or getattr(item, "platform", "") or "Видео")
-        rows.append({"t": title[:28], "u": url})
+        platform = str(getattr(item, "platform", "") or "").casefold()
+        title = str(getattr(item, "title", "") or "").strip() or "Видео техники"
+        rows.append(
+            {
+                "t": title[:64],
+                "u": url,
+                "p": _PLATFORMS.get(platform, "Видео"),
+            },
+        )
     return rows
+
+
+def _fit_vids(data: dict[str, object], rows: list[dict[str, str]]) -> None:
+    data.pop("restUntil", None)
+    data.pop("rows", None)
+    data.pop("pct", None)
+    data.pop("title", None)
+    data.pop("tip", None)
+    data.pop("alts", None)
+    data.pop("ids", None)
+    data.pop("note", None)
+    data.pop("draft", None)
+    if data.get("timed") in (0, None):
+        data.pop("timed", None)
+    if not int(data.get("log") or 0):
+        data.pop("log", None)
+    kept = [dict(item) for item in rows]
+    data["vids"] = kept
+    while True:
+        data["vids"] = kept
+        if _state_bytes(data) <= STATE_BYTE_LIMIT:
+            return
+        if not kept:
+            data["vids"] = []
+            return
+        last = kept[-1]
+        title = str(last.get("t") or "")
+        if len(title) > 24:
+            last["t"] = title[: max(16, len(title) - 8)].rstrip()
+            continue
+        kept.pop()
 
 
 def _matches(data: dict[str, object], slot: ExerciseSlot) -> bool:
@@ -202,8 +264,6 @@ class ConsoleScreen:
         if parsed.name == "sync":
             return await self._sync(ctx, data)
         if parsed.name == "ok":
-            if phase == "kg":
-                return self._commit_kg(data)
             return await self._ok(ctx, data, phase)
         if parsed.name in {"w+", "w-"}:
             return self._step_kg(data, phase, 1 if parsed.name == "w+" else -1)
@@ -223,10 +283,6 @@ class ConsoleScreen:
             return await self._how(ctx, data, phase)
         if parsed.name == "vid":
             return await self._vid(ctx, data, phase)
-        if parsed.name == "kg":
-            return self._exact(data, phase)
-        if parsed.name == "n":
-            return self._type_kg(data, phase, parsed.arg or "")
         if parsed.name == "sum":
             return await self._sum(ctx, data, phase)
         if parsed.name == "view":
@@ -262,6 +318,9 @@ class ConsoleScreen:
         except DomainError:
             return _error(self._frame(data))
         data["log"] = int(data.get("log") or 0) + 1
+        if int(data.get("set") or 1) >= int(data.get("sets") or 1):
+            total = max(1, int(data.get("n") or 1))
+            data["pct"] = int(round(100 * int(data.get("i") or 1) / total))
         self._start_rest(data, slot)
         return self._result(data)
 
@@ -360,7 +419,7 @@ class ConsoleScreen:
         return self._result(rebuilt)
 
     def _back(self, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase not in {"alt", "how", "vid", "kg", "view"}:
+        if phase not in {"alt", "how", "vid", "view"}:
             return _error(self._frame(data))
         data["ph"] = "work"
         data.pop("alts", None)
@@ -368,14 +427,13 @@ class ConsoleScreen:
         data.pop("note", None)
         data.pop("tip", None)
         data.pop("vids", None)
-        data.pop("draft", None)
         data.pop("rows", None)
         data.pop("pct", None)
         data.pop("title", None)
         return self._result(data)
 
     async def _view(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase in {"alt", "how", "vid", "kg"}:
+        if phase in {"alt", "how", "vid"}:
             return _error(self._frame(data))
         today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
         names = await self._catalog(ctx)
@@ -407,7 +465,6 @@ class ConsoleScreen:
         data.pop("alts", None)
         data.pop("ids", None)
         data.pop("note", None)
-        data.pop("draft", None)
         _fit_rows(data, rows)
         return self._result(data)
 
@@ -448,45 +505,7 @@ class ConsoleScreen:
             guide = await ctx.mediator.send(GetExerciseGuideQuery(exercise_id=slot.exercise_id))
             rows = _video_rows(guide)
         data["ph"] = "vid"
-        data["vids"] = rows
-        data.pop("tip", None)
-        return self._result(data)
-
-    def _exact(self, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase != "work":
-            return _error(self._frame(data))
-        current = data.get("kg")
-        data["ph"] = "kg"
-        data["draft"] = "" if current in (None, "") else str(current)
-        return self._result(data)
-
-    def _type_kg(self, data: dict[str, object], phase: str, key: str) -> ScreenResult:
-        if phase != "kg" or len(key) != 1:
-            return _error(self._frame(data))
-        draft = str(data.get("draft") or "")
-        if key == "x":
-            draft = draft[:-1]
-        elif key == ".":
-            if "." not in draft:
-                draft = f"{draft}."
-        elif len(draft.replace(".", "")) < 4:
-            draft = f"{draft}{key}"
-        data["draft"] = draft[:7]
-        return self._result(data)
-
-    def _commit_kg(self, data: dict[str, object]) -> ScreenResult:
-        raw = str(data.get("draft") or "").strip().rstrip(".")
-        if not raw:
-            return _error(self._frame(data))
-        try:
-            value = Decimal(raw)
-        except InvalidOperation:
-            return _error(self._frame(data))
-        if value < 0 or value > 500:
-            return _error(self._frame(data))
-        data["kg"] = None if value == 0 else as_number(value)
-        data["ph"] = "work"
-        data.pop("draft", None)
+        _fit_vids(data, rows)
         return self._result(data)
 
     async def _sum(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
@@ -553,6 +572,7 @@ class ConsoleScreen:
                 "ph": "done",
                 "i": 0,
                 "n": 0,
+                "pct": 0,
                 "set": 0,
                 "sets": 0,
                 "name": "Нет тренировки",
@@ -582,10 +602,13 @@ class ConsoleScreen:
         index = next((i for i, item in enumerate(slots) if item.position == slot.position), 0)
         name = _label(slot, names)
         timed = slot.duration_seconds is not None
+        done = sum(1 for item in slots if item.actual is not None)
+        total = len(slots)
         return {
             "ph": previous.get("ph") or "work",
             "i": index + 1,
-            "n": len(slots),
+            "n": total,
+            "pct": int(round(100 * done / total)) if total else 0,
             "set": 1,
             "sets": slot.sets,
             "name": name,

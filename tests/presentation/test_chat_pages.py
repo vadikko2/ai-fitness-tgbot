@@ -10,10 +10,14 @@ from fitness_bot.domain.enums import ExpectedInput, ProgramType, SessionStatus
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
 from fitness_bot.presentation.chat_pages import (
     DELETE_PAUSE_SECONDS,
+    ORPHAN_LOOKBACK,
     ChatPageMiddleware,
     bind_bot,
     dismiss_pushes,
+    flush_tidy,
+    leave_page,
     page_message_ids,
+    pending_message_ids,
     push_message_ids,
     push_scope,
     remember,
@@ -63,6 +67,9 @@ class _Bot:
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
         self.deleted.append(message_id)
+
+    async def delete_messages(self, chat_id: int, message_ids: list[int]) -> None:
+        self.deleted.extend(message_ids)
 
     async def edit_message_text(self, text: str, *, chat_id: int, message_id: int, **kwargs: object) -> None:
         self.edits.append(message_id)
@@ -244,9 +251,9 @@ async def test_leaving_a_page_deletes_that_page_and_keeps_the_new_one() -> None:
 
     workout_ids = page_message_ids(user_id)
     assert opened.answered == 1
-    assert bot.deleted == previous
+    assert all(message_id in bot.deleted for message_id in previous)
     assert workout_ids
-    assert set(workout_ids).isdisjoint(previous)
+    assert set(workout_ids).isdisjoint(bot.deleted)
     assert pauses.count(DELETE_PAUSE_SECONDS) == len(previous) - 1
 
     done = _Callback("sess_fin", _Outgoing(bot, chat_id=chat_id, user_id=user_id, start_id=200), bot)
@@ -311,6 +318,9 @@ class _PushBot:
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
         self.deleted.append(message_id)
+
+    async def delete_messages(self, chat_id: int, message_ids: list[int]) -> None:
+        self.deleted.extend(message_ids)
 
 
 async def test_notification_stays_when_another_screen_opens() -> None:
@@ -457,4 +467,54 @@ async def test_photo_skip_cancels_the_ask_without_clearing_the_screen() -> None:
     assert page_message_ids(user_id) == [10]
     assert note.answers == []
     assert any(isinstance(item, CancelProgressPhotoCaptureCommand) for item in mediator.sent)
+    reset_chat_pages()
+
+
+class _FlakyBot:
+    def __init__(self, *, fail_ids: set[int]) -> None:
+        self.fail_ids = fail_ids
+        self.deleted: list[int] = []
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        if message_id in self.fail_ids:
+            raise RuntimeError("flood")
+        self.deleted.append(message_id)
+
+    async def delete_messages(self, chat_id: int, message_ids: list[int]) -> None:
+        for message_id in message_ids:
+            await self.delete_message(chat_id, message_id)
+
+
+async def test_failed_leave_delete_is_retried_on_the_next_leave() -> None:
+    reset_chat_pages()
+    user_id = 21
+    remember(user_id, user_id, 10)
+    remember(user_id, user_id, 11)
+    flaky = _FlakyBot(fail_ids={11})
+    await leave_page(flaky, user_id)
+    assert 10 in flaky.deleted
+    assert 11 not in flaky.deleted
+    assert pending_message_ids(user_id) == [11]
+
+    remember(user_id, user_id, 20)
+    flaky.fail_ids.clear()
+    await leave_page(flaky, user_id)
+    assert 11 in flaky.deleted
+    assert 20 in flaky.deleted
+    assert pending_message_ids(user_id) == []
+    reset_chat_pages()
+
+
+async def test_tidy_sweeps_untracked_orphans_below_the_new_page() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _Bot()
+    # Simulate a restart: memory is empty, but Telegram still has older bubbles.
+    await leave_page(bot, user_id)
+    remember(user_id, user_id, 45)
+    await flush_tidy(bot, user_id)
+    assert 45 not in bot.deleted
+    assert page_message_ids(user_id) == [45]
+    expected = set(range(max(1, 45 - ORPHAN_LOOKBACK), 45))
+    assert expected.issubset(bot.deleted)
     reset_chat_pages()

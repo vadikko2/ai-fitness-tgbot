@@ -186,7 +186,13 @@ async def test_console_how_is_text_and_technique_is_a_video_link() -> None:
     screen, mediator, ctx = _console()
     guide = SimpleNamespace(
         technique="Спина ровная, колени в стороны.",
-        videos=[SimpleNamespace(platform="youtube", url="https://youtu.be/abcdefghijk", title="Гакк")],
+        videos=[
+            SimpleNamespace(
+                platform="youtube",
+                url="https://youtu.be/abcdefghijk",
+                title="Тяга штанги в наклоне: техника выполнения",
+            ),
+        ],
     )
     mediator.replies[GetExerciseGuideQuery] = guide
     frame = await screen.open(ctx)
@@ -200,6 +206,8 @@ async def test_console_how_is_text_and_technique_is_a_video_link() -> None:
     assert video.video_file_id is None
     assert video_body["ph"] == "vid"
     assert video_body["vids"][0]["u"] == "https://youtu.be/abcdefghijk"
+    assert "техника" in video_body["vids"][0]["t"]
+    assert video_body["vids"][0]["p"] == "YouTube"
     assert "tip" not in video_body
 
 
@@ -257,23 +265,6 @@ async def test_how_clips_a_technique_on_a_sentence_when_the_card_is_full() -> No
     assert len(how.frame.chat_data.encode()) <= 1024
     assert len(body["tip"]) < len(sentence * 40)
     assert body["tip"].endswith(".")
-
-
-async def test_console_exact_weight_is_typed_on_the_card() -> None:
-    screen, mediator, ctx = _console()
-    frame = await screen.open(ctx)
-    exact = await screen.apply(_rebind(ctx, frame), "kg")
-    assert json.loads(exact.frame.chat_data)["ph"] == "kg"
-    assert exact.expect is None
-    typed = exact
-    for key in ("n:4", "n:7", "n:.", "n:5"):
-        typed = await screen.apply(_rebind(ctx, typed.frame), key)
-    assert json.loads(typed.frame.chat_data)["draft"] == "47.5"
-    saved = await screen.apply(_rebind(ctx, typed.frame), "ok")
-    body = json.loads(saved.frame.chat_data)
-    assert body["ph"] == "work"
-    assert body["kg"] == 47.5
-    assert _writes(mediator) == []
 
 
 async def test_workout_widgets_send_no_caption_under_the_interface() -> None:
@@ -360,6 +351,19 @@ async def test_home_other_day_starts_that_weekday_in_the_console() -> None:
     assert result.navigate is WidgetScreenId.CONSOLE
     command = next(item for item in mediator.sent if isinstance(item, StartTodayWorkoutCommand))
     assert command.weekday == 5
+
+
+async def test_home_menu_leaves_to_classic_home_keyboard() -> None:
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.HOME,
+        chat_data=pack_state({"title": "уже", "mode": "again", "day": 3}),
+        caption="",
+        shell_id="home",
+    )
+    result = await screen.apply(_rebind(_ctx(_Mediator(), frame, screen=WidgetScreenId.HOME), frame), "menu")
+    assert result.leave_to_menu is True
+    assert result.navigate is None
 
 
 async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing() -> None:
@@ -550,6 +554,15 @@ async def test_intake_pick_sends_update_profile() -> None:
     assert json.loads(result.frame.chat_data)["step"] == "birth_year"
 
 
+async def test_console_work_state_includes_workout_progress_pct() -> None:
+    screen, _mediator, ctx = _console()
+    frame = await screen.open(ctx)
+    body = json.loads(frame.chat_data)
+    assert body["ph"] == "work"
+    assert body["pct"] == 0
+    assert body["n"] >= 1
+
+
 async def test_console_list_shows_progress_circle_and_statuses() -> None:
     exercise_id = uuid4()
     slot = ExerciseSlot(
@@ -705,11 +718,23 @@ def test_shell_zlib_stays_within_4096() -> None:
     assert 'data-op="end"' in console
     assert 'data-op="view"' in console
     assert "data-rpe" not in console
+    assert "Точно" not in console
+    assert 'data-op="kg"' not in console
+    assert 'id="pad"' not in console
+    assert "Список" not in console
+    assert "Прогресс" in console
+    assert 'id="gauge"' in console
+    assert 'id="prog"' in console
+    assert "hue(" in console
+    assert "bar.style.background=color" in console
     summary = shells["summary"].html()
     assert "На главную" in summary
     assert summary.index("На главную") < summary.index('id="list"')
     assert "tonnage" not in summary
     assert "d.spark" not in summary
+    home = shells["home"].html()
+    assert 'data-op="menu"' in home
+    assert "В меню" in home
     for shell in shells.values():
         html = shell.html()
         assert "<footer" not in html
@@ -722,7 +747,6 @@ def test_shells_request_only_from_a_tap() -> None:
         html = shell.html()
         assert "setInterval" not in html, key
         assert html.count("TelegramWidget.request") == 1, key
-        assert "answer.result" in html, key
-        assert 'code=="TIMEOUT"||code=="FAILED"' in html, key
+        assert "TIMEOUT" in html and "FAILED" in html, key
         listener = html.split('addEventListener("click"', 1)[1]
         assert listener.index("TelegramWidget.request") < listener.index(".then"), key

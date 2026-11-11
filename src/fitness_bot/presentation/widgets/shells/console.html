@@ -2,36 +2,41 @@
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
 <style>
-.dots{display:flex;gap:6px;margin:0 0 12px}
+.top{display:flex;align-items:center;gap:10px;margin:8px 0 10px}
+.bar{flex:1;height:6px;margin:0;background:#E6EAF0;border-radius:99px;overflow:hidden}
+.bar span{display:block;height:100%;width:0;border-radius:99px;background:#E24B4B;transition:width .25s ease,background .25s ease}
+.pct{flex:0 0 auto;min-width:2.4em;font-size:12px;font-weight:600;color:rgba(2,32,70,.55);text-align:right}
+.dots{display:flex;gap:6px;margin:0 0 12px;justify-content:center}
 .dots:empty{display:none}
-.dots i{width:8px;height:8px;border-radius:50%;background:#E6EAF0}
-.dots i.done{background:#F5D22D}
-.dots i.now{background:#022046}
-.hero{margin:8px 0 12px;font-size:34px;font-weight:600;letter-spacing:-.03em;line-height:1.05}
-.hero span{font-weight:500;color:rgba(2,32,70,.45)}
-.step{display:flex;gap:8px}
-.step div{flex:1;min-width:0}
-.step small{display:block;margin:0 0 4px;font-size:11px;font-weight:500;color:rgba(2,32,70,.6)}
-.step p{display:flex;gap:8px;margin:0}
-.step button{flex:1;height:36px;padding:0;background:#F2F4F7;border-radius:10px;font-size:18px}
-.links{margin:2px 0;text-align:center;color:rgba(2,32,70,.35)}
-.links button{font-weight:500;padding:6px 4px}
-#ringbox,#gauge{margin:0 0 4px;text-align:center;position:relative}
-#gval{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
-.rows button{display:block;width:100%;margin:0 0 8px;padding:0 12px;height:44px;background:#F2F4F7;border-radius:12px;text-align:left;font-weight:500}
-#tip{margin:4px 0 0;max-height:200px;overflow:auto;font-size:15px;line-height:1.4;white-space:pre-wrap}
-#pad{display:flex;flex-wrap:wrap;gap:6px}
-#pad button{width:30%;height:36px;padding:0;background:#F2F4F7;border-radius:10px}
-#plan{max-height:180px;overflow:auto;margin:8px 0 0}
+.dots i{width:9px;height:9px;border-radius:50%;background:#E6EAF0}
+.dots i.done{background:#1B7A4A}
+.dots i.now{background:#022046;box-shadow:0 0 0 3px rgba(2,32,70,.12)}
+.hero{margin:0 0 12px;font-size:36px;font-weight:600;letter-spacing:-.04em;line-height:1.05;text-align:center}
+.hero span{font-weight:500;color:rgba(2,32,70,.42)}
+.step{display:flex;gap:10px}
+.step div{flex:1;min-width:0;padding:8px;background:#F7F8FA;border-radius:14px}
+.step small{display:block;margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(2,32,70,.5);text-align:center}
+.step p{display:flex;gap:6px;margin:0}
+.step button{flex:1;height:40px;padding:0;background:#fff;border:1px solid rgba(2,32,70,.1);border-radius:10px;font-size:20px}
+.links{margin:4px 0 0;text-align:center;color:rgba(2,32,70,.28)}
+.links button{font-weight:500;padding:8px 3px;color:rgba(2,32,70,.55)}
+#gauge{margin:4px auto 10px;text-align:center;position:relative;width:96px;height:96px}
+#gauge svg{width:100%;height:100%;display:block}
+#gval{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:600;letter-spacing:-.03em}
+.rows button{display:block;width:100%;margin:0 0 8px;padding:10px 12px;min-height:44px;background:#F2F4F7;border-radius:12px;text-align:left;font-weight:500;white-space:normal}
+#vid .clip{display:flex;gap:10px;align-items:center;padding:10px;margin:0 0 8px}
+#vid .play{flex:0 0 44px;height:44px;border-radius:12px;background:#022046;color:#F5D22D;display:flex;align-items:center;justify-content:center;font-size:18px}
+#vid .clip b{display:block;font-size:14px;line-height:1.25;white-space:normal}
+#vid .clip small{display:block;margin-top:2px;font-size:12px;color:rgba(2,32,70,.5)}
+#tip{margin:4px 0 0;font-size:15px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+#plan{max-height:9em;overflow:auto;margin:4px 0 0}
 #plan p{margin:0 0 8px;font-size:14px;line-height:1.3;font-weight:500}
-#plan span{display:block;margin-top:2px;font-size:12px;font-weight:400;color:rgba(2,32,70,.55)}
-#plan .d{color:#1B7A4A}
-#plan .n{color:#022046}
-#plan .t{color:rgba(2,32,70,.45)}
+#plan span{display:block;margin-top:2px;font-size:12px;color:rgba(2,32,70,.55)}
+#plan .d{color:#1B7A4A}#plan .n{color:#022046}#plan .t{color:rgba(2,32,70,.45)}
 </style>
-<div class="bar"><span id="bar"></span></div>
+<div class="top" id="top"><div class="bar" id="prog"><span id="bar"></span></div><span class="pct" id="plab">0%</span></div>
 <div class="dots" id="dots"></div>
-<div id="ringbox" class="hide"><svg id="ring" viewBox="0 0 36 36" width="72" height="72"><circle cx="18" cy="18" r="16" stroke="#E6EAF0" fill="none" stroke-width="2"></circle><circle id="arc" cx="18" cy="18" r="16" stroke="#F5D22D" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="0" transform="rotate(-90 18 18)"></circle></svg></div>
+<div id="gauge" class="hide"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" stroke="#E6EAF0" fill="none" stroke-width="3"/><circle id="garc" cx="18" cy="18" r="16" stroke="#E24B4B" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="100.5" transform="rotate(-90 18 18)"/></svg><div id="gval">0%</div></div>
 <p class="hero" id="hero"></p>
 <div id="work">
 <div class="step">
@@ -39,18 +44,14 @@
 <div><small id="unit">повт</small><p><button type="button" data-op="r-">−</button><button type="button" data-op="r+">+</button></p></div>
 </div>
 </div>
-<div id="view" class="hide">
-<div id="gauge"><svg viewBox="0 0 36 36" width="96" height="96"><circle cx="18" cy="18" r="16" stroke="#E6EAF0" fill="none" stroke-width="3"></circle><circle id="garc" cx="18" cy="18" r="16" stroke="#E24B4B" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="100.5" transform="rotate(-90 18 18)"></circle></svg><div id="gval">0%</div></div>
-<div id="plan"></div>
-</div>
+<div id="plan" class="hide"></div>
 <button type="button" class="p" id="go" data-op="ok">Готово</button>
 <button type="button" class="back" id="skip" data-op="skip">Пропустить</button>
 <button type="button" class="back" id="end" data-op="end">Завершить</button>
-<p class="links" id="q2"><button type="button" data-op="view">Список</button> · <button type="button" data-op="alt">Замена</button> · <button type="button" data-op="how">Как делать</button> · <button type="button" data-op="vid">Техника</button> · <button type="button" data-op="kg">Точно</button></p>
+<p class="links" id="q2"><button type="button" data-op="view">Прогресс</button> · <button type="button" data-op="alt">Замена</button> · <button type="button" data-op="how">Как делать</button> · <button type="button" data-op="vid">Техника</button></p>
 <div id="alt" class="rows hide"></div>
 <div id="how" class="hide"><p id="tip"></p><button type="button" class="back" data-op="back">Назад</button></div>
 <div id="vid" class="rows hide"></div>
-<div id="pad" class="hide"></div>
 <p id="e"></p>
 <script>
 (function(){
@@ -58,37 +59,54 @@ var S={},prev=0,timer=0;
 function $(id){return document.getElementById(id);}
 function show(id,on){$(id).classList.toggle("hide",!on);}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
-function hue(p){return "hsl("+Math.round(p*1.2)+",70%,45%)";}
+function hue(p){return "hsl("+Math.round(p*1.2)+",72%,42%)";}
+function ringPct(d){
+if(d.pct!=null){return Math.max(0,Math.min(100,d.pct||0));}
+var n=Math.max(1,d.n||1),done=Math.max(0,(d.i||1)-1);
+return Math.round(100*done/n);
+}
+function paint(p){
+var color=hue(p),bar=$("bar");
+bar.style.width=p+"%";
+bar.style.background=color;
+$("plab").textContent=p+"%";
+$("plab").style.color=color;
+$("garc").style.strokeDashoffset=(100.5*(1-p/100)).toFixed(1);
+$("garc").style.stroke=color;
+$("gval").textContent=p+"%";
+$("gval").style.color=color;
+}
 function render(d){
 if(!d){return;}
 S=d;
-$("t").textContent=d.ph=="view"?(d.title||"Тренировка"):(d.name||"");
-$("s").textContent=d.ph=="view"?((d.pct||0)+"% готово"):(d.plan||"");
-$("bar").style.width=Math.round(100*(d.i||0)/Math.max(1,d.n||1))+"%";
-var html="",k,cur=d.set||0,ph=d.ph,cls;
+var p=ringPct(d),ph=d.ph;
+$("t").textContent=ph=="view"?(d.title||"Тренировка"):(d.name||"");
+$("s").textContent=ph=="view"?(p+"% готово"):(ph=="vid"?"Видео · нажми чтобы открыть":(d.plan||""));
+var html="",k,cur=d.set||0,cls;
 for(k=1;k<=(d.sets||0);k++){
 cls=(ph=="done"||k<cur||(ph=="rest"&&k<=cur))?"done":(k==cur?"now":"");
 html+='<i class="'+cls+'"></i>';
 }
-$("dots").innerHTML=ph=="view"?"":html;
-var work=ph=="work"||!ph,rest=ph=="rest",rpe=ph=="rpe",kgph=ph=="kg",vid=ph=="vid",view=ph=="view";
-show("hero",work||rpe||rest||kgph);
+$("dots").innerHTML=ph=="view"||ph=="done"?"":html;
+var work=ph=="work"||!ph,rest=ph=="rest",rpe=ph=="rpe",vid=ph=="vid",view=ph=="view";
+var live=work||rpe||rest;
+show("top",live);
+show("gauge",view||ph=="done");
+paint(p);
+show("hero",live);
 show("work",work);
-show("skip",work);
 show("q2",work);
 show("alt",ph=="alt");
 show("how",ph=="how");
 show("vid",vid);
-show("pad",kgph);
-show("ringbox",rest);
-show("view",view);
-show("end",work||rest||rpe||view||ph=="done");
-show("dots",!view&&ph!="alt"&&ph!="how"&&!vid&&!kgph);
+show("plan",view);
+show("end",live||view||ph=="done");
+show("dots",live&&ph!="alt"&&ph!="how"&&!vid);
+show("skip",work);
 if(work||rpe){
 var kg=d.kg==null?"—":d.kg,reps=d.reps==null?"—":d.reps;
 $("hero").innerHTML="<b>"+kg+" кг</b> <span>× "+reps+"</span>";
 }
-if(kgph){$("hero").innerHTML="<b>"+(d.draft||"—")+"</b> <span>кг</span>";}
 $("unit").textContent=d.timed?"сек":"повт";
 var go=$("go");
 if(ph=="done"){go.setAttribute("data-op","sum");go.textContent="Итог";}
@@ -96,12 +114,9 @@ else if(rest){go.setAttribute("data-op","skip");go.textContent="Пропусти
 else if(rpe){go.setAttribute("data-op","ok");go.textContent="Дальше";}
 else if(view){go.setAttribute("data-op","back");go.textContent="Назад";}
 else{go.setAttribute("data-op","ok");go.textContent="Готово";}
-show("go",work||rpe||rest||ph=="done"||kgph||view);
+show("go",live||ph=="done"||view);
 if(view){
-var p=Math.max(0,Math.min(100,d.pct||0)),box="",i,row,mark,body,parts;
-$("garc").style.strokeDashoffset=(100.5*(1-p/100)).toFixed(1);
-$("garc").style.stroke=hue(p);
-$("gval").textContent=p+"%";
+var box="",i,row,mark,body,parts;
 for(i=0;i<(d.rows||[]).length;i++){
 row=String(d.rows[i]);mark=row.slice(0,1);body=row.slice(2);
 parts=body.split(" — ");
@@ -118,45 +133,34 @@ box+='<button type="button" class="back" data-op="back">Назад</button>';
 $("alt").innerHTML=box;
 }
 if(ph=="how"){$("tip").textContent=d.tip||"Описания пока нет";}
-if(kgph&&!$("pad").dataset.ready){
-var keys="123456789.0x",labels="123456789.0⌫",b="",i;
-for(i=0;i<keys.length;i++){b+='<button type="button" data-op="n:'+keys[i]+'">'+labels[i]+"</button>";}
-$("pad").innerHTML=b;$("pad").dataset.ready="1";
-}
 if(vid){
-var box="",v,list=d.vids||[];
-for(v=0;v<list.length;v++){box+='<button type="button" data-url="'+esc(list[v].u)+'">'+esc(list[v].t||"Видео")+"</button>";}
-if(!list.length){box="<p>Видео пока нет</p>";}
+var box="",v,list=d.vids||[],item,where;
+for(v=0;v<list.length;v++){
+item=list[v];where=item.p||"Видео";
+box+='<button type="button" class="clip" data-url="'+esc(item.u)+'"><span class="play">▶</span><span><b>'+esc(item.t||"Видео")+"</b><small>"+esc(where)+" · открыть</small></span></button>";
+}
+if(!list.length){box='<p class="hint">Видео нет</p>';}
 box+='<button type="button" class="back" data-op="back">Назад</button>';
 $("vid").innerHTML=box;
 }
 if((d.log||0)>prev){try{TelegramWidget.HapticFeedback.notificationOccurred("success");}catch(err){}prev=d.log;}
-if(rest){ring();}
+if(rest){tick();}
 }
-function ring(){
+function tick(){
 if(S.ph!="rest"){return;}
 var left=Math.max(0,(S.restUntil||0)*1000-Date.now());
-var total=Math.max(1,(S.rest||90)*1000);
-$("arc").style.strokeDashoffset=(100.5*(1-Math.min(1,left/total))).toFixed(1);
 $("hero").innerHTML="<b>"+Math.ceil(left/1000)+"</b> <span>отдых</span>";
-if(left>0){cancelAnimationFrame(timer);timer=requestAnimationFrame(ring);}
-}
-function rawOf(answer){
-if(!answer){return "";}
-if(typeof answer=="string"){return answer;}
-return typeof answer.result=="string"?answer.result:"";
+if(left>0){cancelAnimationFrame(timer);timer=requestAnimationFrame(tick);}
 }
 function take(answer){
 $("e").textContent="";
-var raw=rawOf(answer);if(!raw){return;}
+var raw=!answer?"":(typeof answer=="string"?answer:(typeof answer.result=="string"?answer.result:""));
+if(!raw){return;}
 var d;try{d=JSON.parse(raw);}catch(err){return;}
 if(d.err){$("e").textContent="Не вышло";return;}
 render(d);
 }
-function fail(err){
-var code=err&&err.code;
-if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}
-}
+function fail(err){if(err&&(err.code=="TIMEOUT"||err.code=="FAILED")){$("e").textContent="Нет связи";}}
 document.body.addEventListener("click",function(ev){
 var node=ev.target&&ev.target.closest?ev.target.closest("button"):null;
 if(!node){return;}

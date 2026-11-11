@@ -1,7 +1,8 @@
 """One screen of chat messages per user, dropped when they open another screen.
 
 The bot is a single polling process, so the current page lives in memory.
-Only ids recorded for that page are deleted. Older history is left alone.
+Tracked ids are deleted on navigation; failed deletes are retried later.
+After a crash or restart, untracked leftovers near the new screen are swept.
 
 Notifications are not part of that screen. A training nudge, a weigh-in,
 a progress-photo ask, and other pushes stay until the user presses a button
@@ -21,6 +22,8 @@ from aiogram import BaseMiddleware, Bot
 from aiogram.types import Message
 
 DELETE_PAUSE_SECONDS = 0.05
+# How far below the newest page bubble to hunt leftovers after a crash/restart.
+ORPHAN_LOOKBACK = 80
 
 # Edits of the message that is already on screen. A new bubble here stays on the
 # same page; it must not wipe the screen the user is still using.
@@ -73,6 +76,10 @@ _BOT_SENDS = (
 
 # user id -> [(chat id, message id)] in send order
 _pages: dict[int, list[tuple[int, int]]] = {}
+# Deletes that Telegram refused (flood, transient). Retried on the next leave/tidy.
+_pending: dict[int, list[tuple[int, int]]] = {}
+# Users whose previous page was dropped; tidy once the new bubbles are recorded.
+_tidy_users: set[int] = set()
 _locks: dict[int, asyncio.Lock] = {}
 
 
@@ -100,6 +107,8 @@ def _set(obj: object, name: str, value: object) -> None:
 def reset_chat_pages() -> None:
     """Drop tracked ids. Tests use this so one case cannot leak into the next."""
     _pages.clear()
+    _pending.clear()
+    _tidy_users.clear()
     _locks.clear()
     _pushes.clear()
     _push_by_ref.clear()
@@ -107,6 +116,10 @@ def reset_chat_pages() -> None:
 
 def page_message_ids(user_id: int) -> list[int]:
     return [message_id for _chat_id, message_id in _pages.get(user_id, [])]
+
+
+def pending_message_ids(user_id: int) -> list[int]:
+    return [message_id for _chat_id, message_id in _pending.get(user_id, [])]
 
 
 def push_message_ids(user_id: int) -> list[int]:
@@ -224,23 +237,122 @@ def bot_of(event: object) -> object | None:
     return getattr(message, "bot", None)
 
 
+def _dedupe_refs(refs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    seen: set[tuple[int, int]] = set()
+    ordered: list[tuple[int, int]] = []
+    for ref in refs:
+        if ref in seen:
+            continue
+        seen.add(ref)
+        ordered.append(ref)
+    return ordered
+
+
+def _store_pending(user_id: int, refs: list[tuple[int, int]]) -> None:
+    if not refs:
+        return
+    bucket = _pending.setdefault(user_id, [])
+    for ref in refs:
+        if ref not in bucket:
+            bucket.append(ref)
+
+
+async def _delete_refs(
+    bot: object,
+    refs: list[tuple[int, int]],
+    *,
+    pause: bool = True,
+) -> list[tuple[int, int]]:
+    """Delete known bubbles. Return those Telegram still has (or refused)."""
+    failed: list[tuple[int, int]] = []
+    for index, (chat_id, message_id) in enumerate(refs):
+        if pause and index:
+            await asyncio.sleep(DELETE_PAUSE_SECONDS)
+        try:
+            await bot.delete_message(chat_id, message_id)
+        except Exception:
+            failed.append((chat_id, message_id))
+    return failed
+
+
 async def leave_page(bot: object | None, user_id: int) -> None:
     """Delete every message recorded for this user's current page.
 
-    Failures are ignored: the message may already be gone or older than Telegram allows.
+    Failures are kept and retried on the next leave/tidy — they must not vanish
+    from memory when Telegram rate-limits or the process dies mid-loop.
     A short pause between deletes keeps a long page under the flood limit.
     """
     if bot is None or not callable(getattr(bot, "delete_message", None)):
         return
     async with _lock(user_id):
-        refs = _pages.pop(user_id, [])
-    for index, (chat_id, message_id) in enumerate(refs):
-        if index:
-            await asyncio.sleep(DELETE_PAUSE_SECONDS)
-        try:
-            await bot.delete_message(chat_id, message_id)
-        except Exception:
-            continue
+        refs = _dedupe_refs(_pending.pop(user_id, []) + _pages.pop(user_id, []))
+        _tidy_users.add(user_id)
+    failed = await _delete_refs(bot, refs)
+    if failed:
+        async with _lock(user_id):
+            _store_pending(user_id, failed)
+
+
+async def tidy_page(bot: object | None, user_id: int) -> None:
+    """Sweep untracked leftovers near the current page after navigation.
+
+    Covers bubbles lost from memory after a crash/restart: anything just below
+    the newest page id, except the open screen and notifications.
+    """
+    if bot is None or not callable(getattr(bot, "delete_message", None)):
+        return
+    async with _lock(user_id):
+        page = list(_pages.get(user_id, []))
+        pending = list(_pending.pop(user_id, []))
+    if not page and not pending:
+        return
+    keep = set(page)
+    keep.update(_push_by_ref)
+    failed = await _delete_refs(bot, [ref for ref in pending if ref not in keep], pause=False)
+    by_chat: dict[int, int] = {}
+    for chat_id, message_id in page:
+        high = by_chat.get(chat_id)
+        if high is None or message_id > high:
+            by_chat[chat_id] = message_id
+    sweep: list[tuple[int, int]] = []
+    for chat_id, high in by_chat.items():
+        low = max(1, high - ORPHAN_LOOKBACK)
+        for message_id in range(high - 1, low - 1, -1):
+            ref = (chat_id, message_id)
+            if ref in keep:
+                continue
+            sweep.append(ref)
+    if sweep:
+        batch = getattr(bot, "delete_messages", None)
+        if callable(batch):
+            for chat_id, _high in by_chat.items():
+                ids = [mid for cid, mid in sweep if cid == chat_id]
+                for start in range(0, len(ids), 100):
+                    chunk = ids[start : start + 100]
+                    try:
+                        await batch(chat_id, chunk)
+                    except Exception:
+                        failed.extend(
+                            await _delete_refs(
+                                bot,
+                                [(chat_id, mid) for mid in chunk],
+                                pause=False,
+                            ),
+                        )
+        else:
+            failed.extend(await _delete_refs(bot, sweep, pause=False))
+    if failed:
+        async with _lock(user_id):
+            keep_now = set(_pages.get(user_id, []))
+            _store_pending(user_id, [ref for ref in failed if ref not in keep_now])
+
+
+async def flush_tidy(bot: object | None, user_id: int) -> None:
+    """Run the orphan sweep once new page bubbles are on the record."""
+    if user_id not in _tidy_users:
+        return
+    _tidy_users.discard(user_id)
+    await tidy_page(bot, user_id)
 
 
 async def _delete_push(bot: object | None, push: _Push) -> None:
@@ -438,6 +550,14 @@ def bind_bot(bot: Bot) -> None:
     _set(bot, "_chat_page_bound", True)
 
 
+def _event_user_id(event: object) -> int | None:
+    user = getattr(event, "from_user", None)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return None
+    return int(user_id)
+
+
 class ChatPageMiddleware(BaseMiddleware):
     """Track outgoing bubbles. Navigation sends replace the previous page."""
 
@@ -454,6 +574,9 @@ class ChatPageMiddleware(BaseMiddleware):
         result = await handler(event, data)
         if _looks_like_callback(event) and not stays_on_page(getattr(event, "data", None)):
             await dismiss_tapped_push(bot_of(event), getattr(event, "message", None))
+        user_id = _event_user_id(event)
+        if user_id is not None:
+            await flush_tidy(bot_of(event), user_id)
         return result
 
 

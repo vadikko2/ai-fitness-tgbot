@@ -14,7 +14,6 @@ _INDEX = re.compile(r"0|[1-9][0-9]{0,3}")
 _PRESETS = frozenset({"30", "45", "60", "90"})
 _RPE = frozenset({"6", "7", "8", "9", "10"})
 _ALTS = frozenset({"0", "1", "2"})
-_KEYS = frozenset("0123456789.x")
 
 _EXACT: dict[str, WidgetScreenId] = {
     "sync": WidgetScreenId.CONSOLE,
@@ -28,7 +27,6 @@ _EXACT: dict[str, WidgetScreenId] = {
     "back": WidgetScreenId.CONSOLE,
     "how": WidgetScreenId.CONSOLE,
     "vid": WidgetScreenId.CONSOLE,
-    "kg": WidgetScreenId.CONSOLE,
     "sum": WidgetScreenId.CONSOLE,
     "view": WidgetScreenId.CONSOLE,
     "end": WidgetScreenId.CONSOLE,
@@ -43,6 +41,7 @@ _EXACT: dict[str, WidgetScreenId] = {
     "approve": WidgetScreenId.WEEK,
     "go": WidgetScreenId.HOME,
     "again": WidgetScreenId.HOME,
+    "menu": WidgetScreenId.HOME,
     "home": WidgetScreenId.SUMMARY,
 }
 
@@ -108,11 +107,6 @@ def _parameter(raw: str) -> Opcode | None:
         if _INDEX.fullmatch(arg) is None:
             return None
         return Opcode(raw=raw, screen=WidgetScreenId.WEEK, name="swap", arg=arg)
-    if raw.startswith("n:"):
-        arg = raw[2:]
-        if len(arg) != 1 or arg not in _KEYS:
-            return None
-        return Opcode(raw=raw, screen=WidgetScreenId.CONSOLE, name="n", arg=arg)
     if raw.startswith("day:"):
         arg = raw[4:]
         if arg not in {"1", "2", "3", "4", "5", "6", "7"}:

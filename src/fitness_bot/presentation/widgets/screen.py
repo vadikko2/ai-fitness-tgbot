@@ -29,6 +29,7 @@ class ScreenResult:
     cover_file_id: str | None = None
     photo_path: str | None = None
     navigate: WidgetScreenId | None = None
+    leave_to_menu: bool = False
 
 
 class WidgetScreen(Protocol):
