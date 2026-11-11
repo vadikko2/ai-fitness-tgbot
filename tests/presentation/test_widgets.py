@@ -269,6 +269,8 @@ def test_opcode_grammar() -> None:
         "kg": WidgetScreenId.CONSOLE,
         "n:5": WidgetScreenId.CONSOLE,
         "sum": WidgetScreenId.CONSOLE,
+        "view": WidgetScreenId.CONSOLE,
+        "end": WidgetScreenId.CONSOLE,
         "pick:goal": WidgetScreenId.INTAKE,
         "inc": WidgetScreenId.INTAKE,
         "dec": WidgetScreenId.INTAKE,
@@ -343,7 +345,7 @@ async def test_gateway_edits_then_answers_and_rejects_a_bad_opcode() -> None:
     assert opened.message_id == 15
     assert bot.deleted == [3]
     assert page_message_ids(7) == [15]
-    assert ("send", 7, "<b>ok</b>", '{"ph":"work"}', "work", 440) in calls
+    assert ("send", 7, "<b>ok</b>", '{"ph":"work"}', "work", 480) in calls
 
     calls.clear()
     screen.pending.append(

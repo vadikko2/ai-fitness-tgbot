@@ -16,11 +16,18 @@
 .step button{flex:1;height:36px;padding:0;background:#F2F4F7;border-radius:10px;font-size:18px}
 .links{margin:2px 0;text-align:center;color:rgba(2,32,70,.35)}
 .links button{font-weight:500;padding:6px 4px}
-#ringbox{margin:0 0 4px;text-align:center}
+#ringbox,#gauge{margin:0 0 4px;text-align:center;position:relative}
+#gval{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
 .rows button{display:block;width:100%;margin:0 0 8px;padding:0 12px;height:44px;background:#F2F4F7;border-radius:12px;text-align:left;font-weight:500}
 #tip{margin:4px 0 0;max-height:200px;overflow:auto;font-size:15px;line-height:1.4;white-space:pre-wrap}
 #pad{display:flex;flex-wrap:wrap;gap:6px}
 #pad button{width:30%;height:36px;padding:0;background:#F2F4F7;border-radius:10px}
+#plan{max-height:180px;overflow:auto;margin:8px 0 0}
+#plan p{margin:0 0 8px;font-size:14px;line-height:1.3;font-weight:500}
+#plan span{display:block;margin-top:2px;font-size:12px;font-weight:400;color:rgba(2,32,70,.55)}
+#plan .d{color:#1B7A4A}
+#plan .n{color:#022046}
+#plan .t{color:rgba(2,32,70,.45)}
 </style>
 <div class="bar"><span id="bar"></span></div>
 <div class="dots" id="dots"></div>
@@ -32,9 +39,14 @@
 <div><small id="unit">повт</small><p><button type="button" data-op="r-">−</button><button type="button" data-op="r+">+</button></p></div>
 </div>
 </div>
+<div id="view" class="hide">
+<div id="gauge"><svg viewBox="0 0 36 36" width="96" height="96"><circle cx="18" cy="18" r="16" stroke="#E6EAF0" fill="none" stroke-width="3"></circle><circle id="garc" cx="18" cy="18" r="16" stroke="#E24B4B" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="100.5" transform="rotate(-90 18 18)"></circle></svg><div id="gval">0%</div></div>
+<div id="plan"></div>
+</div>
 <button type="button" class="p" id="go" data-op="ok">Готово</button>
 <button type="button" class="back" id="skip" data-op="skip">Пропустить</button>
-<p class="links" id="q2"><button type="button" data-op="alt">Замена</button> · <button type="button" data-op="how">Как делать</button> · <button type="button" data-op="vid">Техника</button> · <button type="button" data-op="kg">Точно</button></p>
+<button type="button" class="back" id="end" data-op="end">Завершить</button>
+<p class="links" id="q2"><button type="button" data-op="view">Список</button> · <button type="button" data-op="alt">Замена</button> · <button type="button" data-op="how">Как делать</button> · <button type="button" data-op="vid">Техника</button> · <button type="button" data-op="kg">Точно</button></p>
 <div id="alt" class="rows hide"></div>
 <div id="how" class="hide"><p id="tip"></p><button type="button" class="back" data-op="back">Назад</button></div>
 <div id="vid" class="rows hide"></div>
@@ -46,19 +58,20 @@ var S={},prev=0,timer=0;
 function $(id){return document.getElementById(id);}
 function show(id,on){$(id).classList.toggle("hide",!on);}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+function hue(p){return "hsl("+Math.round(p*1.2)+",70%,45%)";}
 function render(d){
 if(!d){return;}
 S=d;
-$("t").textContent=d.name||"";
-$("s").textContent=d.plan||"";
+$("t").textContent=d.ph=="view"?(d.title||"Тренировка"):(d.name||"");
+$("s").textContent=d.ph=="view"?((d.pct||0)+"% готово"):(d.plan||"");
 $("bar").style.width=Math.round(100*(d.i||0)/Math.max(1,d.n||1))+"%";
 var html="",k,cur=d.set||0,ph=d.ph,cls;
 for(k=1;k<=(d.sets||0);k++){
 cls=(ph=="done"||k<cur||(ph=="rest"&&k<=cur))?"done":(k==cur?"now":"");
 html+='<i class="'+cls+'"></i>';
 }
-$("dots").innerHTML=html;
-var work=ph=="work"||!ph,rest=ph=="rest",rpe=ph=="rpe",kgph=ph=="kg",vid=ph=="vid";
+$("dots").innerHTML=ph=="view"?"":html;
+var work=ph=="work"||!ph,rest=ph=="rest",rpe=ph=="rpe",kgph=ph=="kg",vid=ph=="vid",view=ph=="view";
 show("hero",work||rpe||rest||kgph);
 show("work",work);
 show("skip",work);
@@ -68,6 +81,9 @@ show("how",ph=="how");
 show("vid",vid);
 show("pad",kgph);
 show("ringbox",rest);
+show("view",view);
+show("end",work||rest||rpe||view||ph=="done");
+show("dots",!view&&ph!="alt"&&ph!="how"&&!vid&&!kgph);
 if(work||rpe){
 var kg=d.kg==null?"—":d.kg,reps=d.reps==null?"—":d.reps;
 $("hero").innerHTML="<b>"+kg+" кг</b> <span>× "+reps+"</span>";
@@ -78,8 +94,21 @@ var go=$("go");
 if(ph=="done"){go.setAttribute("data-op","sum");go.textContent="Итог";}
 else if(rest){go.setAttribute("data-op","skip");go.textContent="Пропустить";}
 else if(rpe){go.setAttribute("data-op","ok");go.textContent="Дальше";}
+else if(view){go.setAttribute("data-op","back");go.textContent="Назад";}
 else{go.setAttribute("data-op","ok");go.textContent="Готово";}
-show("go",work||rpe||rest||ph=="done"||kgph);
+show("go",work||rpe||rest||ph=="done"||kgph||view);
+if(view){
+var p=Math.max(0,Math.min(100,d.pct||0)),box="",i,row,mark,body,parts;
+$("garc").style.strokeDashoffset=(100.5*(1-p/100)).toFixed(1);
+$("garc").style.stroke=hue(p);
+$("gval").textContent=p+"%";
+for(i=0;i<(d.rows||[]).length;i++){
+row=String(d.rows[i]);mark=row.slice(0,1);body=row.slice(2);
+parts=body.split(" — ");
+box+='<p class="'+mark+'">'+esc(parts[0])+(parts.length>1?"<span>"+esc(parts.slice(1).join(" — "))+"</span>":"")+"</p>";
+}
+$("plan").innerHTML=box||'<p class="hint">Пока пусто</p>';
+}
 if(ph=="alt"){
 var box="",a,list=d.alts||[];
 if(d.note){box+='<p class="hint">'+esc(d.note)+"</p>";}

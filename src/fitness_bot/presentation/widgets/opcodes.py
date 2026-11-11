@@ -30,6 +30,8 @@ _EXACT: dict[str, WidgetScreenId] = {
     "vid": WidgetScreenId.CONSOLE,
     "kg": WidgetScreenId.CONSOLE,
     "sum": WidgetScreenId.CONSOLE,
+    "view": WidgetScreenId.CONSOLE,
+    "end": WidgetScreenId.CONSOLE,
     "inc": WidgetScreenId.INTAKE,
     "dec": WidgetScreenId.INTAKE,
     "done": WidgetScreenId.INTAKE,

@@ -24,6 +24,7 @@ from fitness_bot.presentation.widgets.state import pack_state
 from fitness_bot.service.models.commands.program import ApproveProposalCommand
 from fitness_bot.service.models.commands.session import (
     ConfirmExerciseAsPlannedCommand,
+    FinalizeSessionCommand,
     RecordSlotActualCommand,
     StartSessionFromTemplateCommand,
     StartTodayWorkoutCommand,
@@ -549,6 +550,98 @@ async def test_intake_pick_sends_update_profile() -> None:
     assert json.loads(result.frame.chat_data)["step"] == "birth_year"
 
 
+async def test_console_list_shows_progress_circle_and_statuses() -> None:
+    exercise_id = uuid4()
+    slot = ExerciseSlot(
+        position=1,
+        exercise_id=exercise_id,
+        sets=5,
+        reps=5,
+        weight_kg=Decimal("65"),
+        rest_seconds=180,
+        rpe=7,
+        actual=SlotActual(sets=5, reps=5, weight_kg=Decimal("65")),
+    )
+    next_slot = ExerciseSlot(
+        position=2,
+        exercise_id=uuid4(),
+        sets=4,
+        reps=8,
+        rest_seconds=90,
+        rpe=7,
+    )
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Грудь", position=1, slots=[slot, next_slot])],
+    )
+    today = SimpleNamespace(document=document, screen="session", technique_video_positions=[], weekday=1)
+    mediator = _Mediator(
+        {
+            GetTodayWorkoutQuery: today,
+            GetExerciseNamesQuery: SimpleNamespace(
+                names={str(exercise_id): "Жим штанги лёжа", str(next_slot.exercise_id): "Разведения"},
+            ),
+        },
+    )
+    screen = ConsoleScreen(_Shell())
+    ctx = _ctx(mediator, screen=WidgetScreenId.CONSOLE)
+    frame = WidgetFrame(
+        screen=WidgetScreenId.CONSOLE,
+        chat_data=pack_state(
+            {
+                "ph": "work",
+                "i": 2,
+                "n": 2,
+                "set": 1,
+                "sets": 4,
+                "name": "Разведения",
+                "plan": "4×8 · 90 с",
+                "pos": 2,
+                "reps": 8,
+                "kg": None,
+                "rest": 90,
+                "log": 1,
+            },
+        ),
+        caption="",
+        shell_id="console",
+    )
+    shown = await screen.apply(_rebind(ctx, frame), "view")
+    body = json.loads(shown.frame.chat_data)
+    assert body["ph"] == "view"
+    assert body["pct"] == 50
+    assert body["title"] == "Грудь"
+    assert body["rows"][0].startswith("d:")
+    assert body["rows"][1].startswith("n:")
+    assert shown.navigate is None
+
+
+async def test_console_end_finalizes_and_opens_summary() -> None:
+    screen, mediator, ctx = _console()
+    frame = await screen.open(ctx)
+    ended = await screen.apply(_rebind(ctx, frame), "end")
+    assert ended.navigate is WidgetScreenId.SUMMARY
+    assert any(isinstance(item, FinalizeSessionCommand) for item in mediator.sent)
+
+
+async def test_summary_home_opens_the_main_card() -> None:
+    screen = SummaryScreen(_Shell(shell_id="summary"))
+    mediator = _Mediator(
+        {
+            GetSessionHistoryQuery: SimpleNamespace(items=[]),
+            GetTodayWorkoutQuery: SimpleNamespace(document=None),
+        },
+    )
+    frame = WidgetFrame(
+        screen=WidgetScreenId.SUMMARY,
+        chat_data=pack_state({"title": "Грудь", "rows": ["Жим — 5×5"], "n": 1}),
+        caption="",
+        shell_id="summary",
+    )
+    result = await screen.apply(_ctx(mediator, frame, screen=WidgetScreenId.SUMMARY), "home")
+    assert result.navigate is WidgetScreenId.HOME
+
+
 async def test_summary_lists_exercises_with_sets_and_reps() -> None:
     session_id = uuid4()
     mediator = _Mediator(
@@ -609,11 +702,14 @@ def test_shell_zlib_stays_within_4096() -> None:
     assert "height:140px" not in console
     assert "<footer" not in console
     assert "Готово" in console
+    assert 'data-op="end"' in console
+    assert 'data-op="view"' in console
     assert "data-rpe" not in console
     summary = shells["summary"].html()
     assert "На главную" in summary
+    assert summary.index("На главную") < summary.index('id="list"')
     assert "tonnage" not in summary
-    assert "spark" not in summary or "d.spark" not in summary
+    assert "d.spark" not in summary
     for shell in shells.values():
         html = shell.html()
         assert "<footer" not in html

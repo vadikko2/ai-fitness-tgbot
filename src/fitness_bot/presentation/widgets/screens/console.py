@@ -26,7 +26,7 @@ from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQ
 from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery, GetTodayWorkoutQuery
 
 _KG_STEP = Decimal("2.5")
-_KEEP = frozenset({"rest", "alt", "how", "vid", "kg", "done"})
+_KEEP = frozenset({"rest", "alt", "how", "vid", "kg", "done", "view"})
 _ALT_NOTE = {
     "logged": "Уже записано — заменить нельзя.",
     "unresolved": "Это упражнение не из каталога.",
@@ -48,16 +48,45 @@ def _find(slots: list[ExerciseSlot], position: int) -> ExerciseSlot | None:
 
 
 def _plan(slot: ExerciseSlot) -> str:
-    if slot.reps is not None:
-        load = f"{slot.sets}×{slot.reps}"
-    else:
-        load = f"{slot.sets}×{slot.duration_seconds} с"
-    parts = [load]
-    kg = as_number(slot.weight_kg)
-    if kg is not None:
-        parts.append(f"{kg} кг")
+    parts = [_slot_load(slot)]
     parts.append(f"{slot.rest_seconds} с")
-    return " · ".join(parts)
+    return " · ".join(part for part in parts if part)
+
+
+def _slot_load(slot: ExerciseSlot) -> str:
+    actual = slot.actual
+    sets = actual.sets if actual is not None else slot.sets
+    if actual is not None and actual.reps is not None:
+        text = f"{sets}×{actual.reps}"
+        kg = as_number(actual.weight_kg)
+    elif actual is not None and actual.duration_seconds is not None:
+        text = f"{sets}×{actual.duration_seconds} с"
+        kg = as_number(actual.weight_kg)
+    elif slot.reps is not None:
+        text = f"{sets}×{slot.reps}"
+        kg = as_number(slot.weight_kg)
+    else:
+        text = f"{sets}×{slot.duration_seconds} с"
+        kg = as_number(slot.weight_kg)
+    if kg is not None:
+        return f"{text} · {kg} кг"
+    return text
+
+
+def _fit_rows(data: dict[str, object], rows: list[str]) -> None:
+    kept = list(rows)
+    data["rows"] = kept
+    while True:
+        data["rows"] = kept
+        if _state_bytes(data) <= STATE_BYTE_LIMIT:
+            return
+        if not kept:
+            data["rows"] = []
+            return
+        if len(kept[-1]) > 20:
+            kept[-1] = kept[-1][: max(10, len(kept[-1]) - 8)].rstrip(" —·:")
+            continue
+        kept.pop()
 
 
 def _state_bytes(data: dict[str, object]) -> int:
@@ -200,6 +229,10 @@ class ConsoleScreen:
             return self._type_kg(data, phase, parsed.arg or "")
         if parsed.name == "sum":
             return await self._sum(ctx, data, phase)
+        if parsed.name == "view":
+            return await self._view(ctx, data, phase)
+        if parsed.name == "end":
+            return await self._end(ctx, data)
         return _error(self._frame(data))
 
     async def _sync(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
@@ -327,7 +360,7 @@ class ConsoleScreen:
         return self._result(rebuilt)
 
     def _back(self, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase not in {"alt", "how", "vid", "kg"}:
+        if phase not in {"alt", "how", "vid", "kg", "view"}:
             return _error(self._frame(data))
         data["ph"] = "work"
         data.pop("alts", None)
@@ -336,7 +369,60 @@ class ConsoleScreen:
         data.pop("tip", None)
         data.pop("vids", None)
         data.pop("draft", None)
+        data.pop("rows", None)
+        data.pop("pct", None)
+        data.pop("title", None)
         return self._result(data)
+
+    async def _view(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
+        if phase in {"alt", "how", "vid", "kg"}:
+            return _error(self._frame(data))
+        today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
+        names = await self._catalog(ctx)
+        document = getattr(today, "document", None)
+        slots = _slots(document)
+        current = int(data.get("pos") or 0)
+        rows: list[str] = []
+        done = 0
+        title = "Тренировка"
+        if document is not None and document.days:
+            title = str(document.days[0].title or title)
+        for slot in slots:
+            if slot.actual is not None:
+                mark = "d"
+                done += 1
+            elif slot.position == current:
+                mark = "n"
+            else:
+                mark = "t"
+            name = _label(slot, names)
+            load = _slot_load(slot)
+            rows.append(f"{mark}:{name} — {load}" if load else f"{mark}:{name}")
+        pct = int(round(100 * done / len(slots))) if slots else 0
+        data["ph"] = "view"
+        data["title"] = title[:40]
+        data["pct"] = pct
+        data.pop("tip", None)
+        data.pop("vids", None)
+        data.pop("alts", None)
+        data.pop("ids", None)
+        data.pop("note", None)
+        data.pop("draft", None)
+        _fit_rows(data, rows)
+        return self._result(data)
+
+    async def _end(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
+        try:
+            await ctx.mediator.send(FinalizeSessionCommand(telegram_user_id=ctx.user_id))
+        except DomainError:
+            pass
+        data["ph"] = "done"
+        data.pop("restUntil", None)
+        data.pop("rows", None)
+        data.pop("pct", None)
+        data.pop("title", None)
+        frame = self._frame(data)
+        return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.SUMMARY)
 
     async def _how(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "work":
@@ -406,12 +492,7 @@ class ConsoleScreen:
     async def _sum(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "done":
             return _error(self._frame(data))
-        try:
-            await ctx.mediator.send(FinalizeSessionCommand(telegram_user_id=ctx.user_id))
-        except DomainError:
-            pass
-        frame = self._frame(data)
-        return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.SUMMARY)
+        return await self._end(ctx, data)
 
     async def _after_rest(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
         data.pop("restUntil", None)
