@@ -326,7 +326,7 @@ class _PushBot:
         self.deleted.extend(message_ids)
 
 
-async def test_notification_stays_when_another_screen_opens() -> None:
+async def test_notifications_are_cleared_when_another_screen_opens() -> None:
     reset_chat_pages()
     user_id = 21
     bot = _PushBot()
@@ -346,9 +346,9 @@ async def test_notification_stays_when_another_screen_opens() -> None:
     await _dispatch(opened, show_workout)
 
     assert 10 in bot.deleted
-    assert training.message_id not in bot.deleted
-    assert weight.message_id not in bot.deleted
-    assert push_message_ids(user_id) == [training.message_id, weight.message_id]
+    assert training.message_id in bot.deleted
+    assert weight.message_id in bot.deleted
+    assert push_message_ids(user_id) == []
     assert training.message_id not in page_message_ids(user_id)
     reset_chat_pages()
 

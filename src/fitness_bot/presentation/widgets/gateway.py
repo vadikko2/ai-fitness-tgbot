@@ -11,12 +11,10 @@ from aiogram.exceptions import TelegramAPIError
 from cqrs import RequestMediator
 
 from fitness_bot.presentation.chat_pages import (
-    MENU_WIPE_LOOKBACK,
     clear_tidy_mark,
     flush_tidy,
-    leave_page,
     remember,
-    tidy_page,
+    schedule_deep_tidy,
     wipe_chat,
 )
 from fitness_bot.presentation.widgets.frame import (
@@ -120,7 +118,8 @@ class WidgetGateway:
             logger.warning("widget html failed; using the default shell", exc_info=True)
             html = widget.shell.html()
         try:
-            await leave_page(self._bot, user_id)
+            self._bindings.clear(user_id)
+            await wipe_chat(self._bot, user_id)
             prelude = WidgetBinding(chat_id=resolved_chat, message_id=0, screen=screen, frame=frame)
             prelude = await self._companion_binding(user_id, prelude, widget, ctx, frame)
             message_id = await self._transport.send(
@@ -143,6 +142,7 @@ class WidgetGateway:
         self._bindings.put(user_id, binding)
         remember(user_id, resolved_chat, message_id)
         await flush_tidy(self._bot, user_id)
+        clear_tidy_mark(user_id)
         return OpenResult(use_keyboard=False, message_id=message_id, frame=frame)
 
     async def on_query(self, query: WidgetQuery) -> None:
@@ -253,22 +253,10 @@ class WidgetGateway:
                 updated = with_hint(opened.frame, note)
                 await self._transport.edit_state(binding.chat_id, binding.message_id, updated.chat_data)
                 self._bindings.put(user_id, replace(binding, frame=updated))
-            await tidy_page(
-                self._bot,
-                user_id,
-                lookback=MENU_WIPE_LOOKBACK,
-                keep_pushes=False,
-            )
-            clear_tidy_mark(user_id)
+            schedule_deep_tidy(self._bot, user_id)
             return
         if not opened.use_keyboard:
-            await tidy_page(
-                self._bot,
-                user_id,
-                lookback=MENU_WIPE_LOOKBACK,
-                keep_pushes=False,
-            )
-            clear_tidy_mark(user_id)
+            schedule_deep_tidy(self._bot, user_id)
             return
         if self._bot is None or not callable(getattr(self._bot, "send_message", None)):
             return
@@ -279,13 +267,7 @@ class WidgetGateway:
         message_id = getattr(message, "message_id", None)
         if isinstance(message_id, int):
             remember(user_id, chat_id, message_id)
-        await tidy_page(
-            self._bot,
-            user_id,
-            lookback=MENU_WIPE_LOOKBACK,
-            keep_pushes=False,
-        )
-        clear_tidy_mark(user_id)
+        schedule_deep_tidy(self._bot, user_id)
 
     async def exit_handoff(self, user_id: int, chat_id: int, target: str) -> None:
         """Drop the widget and open a classic section outside the bubble."""
@@ -310,13 +292,7 @@ class WidgetGateway:
             chat_id=chat_id,
             target=target,
         )
-        await tidy_page(
-            self._bot,
-            user_id,
-            lookback=MENU_WIPE_LOOKBACK,
-            keep_pushes=False,
-        )
-        clear_tidy_mark(user_id)
+        schedule_deep_tidy(self._bot, user_id)
 
     async def _companion_binding(
         self,

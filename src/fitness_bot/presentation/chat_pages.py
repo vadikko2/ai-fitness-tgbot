@@ -4,9 +4,8 @@ The bot is a single polling process, so the current page lives in memory.
 Tracked ids are deleted on navigation; failed deletes are retried later.
 After a crash or restart, untracked leftovers near the new screen are swept.
 
-Notifications are not part of that screen. A training nudge, a weigh-in,
-a progress-photo ask, and other pushes stay until the user presses a button
-on that message, or answers the question it asked.
+Opening another window also clears notifications (training nudges, weigh-ins,
+progress-photo asks): the chat stays one clean surface at a time.
 """
 
 from __future__ import annotations
@@ -24,7 +23,8 @@ from aiogram.types import Message
 DELETE_PAUSE_SECONDS = 0.05
 # How far below the newest page bubble to hunt leftovers after a crash/restart.
 ORPHAN_LOOKBACK = 80
-# Deep wipe when returning to the main menu after a workout (long classic packs).
+# Deep wipe when opening the main menu or replacing a long classic pack.
+# Only used off the hot widget-tap path — sweeping hundreds of ids blocks Telegram.
 MENU_WIPE_LOOKBACK = 500
 
 # Edits of the message that is already on screen. A new bubble here stays on the
@@ -278,7 +278,7 @@ async def _delete_refs(
 
 
 async def leave_page(bot: object | None, user_id: int) -> None:
-    """Delete every message recorded for this user's current page.
+    """Delete the open page and every notification for this user.
 
     Failures are kept and retried on the next leave/tidy — they must not vanish
     from memory when Telegram rate-limits or the process dies mid-loop.
@@ -286,6 +286,8 @@ async def leave_page(bot: object | None, user_id: int) -> None:
     """
     if bot is None or not callable(getattr(bot, "delete_message", None)):
         return
+    for push in list(_pushes.get(user_id, [])):
+        await _delete_push(bot, push)
     async with _lock(user_id):
         refs = _dedupe_refs(_pending.pop(user_id, []) + _pages.pop(user_id, []))
         _tidy_users.add(user_id)
@@ -342,14 +344,9 @@ async def tidy_page(
                     try:
                         await batch(chat_id, chunk)
                     except Exception:
-                        failed.extend(
-                            await _delete_refs(
-                                bot,
-                                [(chat_id, mid) for mid in chunk],
-                                pause=False,
-                            ),
-                        )
-        else:
+                        # Speculative ids are not worth hundreds of one-by-one RTTs.
+                        pass
+        elif window <= ORPHAN_LOOKBACK:
             failed.extend(await _delete_refs(bot, sweep, pause=False))
     if failed:
         async with _lock(user_id):
@@ -358,11 +355,34 @@ async def tidy_page(
 
 
 async def flush_tidy(bot: object | None, user_id: int) -> None:
-    """Run the orphan sweep once new page bubbles are on the record."""
+    """Run a light orphan sweep once new page bubbles are on the record."""
     if user_id not in _tidy_users:
         return
     _tidy_users.discard(user_id)
-    await tidy_page(bot, user_id)
+    await tidy_page(bot, user_id, keep_pushes=False)
+
+
+def schedule_deep_tidy(bot: object | None, user_id: int) -> None:
+    """Sweep a wide band after the new screen is already visible."""
+    if bot is None or not callable(getattr(bot, "delete_message", None)):
+        clear_tidy_mark(user_id)
+        return
+
+    async def _run() -> None:
+        try:
+            await tidy_page(
+                bot,
+                user_id,
+                lookback=MENU_WIPE_LOOKBACK,
+                keep_pushes=False,
+            )
+        except Exception:
+            pass
+        finally:
+            clear_tidy_mark(user_id)
+
+    clear_tidy_mark(user_id)
+    asyncio.create_task(_run())
 
 
 def clear_tidy_mark(user_id: int) -> None:
@@ -376,10 +396,6 @@ async def wipe_chat(bot: object | None, user_id: int) -> None:
     Caller should then send the new menu bubble, ``remember`` it, and run
     ``tidy_page(..., lookback=MENU_WIPE_LOOKBACK, keep_pushes=False)``.
     """
-    if bot is None or not callable(getattr(bot, "delete_message", None)):
-        return
-    for push in list(_pushes.get(user_id, [])):
-        await _delete_push(bot, push)
     await leave_page(bot, user_id)
 
 

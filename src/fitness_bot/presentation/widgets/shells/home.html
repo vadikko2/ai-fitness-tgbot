@@ -1,8 +1,14 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
-<style>#streak:empty{display:none}</style>
+<style>
+.card{margin:8px 0 0;padding:14px;border-radius:16px;background:#F7F8FA}
+.card p{margin:0;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
+#streak:empty{display:none}
+#streak{margin:0 0 10px}
+</style>
 <p class="hint" id="streak"></p>
+<div class="card hide" id="note"><p id="noteText"></p></div>
 <button type="button" class="p" id="go" data-op="go">Начать</button>
 <button type="button" class="back hide" id="alt" data-op="go">Ещё одну</button>
 <button type="button" class="back" id="menu" data-op="menu">В меню</button>
@@ -16,23 +22,29 @@ if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=d.when||"";
 $("streak").textContent=d.streak==null?"":("Серия "+d.streak);
-var go=$("go"),alt=$("alt"),mode=d.mode||"go";
-if(mode=="again"){go.textContent="Повторить";go.setAttribute("data-op","again");}
-else if(mode=="live"){go.textContent="Продолжить";go.setAttribute("data-op","go");}
-else{go.textContent="Начать";go.setAttribute("data-op","go");}
-show(go,mode!="none"&&mode!="rest");
+var go=$("go"),alt=$("alt"),mode=d.mode||"go",note=$("note");
+if(mode=="again"){go.textContent="Повторить";go.setAttribute("data-op","again");$("noteText").textContent="Можно пройти день ещё раз.";}
+else if(mode=="live"){go.textContent="Продолжить";go.setAttribute("data-op","go");$("noteText").textContent="Сессия уже открыта.";}
+else if(mode=="rest"){go.textContent="Назад";go.setAttribute("data-op","menu");$("noteText").textContent="Сегодня по плану отдых. Можно взять другой день.";}
+else if(mode=="none"){go.textContent="В меню";go.setAttribute("data-op","menu");$("noteText").textContent="Сначала нужен план тренировок.";}
+else{go.textContent="Начать";go.setAttribute("data-op","go");$("noteText").textContent="";}
+show(go,mode!="rest"&&mode!="none");
+show(note,!!$("noteText").textContent);
+show($("menu"),true);
 if(d.alt&&d.altDay){
 alt.textContent=d.alt;
 alt.setAttribute("data-op","day:"+d.altDay);
 show(alt,true);
-alt.classList.toggle("p",mode=="rest");
-alt.classList.toggle("back",mode!="rest");
+alt.classList.toggle("p",mode=="rest"||mode=="again");
+alt.classList.toggle("back",mode!="rest"&&mode!="again");
 }else{show(alt,false);}
+if(mode=="again"){go.className="p";}
+else if(mode=="live"||mode=="go"){go.className="p";}
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
 function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
-document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";TelegramWidget.request(op).then(take,fail);});
 function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();

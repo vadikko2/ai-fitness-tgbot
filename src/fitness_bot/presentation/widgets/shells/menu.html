@@ -2,39 +2,59 @@
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
 <style>
-#hint:empty{display:none}
-.rows{margin:6px 0 0}
-.rows button{display:block;width:100%;margin:0 0 8px;padding:12px;min-height:44px;background:#F2F4F7;border-radius:12px;text-align:left;font-weight:500;line-height:1.25;white-space:normal}
-.rows button.p{background:#F5D22D;font-weight:600;text-align:center;font-size:16px}
-.pair{display:flex;gap:8px}
-.pair button{flex:1;margin:0;text-align:center}
+header{display:none}
+.wrap{padding:2px 0 4px}
+.hero{margin:0 0 16px;padding:16px 14px;border-radius:18px;background:linear-gradient(160deg,#FFF4B8 0%,#F7F8FA 58%,#EEF2F7 100%)}
+.hero em{display:block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(2,32,70,.42)}
+.hero b{display:block;margin-top:8px;font-size:24px;font-weight:700;letter-spacing:-.04em;line-height:1.1}
+.hero small{display:block;margin-top:8px;font-size:13px;font-weight:500;color:rgba(2,32,70,.58);line-height:1.35}
+#hint:empty,.sub:empty{display:none}
+#hint{margin:0 0 12px}
+.nav button{display:block;width:100%;box-sizing:border-box;margin:0 0 10px;padding:14px 16px;min-height:52px;background:#F2F4F7;border-radius:16px;text-align:left;font-weight:600;font-size:15px;line-height:1.3;white-space:normal}
+.nav button.p{background:#F5D22D;text-align:center;font-size:17px;letter-spacing:-.02em}
+.nav button.ghost{background:#fff;border:1px solid rgba(2,32,70,.14);font-weight:500;color:rgba(2,32,70,.82)}
+.nav button:last-child{margin-bottom:0}
 </style>
+<div class="wrap">
+<div class="hero"><em id="tag">Сегодня</em><b id="status">Главное</b><small class="sub" id="sub"></small></div>
 <p class="hint" id="hint"></p>
-<div class="rows" id="rows"></div>
+<nav class="nav" id="nav"></nav>
+</div>
 <p id="e"></p>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
-function trainLabel(mode){
-if(mode=="live"){return "Продолжить";}
-if(mode=="again"){return "К тренировке";}
-if(mode=="rest"){return "Тренировка";}
+function statusOf(d){
+if(d.mode=="live"){return "Тренировка идёт";}
+if(d.mode=="again"){return "Уже сделано";}
+if(d.mode=="rest"){return "Выходной";}
+if(d.mode=="none"){return "Нужна программа";}
+return d.workout||"Готов к тренировке";
+}
+function ctaOf(d){
+if(d.mode=="live"){return "Продолжить";}
+if(d.mode=="again"){return "К тренировке";}
+if(d.mode=="rest"&&d.cta){return d.cta;}
+if(d.mode=="rest"){return "Выбрать день";}
+if(d.mode=="none"){return "Открыть план";}
 return "Начать тренировку";
 }
 function render(d){
 if(!d){return;}
-$("t").textContent=d.title||"Главное";
-$("s").textContent=d.sub||"";
+$("t").textContent="Главное";
+$("s").textContent="";
+$("tag").textContent=d.when||"Меню";
+$("status").textContent=statusOf(d);
+$("sub").textContent=d.sub||"";
 $("hint").textContent=d.hint||"";
-var html="",coach=d.coach==="mine",cab=d.cab==="cab",n=d.n;
-html+='<button type="button" class="p" data-op="train">'+esc(trainLabel(d.mode))+'</button>';
-html+='<div class="pair"><button type="button" data-op="prof">Профиль</button>';
-html+='<button type="button" data-op="'+(coach?"cmine":"cfind")+'">'+(coach?"Мой тренер":"Найти тренера")+'</button></div>';
-if(cab){html+='<button type="button" data-op="cab">Кабинет тренера'+(n!=null&&n!==""?(" · "+esc(n)):"")+'</button>';}
-else{html+='<button type="button" data-op="apply">Стать тренером</button>';}
-if(d.mod){html+='<button type="button" data-op="mod">Модератор</button>';}
-$("rows").innerHTML=html;
+var html='<button type="button" class="p" data-op="train">'+esc(ctaOf(d))+'</button>';
+html+='<button type="button" class="ghost" data-op="prof">Профиль</button>';
+html+='<button type="button" class="ghost" data-op="'+(d.coach==="mine"?"cmine":"cfind")+'">'+(d.coach==="mine"?"Мой тренер":"Найти тренера")+'</button>';
+if(d.cab==="cab"){html+='<button type="button" class="ghost" data-op="cab">Кабинет тренера'+(d.n!=null&&d.n!==""?(" · "+esc(d.n)):"")+'</button>';}
+else{html+='<button type="button" class="ghost" data-op="apply">Стать тренером</button>';}
+if(d.mod){html+='<button type="button" class="ghost" data-op="mod">Модератор</button>';}
+$("nav").innerHTML=html;
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}

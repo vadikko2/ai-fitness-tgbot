@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -455,6 +456,9 @@ async def test_gateway_leave_to_menu_clears_widget_and_posts_home_keyboard() -> 
         ScreenResult(frame=_frame("work", '{"ph":"work"}'), answer='{"ph":"work"}', leave_to_menu=True),
     )
     await gateway.on_query(_query("sync"))
+    pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
     assert calls == [("apply", "sync"), ("answer", "q1", '{"ph":"work"}')]
     assert gateway.bindings.get(7) is None
     assert 15 in bot.deleted

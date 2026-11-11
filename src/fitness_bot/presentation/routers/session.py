@@ -1969,11 +1969,9 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             return
         if callback.message:
             from fitness_bot.presentation.chat_pages import (
-                MENU_WIPE_LOOKBACK,
                 bot_of,
-                clear_tidy_mark,
                 remember,
-                tidy_page,
+                schedule_deep_tidy,
                 wipe_chat,
             )
             from fitness_bot.presentation.widgets.gateway import widget_gateway
@@ -2001,13 +1999,7 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             chat_id = getattr(chat, "id", None)
             if isinstance(message_id, int) and chat_id is not None:
                 remember(callback.from_user.id, int(chat_id), message_id)
-                await tidy_page(
-                    bot,
-                    callback.from_user.id,
-                    lookback=MENU_WIPE_LOOKBACK,
-                    keep_pushes=False,
-                )
-                clear_tidy_mark(callback.from_user.id)
+                schedule_deep_tidy(bot, callback.from_user.id)
         await callback.answer()
 
     @router.callback_query(F.data == "sess_plan_all")

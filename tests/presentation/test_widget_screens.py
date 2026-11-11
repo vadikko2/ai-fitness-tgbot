@@ -384,11 +384,11 @@ async def test_menu_shell_fits_telegram_zlib_limit() -> None:
     assert len(zlib.compress(shell.html().encode("utf-8"), 9)) <= 4096
 
 
-async def test_menu_train_opens_home_or_live_console() -> None:
+async def test_menu_train_starts_workout_or_opens_live_console() -> None:
     home = _home_query_result()
     today = SimpleNamespace(
         screen="template",
-        document=None,
+        document=SimpleNamespace(days=[SimpleNamespace(title="Грудь")]),
         weekday=1,
         completed_weekdays=[],
         completed_today=False,
@@ -399,10 +399,13 @@ async def test_menu_train_opens_home_or_live_console() -> None:
     body = json.loads(frame.chat_data)
     assert body["title"] == "Главное"
     assert body["mode"] == "go"
+    assert body["workout"] == "Грудь"
     assert body["coach"] == "find"
     assert body["cab"] == "apply"
-    train = await screen.apply(_rebind(_ctx(_Mediator(), frame, screen=WidgetScreenId.MENU), frame), "train")
-    assert train.navigate is WidgetScreenId.HOME
+    starter = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="started")})
+    train = await screen.apply(_rebind(_ctx(starter, frame, screen=WidgetScreenId.MENU), frame), "train")
+    assert train.navigate is WidgetScreenId.CONSOLE
+    assert any(isinstance(item, StartTodayWorkoutCommand) for item in starter.sent)
     live = WidgetFrame(
         screen=WidgetScreenId.MENU,
         chat_data=pack_state({**body, "mode": "live"}),
@@ -411,6 +414,28 @@ async def test_menu_train_opens_home_or_live_console() -> None:
     )
     resumed = await screen.apply(_rebind(_ctx(_Mediator(), live, screen=WidgetScreenId.MENU), live), "train")
     assert resumed.navigate is WidgetScreenId.CONSOLE
+
+
+async def test_menu_train_on_rest_day_starts_alternative_weekday() -> None:
+    screen = MenuScreen(_Shell(shell_id="menu"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.MENU,
+        chat_data=pack_state(
+            {
+                "title": "Главное",
+                "mode": "rest",
+                "altDay": 1,
+                "cta": "Пн · База",
+            },
+        ),
+        caption="",
+        shell_id="menu",
+    )
+    mediator = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="started")})
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.MENU), frame), "train")
+    assert result.navigate is WidgetScreenId.CONSOLE
+    command = next(item for item in mediator.sent if isinstance(item, StartTodayWorkoutCommand))
+    assert command.weekday == 1
 
 
 async def test_menu_profile_and_coach_use_handoff() -> None:
