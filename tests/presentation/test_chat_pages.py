@@ -10,6 +10,7 @@ from fitness_bot.domain.enums import ExpectedInput, ProgramType, SessionStatus
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
 from fitness_bot.presentation.chat_pages import (
     DELETE_PAUSE_SECONDS,
+    MENU_WIPE_LOOKBACK,
     ORPHAN_LOOKBACK,
     ChatPageMiddleware,
     bind_bot,
@@ -23,6 +24,8 @@ from fitness_bot.presentation.chat_pages import (
     remember,
     remember_incoming,
     reset_chat_pages,
+    tidy_page,
+    wipe_chat,
 )
 from fitness_bot.presentation.routers.body import create_body_router
 from fitness_bot.presentation.routers.progress_photo import create_progress_photo_router
@@ -517,4 +520,24 @@ async def test_tidy_sweeps_untracked_orphans_below_the_new_page() -> None:
     assert page_message_ids(user_id) == [45]
     expected = set(range(max(1, 45 - ORPHAN_LOOKBACK), 45))
     assert expected.issubset(bot.deleted)
+    reset_chat_pages()
+
+
+async def test_menu_wipe_clears_pushes_and_a_deep_band() -> None:
+    reset_chat_pages()
+    user_id = 21
+    bot = _PushBot()
+    bind_bot(bot)  # type: ignore[arg-type]
+    remember(user_id, user_id, 10)
+    with push_scope(user_id):
+        note = await bot.send_message(user_id, "Напоминание")
+    await wipe_chat(bot, user_id)
+    assert 10 in bot.deleted
+    assert note.message_id in bot.deleted
+    assert push_message_ids(user_id) == []
+    remember(user_id, user_id, 600)
+    await tidy_page(bot, user_id, lookback=MENU_WIPE_LOOKBACK, keep_pushes=False)
+    assert 600 not in bot.deleted
+    assert (600 - MENU_WIPE_LOOKBACK) in bot.deleted
+    assert 599 in bot.deleted
     reset_chat_pages()

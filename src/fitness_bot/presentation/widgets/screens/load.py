@@ -8,7 +8,7 @@ from fitness_bot.presentation.widgets.shell import FileWidgetShell, load_widget_
 
 _SHELLS = Path(__file__).resolve().parent.parent / "shells"
 _CHROME = _SHELLS / "chrome.html"
-_IDS = ("console", "intake", "week", "home", "summary")
+_IDS = ("console", "intake", "week", "home", "summary", "menu")
 
 
 def load_static_shell(shell_id: str) -> FileWidgetShell:

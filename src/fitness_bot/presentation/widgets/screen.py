@@ -30,6 +30,8 @@ class ScreenResult:
     photo_path: str | None = None
     navigate: WidgetScreenId | None = None
     leave_to_menu: bool = False
+    menu_note: str | None = None
+    handoff: str | None = None
 
 
 class WidgetScreen(Protocol):

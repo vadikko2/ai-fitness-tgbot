@@ -53,6 +53,73 @@ def _plan(slot: ExerciseSlot) -> str:
     return " · ".join(part for part in parts if part)
 
 
+def _planned_sets(slot: ExerciseSlot) -> int:
+    return max(1, int(slot.sets or 1))
+
+
+def _logged_sets(slot: ExerciseSlot) -> int:
+    actual = slot.actual
+    if actual is None:
+        return 0
+    return max(0, min(int(actual.sets or 0), _planned_sets(slot)))
+
+
+def _total_sets(slots: list[ExerciseSlot]) -> int:
+    return sum(_planned_sets(slot) for slot in slots) or 1
+
+
+def _base_sets(slots: list[ExerciseSlot], index: int) -> int:
+    """Sets already finished before the exercise at ``index``."""
+    done = 0
+    for position, slot in enumerate(slots):
+        if position >= index:
+            break
+        logged = _logged_sets(slot)
+        done += logged if logged else _planned_sets(slot)
+    return done
+
+
+def _set_pct(
+    *,
+    total: int,
+    base: int,
+    set_no: int,
+    phase: str,
+) -> int:
+    current = max(1, int(set_no or 1))
+    finished = current if phase in {"rest", "done", "view"} else max(0, current - 1)
+    done = min(base + finished, max(1, total))
+    return int(round(100 * done / max(1, total)))
+
+
+def _slots_pct(slots: list[ExerciseSlot]) -> int:
+    total = _total_sets(slots)
+    done = sum(_logged_sets(slot) for slot in slots)
+    return int(round(100 * min(done, total) / total))
+
+
+def _put_progress(
+    data: dict[str, object],
+    *,
+    slots: list[ExerciseSlot] | None = None,
+    index: int | None = None,
+) -> None:
+    if slots is not None and index is not None:
+        data["ts"] = _total_sets(slots)
+        data["base"] = _base_sets(slots, index)
+    total = int(data.get("ts") or 0)
+    base = int(data.get("base") or 0)
+    if total <= 0 and slots is not None:
+        total = _total_sets(slots)
+        data["ts"] = total
+    data["pct"] = _set_pct(
+        total=total,
+        base=base,
+        set_no=int(data.get("set") or 1),
+        phase=str(data.get("ph") or "work"),
+    )
+
+
 def _slot_load(slot: ExerciseSlot) -> str:
     actual = slot.actual
     sets = actual.sets if actual is not None else slot.sets
@@ -318,10 +385,8 @@ class ConsoleScreen:
         except DomainError:
             return _error(self._frame(data))
         data["log"] = int(data.get("log") or 0) + 1
-        if int(data.get("set") or 1) >= int(data.get("sets") or 1):
-            total = max(1, int(data.get("n") or 1))
-            data["pct"] = int(round(100 * int(data.get("i") or 1) / total))
         self._start_rest(data, slot)
+        _put_progress(data)
         return self._result(data)
 
     def _step_kg(self, data: dict[str, object], phase: str, sign: int) -> ScreenResult:
@@ -428,8 +493,8 @@ class ConsoleScreen:
         data.pop("tip", None)
         data.pop("vids", None)
         data.pop("rows", None)
-        data.pop("pct", None)
         data.pop("title", None)
+        _put_progress(data)
         return self._result(data)
 
     async def _view(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
@@ -441,14 +506,12 @@ class ConsoleScreen:
         slots = _slots(document)
         current = int(data.get("pos") or 0)
         rows: list[str] = []
-        done = 0
         title = "Тренировка"
         if document is not None and document.days:
             title = str(document.days[0].title or title)
         for slot in slots:
             if slot.actual is not None:
                 mark = "d"
-                done += 1
             elif slot.position == current:
                 mark = "n"
             else:
@@ -456,10 +519,9 @@ class ConsoleScreen:
             name = _label(slot, names)
             load = _slot_load(slot)
             rows.append(f"{mark}:{name} — {load}" if load else f"{mark}:{name}")
-        pct = int(round(100 * done / len(slots))) if slots else 0
         data["ph"] = "view"
         data["title"] = title[:40]
-        data["pct"] = pct
+        data["pct"] = _slots_pct(slots)
         data.pop("tip", None)
         data.pop("vids", None)
         data.pop("alts", None)
@@ -476,10 +538,15 @@ class ConsoleScreen:
         data["ph"] = "done"
         data.pop("restUntil", None)
         data.pop("rows", None)
-        data.pop("pct", None)
         data.pop("title", None)
+        _put_progress(data)
         frame = self._frame(data)
-        return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.SUMMARY)
+        return ScreenResult(
+            frame=frame,
+            answer=frame.chat_data,
+            leave_to_menu=True,
+            menu_note="Тренировка завершена.",
+        )
 
     async def _how(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "work":
@@ -518,6 +585,7 @@ class ConsoleScreen:
         if int(data.get("set") or 1) < int(data.get("sets") or 1):
             data["set"] = int(data.get("set") or 1) + 1
             data["ph"] = "work"
+            _put_progress(data)
             return self._result(data)
         return await self._next_exercise(ctx, data)
 
@@ -602,13 +670,10 @@ class ConsoleScreen:
         index = next((i for i, item in enumerate(slots) if item.position == slot.position), 0)
         name = _label(slot, names)
         timed = slot.duration_seconds is not None
-        done = sum(1 for item in slots if item.actual is not None)
-        total = len(slots)
-        return {
+        data = {
             "ph": previous.get("ph") or "work",
             "i": index + 1,
-            "n": total,
-            "pct": int(round(100 * done / total)) if total else 0,
+            "n": len(slots),
             "set": 1,
             "sets": slot.sets,
             "name": name,
@@ -620,6 +685,8 @@ class ConsoleScreen:
             "rest": slot.rest_seconds,
             "log": int(previous.get("log") or 0),
         }
+        _put_progress(data, slots=slots, index=index)
+        return data
 
     def _start_rest(self, data: dict[str, object], slot: ExerciseSlot | None) -> None:
         seconds = slot.rest_seconds if slot is not None else int(data.get("rest") or 0)

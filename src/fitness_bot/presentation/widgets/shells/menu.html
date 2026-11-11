@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body>
+<!-- chrome -->
+<style>
+#hint:empty{display:none}
+.rows{margin:6px 0 0}
+.rows button{display:block;width:100%;margin:0 0 8px;padding:12px;min-height:44px;background:#F2F4F7;border-radius:12px;text-align:left;font-weight:500;line-height:1.25;white-space:normal}
+.rows button.p{background:#F5D22D;font-weight:600;text-align:center;font-size:16px}
+.pair{display:flex;gap:8px}
+.pair button{flex:1;margin:0;text-align:center}
+</style>
+<p class="hint" id="hint"></p>
+<div class="rows" id="rows"></div>
+<p id="e"></p>
+<script>
+(function(){
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+function trainLabel(mode){
+if(mode=="live"){return "Продолжить";}
+if(mode=="again"){return "К тренировке";}
+if(mode=="rest"){return "Тренировка";}
+return "Начать тренировку";
+}
+function render(d){
+if(!d){return;}
+$("t").textContent=d.title||"Главное";
+$("s").textContent=d.sub||"";
+$("hint").textContent=d.hint||"";
+var html="",coach=d.coach==="mine",cab=d.cab==="cab",n=d.n;
+html+='<button type="button" class="p" data-op="train">'+esc(trainLabel(d.mode))+'</button>';
+html+='<div class="pair"><button type="button" data-op="prof">Профиль</button>';
+html+='<button type="button" data-op="'+(coach?"cmine":"cfind")+'">'+(coach?"Мой тренер":"Найти тренера")+'</button></div>';
+if(cab){html+='<button type="button" data-op="cab">Кабинет тренера'+(n!=null&&n!==""?(" · "+esc(n)):"")+'</button>';}
+else{html+='<button type="button" data-op="apply">Стать тренером</button>';}
+if(d.mod){html+='<button type="button" data-op="mod">Модератор</button>';}
+$("rows").innerHTML=html;
+}
+function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
+function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
+function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";TelegramWidget.request(op).then(take,fail);});
+function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
+boot();
+})();
+</script>
+</body></html>

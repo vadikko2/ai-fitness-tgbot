@@ -103,6 +103,14 @@ def create_start_router(*, jinja_env: Environment, mediator: RequestMediator) ->
                 await message.answer(
                     f"Получена ссылка/код: {deep_link}\nОтправьте его ещё раз или вставьте вручную.",
                 )
+            from fitness_bot.presentation.widgets.hooks import show_main_menu
+
+            if await show_main_menu(
+                message.from_user.id,
+                message.chat.id,
+                note="Профиль готов — можно начинать.",
+            ):
+                return
             home = await mediator.send(GetHomeQuery(telegram_user_id=message.from_user.id))
             greeting = jinja_env.get_template("start.j2").render(profile_complete=True)
             home_text = render_home_text(jinja_env=jinja_env, home=home)

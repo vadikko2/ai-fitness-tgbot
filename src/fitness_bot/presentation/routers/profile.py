@@ -327,6 +327,14 @@ def create_profile_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 expected_input=ExpectedInput.NONE,
             ),
         )
+        from fitness_bot.presentation.widgets.hooks import show_main_menu
+
+        if callback.message is not None and await show_main_menu(
+            callback.from_user.id,
+            callback.message.chat.id,
+        ):
+            await callback.answer()
+            return
         home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
         text = render_home_text(jinja_env=jinja_env, home=home)
         await _answer(callback, text, reply_markup=home_keyboard_from(home))

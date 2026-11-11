@@ -40,7 +40,12 @@ class SummaryScreen:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
         if parsed.name != "home":
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
-        return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
+        return ScreenResult(
+            frame=frame,
+            answer=frame.chat_data,
+            leave_to_menu=True,
+            menu_note="Тренировка завершена.",
+        )
 
     async def _rows(self, ctx: ScreenContext) -> tuple[str, list[str]]:
         history = await ctx.mediator.send(

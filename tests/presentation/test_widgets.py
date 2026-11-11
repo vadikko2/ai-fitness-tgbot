@@ -305,6 +305,13 @@ def test_opcode_grammar() -> None:
         "menu": WidgetScreenId.HOME,
         "day:3": WidgetScreenId.HOME,
         "home": WidgetScreenId.SUMMARY,
+        "train": WidgetScreenId.MENU,
+        "prof": WidgetScreenId.MENU,
+        "cmine": WidgetScreenId.MENU,
+        "cfind": WidgetScreenId.MENU,
+        "cab": WidgetScreenId.MENU,
+        "apply": WidgetScreenId.MENU,
+        "mod": WidgetScreenId.MENU,
     }
     for raw, screen in samples.items():
         item = parse_opcode(raw)
@@ -460,6 +467,8 @@ async def test_gateway_leave_to_menu_clears_widget_and_posts_home_keyboard() -> 
     labels = [button.text for row in markup.inline_keyboard for button in row]
     assert START_WORKOUT_LABEL in labels
     assert page_message_ids(7) == [90]
+    # Deep menu wipe also tries older leftovers below the new menu bubble.
+    assert 89 in bot.deleted
     assert any(isinstance(item, ExpectInputCommand) for item in mediator.sent)
     assert any(isinstance(item, GetHomeQuery) for item in mediator.sent)
     reset_chat_pages()

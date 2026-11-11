@@ -18,6 +18,7 @@ from fitness_bot.presentation.widgets.screens.console import ConsoleScreen
 from fitness_bot.presentation.widgets.screens.home import HomeScreen
 from fitness_bot.presentation.widgets.screens.intake import IntakeScreen
 from fitness_bot.presentation.widgets.screens.load import load_shells
+from fitness_bot.presentation.widgets.screens.menu import MenuScreen
 from fitness_bot.presentation.widgets.screens.summary import SummaryScreen
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 from fitness_bot.presentation.widgets.state import pack_state
@@ -37,7 +38,7 @@ from fitness_bot.service.models.queries.session import (
     GetSimilarExercisesQuery,
     GetTodayWorkoutQuery,
 )
-from fitness_bot.service.models.queries.users import GetProfileQuery
+from fitness_bot.service.models.queries.users import GetHomeQuery, GetHomeQueryResult, GetProfileQuery
 
 
 class _Shell:
@@ -353,7 +354,7 @@ async def test_home_other_day_starts_that_weekday_in_the_console() -> None:
     assert command.weekday == 5
 
 
-async def test_home_menu_leaves_to_classic_home_keyboard() -> None:
+async def test_home_menu_navigates_to_main_menu_widget() -> None:
     screen = HomeScreen(_Shell(shell_id="home"))
     frame = WidgetFrame(
         screen=WidgetScreenId.HOME,
@@ -362,8 +363,69 @@ async def test_home_menu_leaves_to_classic_home_keyboard() -> None:
         shell_id="home",
     )
     result = await screen.apply(_rebind(_ctx(_Mediator(), frame, screen=WidgetScreenId.HOME), frame), "menu")
-    assert result.leave_to_menu is True
-    assert result.navigate is None
+    assert result.navigate is WidgetScreenId.MENU
+    assert result.leave_to_menu is False
+
+
+def _home_query_result(**kwargs: object) -> GetHomeQueryResult:
+    base = dict(
+        user_id=uuid4(),
+        profile_complete=True,
+        goal=None,
+        age=None,
+        weight_kg=None,
+    )
+    base.update(kwargs)
+    return GetHomeQueryResult(**base)  # type: ignore[arg-type]
+
+
+async def test_menu_shell_fits_telegram_zlib_limit() -> None:
+    shell = load_shells()["menu"]
+    assert len(zlib.compress(shell.html().encode("utf-8"), 9)) <= 4096
+
+
+async def test_menu_train_opens_home_or_live_console() -> None:
+    home = _home_query_result()
+    today = SimpleNamespace(
+        screen="template",
+        document=None,
+        weekday=1,
+        completed_weekdays=[],
+        completed_today=False,
+    )
+    screen = MenuScreen(_Shell(shell_id="menu"))
+    mediator = _Mediator({GetHomeQuery: home, GetTodayWorkoutQuery: today})
+    frame = await screen.open(_ctx(mediator, screen=WidgetScreenId.MENU))
+    body = json.loads(frame.chat_data)
+    assert body["title"] == "Главное"
+    assert body["mode"] == "go"
+    assert body["coach"] == "find"
+    assert body["cab"] == "apply"
+    train = await screen.apply(_rebind(_ctx(_Mediator(), frame, screen=WidgetScreenId.MENU), frame), "train")
+    assert train.navigate is WidgetScreenId.HOME
+    live = WidgetFrame(
+        screen=WidgetScreenId.MENU,
+        chat_data=pack_state({**body, "mode": "live"}),
+        caption="",
+        shell_id="menu",
+    )
+    resumed = await screen.apply(_rebind(_ctx(_Mediator(), live, screen=WidgetScreenId.MENU), live), "train")
+    assert resumed.navigate is WidgetScreenId.CONSOLE
+
+
+async def test_menu_profile_and_coach_use_handoff() -> None:
+    screen = MenuScreen(_Shell(shell_id="menu"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.MENU,
+        chat_data=pack_state({"title": "Главное", "mode": "go", "coach": "mine", "cab": "cab", "n": 2}),
+        caption="",
+        shell_id="menu",
+    )
+    ctx = _rebind(_ctx(_Mediator(), frame, screen=WidgetScreenId.MENU), frame)
+    assert (await screen.apply(ctx, "prof")).handoff == "profile"
+    assert (await screen.apply(ctx, "cmine")).handoff == "coach_mine"
+    assert (await screen.apply(ctx, "cab")).handoff == "coach_cab"
+    assert (await screen.apply(ctx, "mod")).handoff == "mod"
 
 
 async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing() -> None:
@@ -561,6 +623,45 @@ async def test_console_work_state_includes_workout_progress_pct() -> None:
     assert body["ph"] == "work"
     assert body["pct"] == 0
     assert body["n"] >= 1
+    assert body["ts"] >= 1
+
+
+async def test_console_progress_rises_after_each_set() -> None:
+    slot = ExerciseSlot(
+        position=1,
+        exercise_id=uuid4(),
+        sets=5,
+        reps=5,
+        weight_kg=Decimal("50"),
+        rest_seconds=90,
+        rpe=7,
+    )
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[WorkoutDay(weekday=1, title="Ноги", position=1, slots=[slot])],
+    )
+    today = SimpleNamespace(document=document, screen="session", technique_video_positions=[], weekday=1)
+    mediator = _Mediator({GetTodayWorkoutQuery: today})
+    screen = ConsoleScreen(_Shell())
+    ctx = _ctx(mediator, screen=WidgetScreenId.CONSOLE)
+    frame = await screen.open(ctx)
+    assert json.loads(frame.chat_data)["pct"] == 0
+
+    first = await screen.apply(_rebind(ctx, frame), "ok")
+    assert json.loads(first.frame.chat_data)["ph"] == "rest"
+    assert json.loads(first.frame.chat_data)["pct"] == 20
+
+    second = await screen.apply(_rebind(ctx, first.frame), "skip")
+    assert json.loads(second.frame.chat_data)["ph"] == "work"
+    assert json.loads(second.frame.chat_data)["set"] == 2
+    assert json.loads(second.frame.chat_data)["pct"] == 20
+
+    third = await screen.apply(_rebind(ctx, second.frame), "ok")
+    assert json.loads(third.frame.chat_data)["pct"] == 40
+    fourth_rest = await screen.apply(_rebind(ctx, third.frame), "skip")
+    fifth = await screen.apply(_rebind(ctx, fourth_rest.frame), "ok")
+    assert json.loads(fifth.frame.chat_data)["set"] == 3
+    assert json.loads(fifth.frame.chat_data)["pct"] == 60
 
 
 async def test_console_list_shows_progress_circle_and_statuses() -> None:
@@ -622,22 +723,24 @@ async def test_console_list_shows_progress_circle_and_statuses() -> None:
     shown = await screen.apply(_rebind(ctx, frame), "view")
     body = json.loads(shown.frame.chat_data)
     assert body["ph"] == "view"
-    assert body["pct"] == 50
+    assert body["pct"] == 56
     assert body["title"] == "Грудь"
     assert body["rows"][0].startswith("d:")
     assert body["rows"][1].startswith("n:")
     assert shown.navigate is None
 
 
-async def test_console_end_finalizes_and_opens_summary() -> None:
+async def test_console_end_finalizes_and_returns_to_menu() -> None:
     screen, mediator, ctx = _console()
     frame = await screen.open(ctx)
     ended = await screen.apply(_rebind(ctx, frame), "end")
-    assert ended.navigate is WidgetScreenId.SUMMARY
+    assert ended.leave_to_menu is True
+    assert ended.menu_note == "Тренировка завершена."
+    assert ended.navigate is None
     assert any(isinstance(item, FinalizeSessionCommand) for item in mediator.sent)
 
 
-async def test_summary_home_opens_the_main_card() -> None:
+async def test_summary_home_returns_to_classic_menu() -> None:
     screen = SummaryScreen(_Shell(shell_id="summary"))
     mediator = _Mediator(
         {
@@ -652,7 +755,8 @@ async def test_summary_home_opens_the_main_card() -> None:
         shell_id="summary",
     )
     result = await screen.apply(_ctx(mediator, frame, screen=WidgetScreenId.SUMMARY), "home")
-    assert result.navigate is WidgetScreenId.HOME
+    assert result.leave_to_menu is True
+    assert result.navigate is None
 
 
 async def test_summary_lists_exercises_with_sets_and_reps() -> None:
@@ -728,8 +832,8 @@ def test_shell_zlib_stays_within_4096() -> None:
     assert "hue(" in console
     assert "bar.style.background=color" in console
     summary = shells["summary"].html()
-    assert "На главную" in summary
-    assert summary.index("На главную") < summary.index('id="list"')
+    assert "В меню" in summary
+    assert summary.index("В меню") < summary.index('id="list"')
     assert "tonnage" not in summary
     assert "d.spark" not in summary
     home = shells["home"].html()

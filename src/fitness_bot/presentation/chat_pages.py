@@ -24,6 +24,8 @@ from aiogram.types import Message
 DELETE_PAUSE_SECONDS = 0.05
 # How far below the newest page bubble to hunt leftovers after a crash/restart.
 ORPHAN_LOOKBACK = 80
+# Deep wipe when returning to the main menu after a workout (long classic packs).
+MENU_WIPE_LOOKBACK = 500
 
 # Edits of the message that is already on screen. A new bubble here stays on the
 # same page; it must not wipe the screen the user is still using.
@@ -293,21 +295,29 @@ async def leave_page(bot: object | None, user_id: int) -> None:
             _store_pending(user_id, failed)
 
 
-async def tidy_page(bot: object | None, user_id: int) -> None:
+async def tidy_page(
+    bot: object | None,
+    user_id: int,
+    *,
+    lookback: int | None = None,
+    keep_pushes: bool = True,
+) -> None:
     """Sweep untracked leftovers near the current page after navigation.
 
     Covers bubbles lost from memory after a crash/restart: anything just below
-    the newest page id, except the open screen and notifications.
+    the newest page id, except the open screen and (optionally) notifications.
     """
     if bot is None or not callable(getattr(bot, "delete_message", None)):
         return
+    window = ORPHAN_LOOKBACK if lookback is None else max(1, lookback)
     async with _lock(user_id):
         page = list(_pages.get(user_id, []))
         pending = list(_pending.pop(user_id, []))
     if not page and not pending:
         return
     keep = set(page)
-    keep.update(_push_by_ref)
+    if keep_pushes:
+        keep.update(_push_by_ref)
     failed = await _delete_refs(bot, [ref for ref in pending if ref not in keep], pause=False)
     by_chat: dict[int, int] = {}
     for chat_id, message_id in page:
@@ -316,7 +326,7 @@ async def tidy_page(bot: object | None, user_id: int) -> None:
             by_chat[chat_id] = message_id
     sweep: list[tuple[int, int]] = []
     for chat_id, high in by_chat.items():
-        low = max(1, high - ORPHAN_LOOKBACK)
+        low = max(1, high - window)
         for message_id in range(high - 1, low - 1, -1):
             ref = (chat_id, message_id)
             if ref in keep:
@@ -353,6 +363,24 @@ async def flush_tidy(bot: object | None, user_id: int) -> None:
         return
     _tidy_users.discard(user_id)
     await tidy_page(bot, user_id)
+
+
+def clear_tidy_mark(user_id: int) -> None:
+    """Skip the deferred middleware sweep when a deep wipe already ran."""
+    _tidy_users.discard(user_id)
+
+
+async def wipe_chat(bot: object | None, user_id: int) -> None:
+    """Delete the open page and every notification for this user.
+
+    Caller should then send the new menu bubble, ``remember`` it, and run
+    ``tidy_page(..., lookback=MENU_WIPE_LOOKBACK, keep_pushes=False)``.
+    """
+    if bot is None or not callable(getattr(bot, "delete_message", None)):
+        return
+    for push in list(_pushes.get(user_id, [])):
+        await _delete_push(bot, push)
+    await leave_page(bot, user_id)
 
 
 async def _delete_push(bot: object | None, push: _Push) -> None:

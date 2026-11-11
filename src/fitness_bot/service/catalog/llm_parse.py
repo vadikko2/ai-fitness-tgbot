@@ -20,18 +20,108 @@ _VIDEO_STOPWORDS = {
     "with",
     "в",
     "видео",
+    "выполнения",
+    "гантелей",
+    "гантели",
+    "гантель",
+    "гантелями",
+    "гантелью",
     "для",
+    "двумя",
     "и",
     "из",
     "к",
+    "лежа",
+    "лёжа",
     "на",
+    "нюансы",
+    "одной",
     "по",
+    "рукой",
+    "руками",
     "с",
+    "сидя",
     "со",
+    "советы",
+    "стоя",
     "техника",
     "упражнение",
     "упражнения",
+    "штанга",
+    "штанги",
+    "штангой",
 }
+
+
+def _fold(text: str) -> str:
+    return text.casefold().replace("ё", "е")
+
+
+def video_title_conflicts(exercise_name: str, video_title: str) -> bool:
+    """True when a video title clearly belongs to a different exercise family."""
+    name = _fold(exercise_name)
+    title = _fold(video_title)
+    if not title.strip():
+        return False
+
+    if "бытовые навыки" in title or "надевание носков" in title:
+        return True
+    if "жира на груди" in title or "поднимите грудь" in title:
+        return True
+
+    if "французск" in title and "французск" not in name:
+        overhead_extension = "разгибание" in name and ("голов" in name or "рук" in name)
+        if not overhead_extension:
+            return True
+
+    if "французск" in name and "французск" not in title:
+        chest_like = (
+            "наклонн" in title
+            or "верх груди" in title
+            or "жим в смите" in title
+            or "жим штанги лежа" in title
+            or "жим гантелей на наклон" in title
+            or "жим гантелями на наклон" in title
+        )
+        if chest_like:
+            return True
+
+    if ("жим ногами" in title or "жим одной ногой" in title) and "ног" not in name and "платформ" not in name:
+        return True
+
+    if "становая" in title and not any(token in name for token in ("становая", "румынск", "мертвая", "deadlift")):
+        return True
+
+    if "румынск" in title and "румынск" not in name and "мертвая" not in name:
+        return True
+
+    if "присед" in title and "без присед" not in title:
+        squat_ok = any(token in name for token in ("присед", "сплит", "гакк", "выпад", "squat"))
+        # Step-downs often surface as one-leg box squats.
+        box_step = "тумб" in name and "тумб" in title
+        if not squat_ok and not box_step:
+            return True
+
+    if "выпад" in title and not any(token in name for token in ("выпад", "сплит", "lunge")):
+        return True
+
+    if "подтягиван" in title and "ног" not in title:
+        if not any(token in name for token in ("подтягиван", "турник", "перекладин", "hang")):
+            return True
+
+    if "отжиман" in title and not any(token in name for token in ("отжиман", "бёрпи", "берпи", "burpee", "push")):
+        return True
+
+    title_tokens = tokenize(video_title)
+    if any(token in name for token in ("мобилити", "растяжка", "скорпион")) and "жим" in title_tokens:
+        return True
+
+    if "доставание носков" in name and any(
+        token in title for token in ("мостик", "подъем таза", "французск", "надевание")
+    ):
+        return True
+
+    return False
 
 
 def extract_json_value(text: str) -> Any:
@@ -73,17 +163,20 @@ def filter_relevant_video_hits(
     *,
     exercise_name: str,
 ) -> list[VideoSearchHit]:
-    """Keep hits whose titles overlap the exercise name; fall back to all hits if none match."""
+    """Keep hits whose titles overlap the exercise name and do not conflict by family."""
     name_tokens = distinctive_name_tokens(exercise_name)
-    if not name_tokens:
-        return hits
-    need = 1 if len(name_tokens) <= 2 else max(2, (len(name_tokens) + 1) // 2)
     relevant: list[VideoSearchHit] = []
     for hit in hits:
+        if video_title_conflicts(exercise_name, hit.title):
+            continue
+        if not name_tokens:
+            relevant.append(hit)
+            continue
         title_tokens = tokenize(hit.title)
+        need = 1 if len(name_tokens) <= 2 else max(2, (len(name_tokens) + 1) // 2)
         if len(name_tokens & title_tokens) >= need:
             relevant.append(hit)
-    return relevant if relevant else hits
+    return relevant
 
 
 def dedupe_videos(hits: list[VideoSearchHit], *, limit_per_platform: int) -> list[ExerciseVideoLine]:

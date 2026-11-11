@@ -12,6 +12,7 @@ class WidgetScreenId(StrEnum):
     WEEK = "week"
     HOME = "home"
     SUMMARY = "summary"
+    MENU = "menu"
 
 
 # Logical-pixel anchors. Width is always 0 (the bubble's own width) and lives on the transport.
@@ -21,6 +22,7 @@ WIDGET_HEIGHT: dict[WidgetScreenId, int] = {
     WidgetScreenId.WEEK: 420,
     WidgetScreenId.HOME: 260,
     WidgetScreenId.SUMMARY: 300,
+    WidgetScreenId.MENU: 340,
 }
 
 

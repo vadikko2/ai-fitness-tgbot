@@ -19,6 +19,15 @@ async def open_widget(user_id: int, screen: WidgetScreenId, chat_id: int) -> boo
     return not opened.use_keyboard
 
 
+async def show_main_menu(user_id: int, chat_id: int, *, note: str | None = None) -> bool:
+    """Wipe the page and open the main menu widget (or classic fallback inside the gateway)."""
+    gateway = widget_gateway()
+    if gateway is None:
+        return False
+    await gateway.return_to_menu(user_id, chat_id, note=note)
+    return True
+
+
 async def refresh_widget(user_id: int) -> bool:
     gateway = widget_gateway()
     if gateway is None:

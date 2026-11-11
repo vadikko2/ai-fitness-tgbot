@@ -251,7 +251,12 @@ async def render_home(
     telegram_user_id: int,
 ) -> None:
     from fitness_bot.presentation.flow_helpers import home_keyboard_from, render_home_text
+    from fitness_bot.presentation.widgets.hooks import show_main_menu
 
+    chat = getattr(message_or_callback, "message", None) or message_or_callback
+    chat_id = getattr(getattr(chat, "chat", None), "id", None)
+    if isinstance(chat_id, int) and await show_main_menu(telegram_user_id, chat_id):
+        return
     home = await mediator.send(GetHomeQuery(telegram_user_id=telegram_user_id))
     text = render_home_text(jinja_env=jinja_env, home=home)
     markup = home_keyboard_from(home)

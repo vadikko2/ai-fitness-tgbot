@@ -42,7 +42,7 @@ class HomeScreen:
         if parsed.name == "day" and parsed.arg is not None:
             return await self._start(ctx, frame, weekday=int(parsed.arg))
         if parsed.name == "menu":
-            return ScreenResult(frame=frame, answer=frame.chat_data, leave_to_menu=True)
+            return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.MENU)
         return ScreenResult(frame=frame, answer=PHASE_ERROR)
 
     async def _start(self, ctx: ScreenContext, frame: WidgetFrame, *, weekday: int | None) -> ScreenResult:

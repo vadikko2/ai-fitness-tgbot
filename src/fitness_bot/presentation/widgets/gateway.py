@@ -10,7 +10,15 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from cqrs import RequestMediator
 
-from fitness_bot.presentation.chat_pages import flush_tidy, leave_page, remember
+from fitness_bot.presentation.chat_pages import (
+    MENU_WIPE_LOOKBACK,
+    clear_tidy_mark,
+    flush_tidy,
+    leave_page,
+    remember,
+    tidy_page,
+    wipe_chat,
+)
 from fitness_bot.presentation.widgets.frame import (
     WIDGET_HEIGHT,
     WidgetBinding,
@@ -168,10 +176,17 @@ class WidgetGateway:
         result = await widget.apply(ctx, query.data)
         if result.expect is not None:
             await self._mediator.send(result.expect)
+        if result.handoff:
+            await self._transport.answer(query.query_id, result.answer)
+            try:
+                await self.exit_handoff(user_id, binding.chat_id, result.handoff)
+            except Exception:
+                logger.warning("widget handoff failed after answer", exc_info=True)
+            return
         if result.leave_to_menu:
             await self._transport.answer(query.query_id, result.answer)
             try:
-                await self._open_menu(user_id, binding.chat_id)
+                await self.return_to_menu(user_id, binding.chat_id, note=result.menu_note)
             except Exception:
                 logger.warning("widget leave-to-menu failed after answer", exc_info=True)
             return
@@ -217,28 +232,91 @@ class WidgetGateway:
     async def reject(self, query_id: str) -> None:
         await self._transport.answer(query_id, BAD_WIDGET_ANSWER)
 
-    async def _open_menu(self, user_id: int, chat_id: int) -> None:
-        """Drop the widget binding and post the classic inline home menu."""
+    async def return_to_menu(self, user_id: int, chat_id: int, *, note: str | None = None) -> None:
+        """Drop the current bubble, wipe the chat band, and open the main menu widget."""
         from fitness_bot.domain.enums import ExpectedInput
         from fitness_bot.presentation.flow_helpers import home_keyboard_from, render_home_text
         from fitness_bot.presentation.templates_env import create_jinja_env
+        from fitness_bot.presentation.widgets.screens.menu import with_hint
         from fitness_bot.service.models.commands.users import ExpectInputCommand
         from fitness_bot.service.models.queries.users import GetHomeQuery
 
         self._bindings.clear(user_id)
-        await leave_page(self._bot, user_id)
+        await wipe_chat(self._bot, user_id)
         await self._mediator.send(
             ExpectInputCommand(telegram_user_id=user_id, expected_input=ExpectedInput.NONE),
         )
+        opened = await self.open(user_id, WidgetScreenId.MENU, chat_id=chat_id)
+        if not opened.use_keyboard and opened.frame is not None and note and note.strip():
+            binding = self._bindings.get(user_id)
+            if binding is not None:
+                updated = with_hint(opened.frame, note)
+                await self._transport.edit_state(binding.chat_id, binding.message_id, updated.chat_data)
+                self._bindings.put(user_id, replace(binding, frame=updated))
+            await tidy_page(
+                self._bot,
+                user_id,
+                lookback=MENU_WIPE_LOOKBACK,
+                keep_pushes=False,
+            )
+            clear_tidy_mark(user_id)
+            return
+        if not opened.use_keyboard:
+            await tidy_page(
+                self._bot,
+                user_id,
+                lookback=MENU_WIPE_LOOKBACK,
+                keep_pushes=False,
+            )
+            clear_tidy_mark(user_id)
+            return
         if self._bot is None or not callable(getattr(self._bot, "send_message", None)):
             return
         home = await self._mediator.send(GetHomeQuery(telegram_user_id=user_id))
-        text = render_home_text(jinja_env=create_jinja_env(), home=home)
+        body = render_home_text(jinja_env=create_jinja_env(), home=home)
+        text = f"{note.strip()}\n\n{body}" if note and note.strip() else body
         message = await self._bot.send_message(chat_id, text, reply_markup=home_keyboard_from(home))
         message_id = getattr(message, "message_id", None)
         if isinstance(message_id, int):
             remember(user_id, chat_id, message_id)
-        await flush_tidy(self._bot, user_id)
+        await tidy_page(
+            self._bot,
+            user_id,
+            lookback=MENU_WIPE_LOOKBACK,
+            keep_pushes=False,
+        )
+        clear_tidy_mark(user_id)
+
+    async def exit_handoff(self, user_id: int, chat_id: int, target: str) -> None:
+        """Drop the widget and open a classic section outside the bubble."""
+        from fitness_bot.domain.enums import ExpectedInput
+        from fitness_bot.presentation.widgets.handoff import deliver_handoff, known_handoff
+        from fitness_bot.service.models.commands.users import ExpectInputCommand
+
+        if not known_handoff(target):
+            await self.return_to_menu(user_id, chat_id)
+            return
+        self._bindings.clear(user_id)
+        await wipe_chat(self._bot, user_id)
+        await self._mediator.send(
+            ExpectInputCommand(telegram_user_id=user_id, expected_input=ExpectedInput.NONE),
+        )
+        if self._bot is None:
+            return
+        await deliver_handoff(
+            bot=self._bot,
+            mediator=self._mediator,
+            user_id=user_id,
+            chat_id=chat_id,
+            target=target,
+        )
+        await tidy_page(
+            self._bot,
+            user_id,
+            lookback=MENU_WIPE_LOOKBACK,
+            keep_pushes=False,
+        )
+        clear_tidy_mark(user_id)
 
     async def _companion_binding(
         self,

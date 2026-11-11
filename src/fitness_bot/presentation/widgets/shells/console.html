@@ -62,8 +62,13 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp
 function hue(p){return "hsl("+Math.round(p*1.2)+",72%,42%)";}
 function ringPct(d){
 if(d.pct!=null){return Math.max(0,Math.min(100,d.pct||0));}
-var n=Math.max(1,d.n||1),done=Math.max(0,(d.i||1)-1);
-return Math.round(100*done/n);
+var total=Math.max(1,d.ts||0),base=d.base||0,cur=Math.max(1,d.set||1);
+if(total){
+var done=base+(d.ph=="rest"||d.ph=="done"||d.ph=="view"?cur:Math.max(0,cur-1));
+return Math.round(100*Math.min(done,total)/total);
+}
+var n=Math.max(1,d.n||1);
+return Math.round(100*Math.max(0,(d.i||1)-1)/n);
 }
 function paint(p){
 var color=hue(p),bar=$("bar");

@@ -43,6 +43,13 @@ _EXACT: dict[str, WidgetScreenId] = {
     "again": WidgetScreenId.HOME,
     "menu": WidgetScreenId.HOME,
     "home": WidgetScreenId.SUMMARY,
+    "train": WidgetScreenId.MENU,
+    "prof": WidgetScreenId.MENU,
+    "cmine": WidgetScreenId.MENU,
+    "cfind": WidgetScreenId.MENU,
+    "cab": WidgetScreenId.MENU,
+    "apply": WidgetScreenId.MENU,
+    "mod": WidgetScreenId.MENU,
 }
 
 

@@ -1968,19 +1968,46 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         if callback.message:
-            from fitness_bot.presentation.widgets.frame import WidgetScreenId
-            from fitness_bot.presentation.widgets.hooks import open_widget
+            from fitness_bot.presentation.chat_pages import (
+                MENU_WIPE_LOOKBACK,
+                bot_of,
+                clear_tidy_mark,
+                remember,
+                tidy_page,
+                wipe_chat,
+            )
+            from fitness_bot.presentation.widgets.gateway import widget_gateway
 
-            if await open_widget(callback.from_user.id, WidgetScreenId.SUMMARY, callback.message.chat.id):
+            gateway = widget_gateway()
+            if gateway is not None:
+                await gateway.return_to_menu(
+                    callback.from_user.id,
+                    callback.message.chat.id,
+                    note="Тренировка завершена.",
+                )
                 await callback.answer()
                 return
+            bot = bot_of(callback)
+            await wipe_chat(bot, callback.from_user.id)
             text = await _render_document_template(
                 jinja_env=jinja_env,
                 mediator=mediator,
                 template_name="session_completed.j2",
                 document=result.document,
             )
-            await callback.message.answer(text, reply_markup=home_keyboard())
+            sent = await callback.message.answer(text, reply_markup=home_keyboard())
+            message_id = getattr(sent, "message_id", None)
+            chat = getattr(callback.message, "chat", None)
+            chat_id = getattr(chat, "id", None)
+            if isinstance(message_id, int) and chat_id is not None:
+                remember(callback.from_user.id, int(chat_id), message_id)
+                await tidy_page(
+                    bot,
+                    callback.from_user.id,
+                    lookback=MENU_WIPE_LOOKBACK,
+                    keep_pushes=False,
+                )
+                clear_tidy_mark(callback.from_user.id)
         await callback.answer()
 
     @router.callback_query(F.data == "sess_plan_all")
@@ -2027,27 +2054,32 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         try:
-            finalized = await mediator.send(FinalizeSessionCommand(telegram_user_id=callback.from_user.id))
+            await mediator.send(FinalizeSessionCommand(telegram_user_id=callback.from_user.id))
         except DomainError as exc:
             if callback.message:
                 await callback.message.answer(f"Не удалось завершить: {exc}")
             await callback.answer()
             return
-        if callback.message:
-            from fitness_bot.presentation.widgets.frame import WidgetScreenId
-            from fitness_bot.presentation.widgets.hooks import open_widget
+        if callback.message is None:
+            await callback.answer()
+            return
+        from fitness_bot.presentation.widgets.gateway import widget_gateway
 
-            if await open_widget(callback.from_user.id, WidgetScreenId.SUMMARY, callback.message.chat.id):
-                await callback.answer()
-                return
-        text = await _render_document_template(
-            jinja_env=jinja_env,
-            mediator=mediator,
-            template_name="session_completed.j2",
-            document=finalized.document,
-        )
-        if callback.message:
-            await callback.message.answer(text, reply_markup=home_keyboard())
+        gateway = widget_gateway()
+        if gateway is not None:
+            await gateway.return_to_menu(
+                callback.from_user.id,
+                callback.message.chat.id,
+                note="Тренировка завершена.",
+            )
+            await callback.answer()
+            return
+        from fitness_bot.presentation.flow_helpers import home_keyboard_from, render_home_text
+        from fitness_bot.service.models.queries.users import GetHomeQuery
+
+        home = await mediator.send(GetHomeQuery(telegram_user_id=callback.from_user.id))
+        text = "Тренировка завершена.\n\n" + render_home_text(jinja_env=jinja_env, home=home)
+        await callback.message.answer(text, reply_markup=home_keyboard_from(home))
         await callback.answer()
 
     return router
