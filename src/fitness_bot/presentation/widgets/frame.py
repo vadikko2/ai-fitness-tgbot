@@ -19,8 +19,8 @@ class WidgetScreenId(StrEnum):
 WIDGET_HEIGHT: dict[WidgetScreenId, int] = {
     WidgetScreenId.CONSOLE: 480,
     WidgetScreenId.INTAKE: 420,
-    WidgetScreenId.WEEK: 420,
-    WidgetScreenId.HOME: 260,
+    WidgetScreenId.WEEK: 380,
+    WidgetScreenId.HOME: 220,
     WidgetScreenId.SUMMARY: 300,
     WidgetScreenId.MENU: 360,
 }
@@ -62,6 +62,46 @@ def menu_height(data: dict[str, object]) -> int:
     if data.get("hint"):
         total += 28
     return min(520, max(220, total))
+
+
+def home_height(data: dict[str, object]) -> int:
+    """Fit the home bubble to note + one or two actions."""
+    total = 78  # chrome header + paddings
+    if data.get("streak") not in (None, 0, "0"):
+        total += 24
+    if data.get("hint"):
+        total += 28
+    mode = str(data.get("mode") or "go")
+    has_alt = bool(data.get("alt") and data.get("altDay"))
+    fresh = bool(data.get("weekDone") and mode == "rest" and not has_alt)
+    show_note = mode in {"again", "live", "rest", "none"} or bool(data.get("weekDone"))
+    if show_note:
+        total += 58
+    buttons = 1  # menu
+    if mode == "rest" and has_alt:
+        buttons += 1
+    elif has_alt:
+        buttons += 1 + (0 if mode == "none" else 1)
+    elif fresh or (mode not in {"rest", "none"}):
+        buttons += 1
+    total += buttons * 50 + max(0, buttons - 1) * 10
+    return min(360, max(180, total))
+
+
+def week_height(data: dict[str, object]) -> int:
+    """Fit the week-draft bubble to day nav, slots, and approve."""
+    total = 118  # chrome header + lead + day bar + section label
+    slots = list(data.get("slots") or [])
+    total += max(1, len(slots)) * 52
+    if data.get("more") is not None:
+        total += 44
+    if slots:
+        total += 96  # selected-exercise actions
+    total += len(list(data.get("alts") or [])) * 48
+    total += 56  # approve
+    if data.get("note"):
+        total += 28
+    return min(520, max(300, total))
 
 
 @dataclass(frozen=True, slots=True)

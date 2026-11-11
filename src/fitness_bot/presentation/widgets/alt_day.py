@@ -40,10 +40,10 @@ def put_alternative(data: dict[str, object], source: object, *, again: bool = Fa
         data.pop("cta", None)
         return
     weekday, label = found
-    prefix = "Ещё одну: " if again or mode == "again" else ""
     data["altDay"] = weekday
-    data["alt"] = f"{prefix}{label}"[:42]
+    data["alt"] = label[:42]
     data["cta"] = label[:42]
+    _ = again
 
 
 def _weekday(value: object) -> bool:

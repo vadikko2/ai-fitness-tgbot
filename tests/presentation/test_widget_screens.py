@@ -11,7 +11,13 @@ from uuid import uuid4
 from fitness_bot.domain.enums import ProfileField, ProgramType, Sex
 from fitness_bot.domain.workout.document import ExerciseSlot, SlotActual, WorkoutDay, WorkoutDocument
 from fitness_bot.presentation.chat_pages import reset_chat_pages
-from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetBindings, WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.frame import (
+    WidgetBinding,
+    WidgetBindings,
+    WidgetFrame,
+    WidgetScreenId,
+    week_height,
+)
 from fitness_bot.presentation.widgets.gateway import WidgetGateway, WidgetQuery
 from fitness_bot.presentation.widgets.screen import ScreenContext
 from fitness_bot.presentation.widgets.screens.console import ConsoleScreen
@@ -980,6 +986,19 @@ async def test_week_approve_sends_approve_proposal() -> None:
     assert result.navigate is WidgetScreenId.HOME
 
 
+def test_week_height_grows_with_slots_and_alts() -> None:
+    compact = week_height({"slots": [{"name": "Жим", "load": "10п"}], "alts": []})
+    taller = week_height(
+        {
+            "slots": [{"name": f"Упр {index}", "load": "8п"} for index in range(4)],
+            "alts": ["Вариант A", "Вариант B", "Вариант C"],
+            "more": 6,
+            "note": "Пока нельзя",
+        },
+    )
+    assert 300 <= compact < taller <= 520
+
+
 def test_shell_zlib_stays_within_4096() -> None:
     shells = load_shells()
     sizes = {key: len(zlib.compress(shell.html().encode("utf-8"), 9)) for key, shell in shells.items()}
@@ -997,7 +1016,7 @@ def test_shell_zlib_stays_within_4096() -> None:
     assert 'data-op="kg"' not in console
     assert 'id="pad"' not in console
     assert "Список" not in console
-    assert "Прогресс" in console
+    assert "Тренировка" in console
     assert 'id="gauge"' in console
     assert 'id="prog"' in console
     assert "hue(" in console
@@ -1015,6 +1034,14 @@ def test_shell_zlib_stays_within_4096() -> None:
     menu = shells["menu"].html()
     assert 'data-op="nweek"' in menu
     assert "Новая неделя" in menu
+    week = shells["week"].html()
+    assert "черновик" in week.lower()
+    assert "Утвердить неделю" in week
+    assert "Выбрано" in week
+    assert "← День" in week
+    assert "День →" in week
+    assert "Убрать" in week
+    assert "Заменить" in week
     for shell in shells.values():
         html = shell.html()
         assert "<footer" not in html

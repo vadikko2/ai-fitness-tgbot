@@ -5,7 +5,7 @@ from __future__ import annotations
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
 from fitness_bot.presentation.widgets.alt_day import put_alternative
-from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId, home_height
 from fitness_bot.presentation.widgets.next_week import start_next_week
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
@@ -103,6 +103,7 @@ class HomeScreen:
             chat_data=pack_state(data),
             caption="",
             shell_id="home",
+            height=home_height(data),
         )
 
 

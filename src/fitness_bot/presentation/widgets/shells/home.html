@@ -36,7 +36,7 @@ go.textContent="Новая неделя";go.setAttribute("data-op","go");
 $("noteText").textContent="Неделя закрыта. Можно сразу собрать следующую.";
 }else if(mode=="rest"){
 go.textContent="Начать";go.setAttribute("data-op","go");
-$("noteText").textContent=hasAlt?"По плану сегодня отдых. Можно пройти другой день недели.":"По плану сегодня отдых. Открытых дней на этой неделе нет.";
+$("noteText").textContent=hasAlt?("Сегодня отдых. Ближайший день — "+d.alt+"."):"По плану сегодня отдых. Открытых дней на этой неделе нет.";
 }else if(mode=="none"){
 go.textContent="В меню";go.setAttribute("data-op","menu");
 $("noteText").textContent="Сначала нужен план тренировок.";
@@ -44,15 +44,16 @@ $("noteText").textContent="Сначала нужен план тренирово
 go.textContent="Начать";go.setAttribute("data-op","go");
 $("noteText").textContent=d.weekDone?"Неделя уже закрыта — новую соберём из меню.":"";
 }
+if(mode=="again"&&hasAlt){$("noteText").textContent="Можно повторить сегодня или взять "+d.alt+".";}
 show($("note"),!!$("noteText").textContent);
 if(mode=="rest"&&hasAlt){
-alt.textContent="Всё равно потренироваться · "+d.alt;
+alt.textContent="Потренироваться";
 alt.setAttribute("data-op","day:"+d.altDay);
 alt.className="p";
 show(alt,true);
 show(go,false);
 }else if(hasAlt){
-alt.textContent=(mode=="again"?"Другой день · ":"")+d.alt;
+alt.textContent="Другой день";
 alt.setAttribute("data-op","day:"+d.altDay);
 alt.className=(mode=="again")?"p":"back";
 show(alt,true);

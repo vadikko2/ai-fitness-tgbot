@@ -8,7 +8,7 @@ from uuid import UUID
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDocument
 from fitness_bot.presentation.keyboards import WEEKDAY_LABELS
-from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId, week_height
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
@@ -159,7 +159,7 @@ class WeekScreen:
         )
         if blocked:
             noted = dict(data)
-            noted["note"] = "Пока нельзя утвердить"
+            noted["note"] = "Пока нельзя утвердить — проверь дни и упражнения"
             blocked_frame = self._frame(noted)
             return ScreenResult(frame=blocked_frame, answer=blocked_frame.chat_data)
         frame = self._frame(data)
@@ -205,7 +205,7 @@ class WeekScreen:
             return {
                 "day": 0,
                 "days": 1,
-                "title": "Черновик",
+                "title": "Новая неделя",
                 "sel": 0,
                 "page": 0,
                 "slots": [],
@@ -248,6 +248,7 @@ class WeekScreen:
             chat_data=_fit(data),
             caption="",
             shell_id="week",
+            height=week_height(data),
         )
 
     def _result(self, data: dict[str, object]) -> ScreenResult:

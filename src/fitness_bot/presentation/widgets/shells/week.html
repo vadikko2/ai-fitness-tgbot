@@ -2,33 +2,73 @@
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
 <style>
-.rows button{display:block;width:100%;margin:0 0 12px;padding:6px 2px;text-align:left;font-weight:500}
-#slots button.on{background:#F2F4F7;border-radius:10px}
-.links{margin:2px 0;text-align:center;color:rgba(2,32,70,.35)}
-.links button{font-weight:500;padding:6px 4px}
+.lead{margin:0 0 10px;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
+.day{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+.day button{flex:1;min-height:40px;padding:8px;background:#F2F4F7;border-radius:12px;font-weight:600;font-size:13px}
+.day b{flex:0 0 auto;font-size:13px;font-weight:700;color:rgba(2,32,70,.5)}
+.lab{margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(2,32,70,.42)}
+.rows button{display:block;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 12px;min-height:44px;text-align:left;font-weight:500;background:#fff;border:1px solid rgba(2,32,70,.08);border-radius:12px;white-space:normal;line-height:1.25}
+#slots button.on{background:#EEF2F7;border-color:transparent}
+.sel{margin:2px 0 12px;padding:10px 12px;border-radius:14px;background:#F7F8FA}
+.sel .lab{margin:0 0 8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:rgba(2,32,70,.72);line-height:1.3}
+.sel .row{display:flex;gap:8px}
+.sel .row button{flex:1;min-height:40px;padding:8px;background:#fff;border:1px solid rgba(2,32,70,.14);border-radius:12px;font-weight:600;font-size:13px}
+#alts:empty,.sel.hide,#moreBox:empty{display:none}
+#moreBox{margin:0 0 8px}
+button.p{margin-top:0}
+.dim{opacity:.35}
 </style>
+<p class="lead" id="lead">Это черновик новой недели. Листай дни, при необходимости поправь упражнения — потом утверди план.</p>
+<div class="day">
+<button type="button" id="prev" data-op="day-">← День</button>
+<b id="mark">1 / 1</b>
+<button type="button" id="next" data-op="day+">День →</button>
+</div>
+<p class="lab">Упражнения · нажми, чтобы выбрать</p>
 <div id="slots" class="rows"></div>
+<div id="moreBox" class="rows"></div>
+<div class="sel hide" id="sel">
+<p class="lab" id="selLab">Выбрано</p>
+<div class="row">
+<button type="button" data-op="drop">Убрать</button>
+<button type="button" id="swapBtn" data-op="swap">Заменить</button>
+</div>
+</div>
 <div id="alts" class="rows"></div>
-<p class="links"><button type="button" data-op="day-">Назад</button> · <button type="button" data-op="day+">Дальше</button></p>
-<p class="links"><button type="button" data-op="drop">Убрать</button> · <button type="button" data-op="swap">Замена</button></p>
-<button type="button" class="p" data-op="approve">Утвердить</button>
+<button type="button" class="p" data-op="approve">Утвердить неделю</button>
 <p id="e"></p>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
-function esc(s){return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
 function render(d){
 if(!d){return;}
-$("t").textContent=d.title||"";
-$("s").textContent=((d.day||0)+1)+" / "+(d.days||1);
-var box="",i,slots=d.slots||[];
+var day=d.day||0,days=d.days||1,slots=d.slots||[],alts=d.alts||[],sel=slots[d.sel]||null;
+$("t").textContent=d.title||"Новая неделя";
+$("s").textContent="Черновик · день "+(day+1)+" из "+days;
+$("mark").textContent=(day+1)+" / "+days;
+$("prev").classList.toggle("dim",day<=0);
+$("next").classList.toggle("dim",day>=days-1);
+var box="",i;
 for(i=0;i<slots.length;i++){
 var slot=slots[i];
-box+='<button type="button" data-op="slot:'+i+'"'+(i==d.sel?' class="on"':"")+">"+esc(slot.name||"")+" "+esc(slot.load||"")+"</button>";
+box+='<button type="button" data-op="slot:'+i+'"'+(i==d.sel?' class="on"':"")+">"+esc(slot.name||"")+(slot.load?" · "+esc(slot.load):"")+"</button>";
 }
-if(d.more!=null){box+='<button type="button" data-op="slot:'+d.more+'">Дальше</button>';}
 $("slots").innerHTML=box;
-var alt="",alts=d.alts||[];
+$("moreBox").innerHTML=d.more!=null?'<button type="button" data-op="slot:'+d.more+'">Ещё упражнения</button>':"";
+var has=slots.length>0;
+$("sel").classList.toggle("hide",!has);
+if(has){
+var name=String((sel&&sel.name)||"упражнение");
+if(alts.length){
+$("selLab").textContent="Замена для «"+name+"» — выбери вариант ниже";
+$("swapBtn").textContent="Скрыть";
+}else{
+$("selLab").textContent="Выбрано: "+name;
+$("swapBtn").textContent="Заменить";
+}
+}
+var alt="";
 for(i=0;i<alts.length;i++){alt+='<button type="button" data-op="swap:'+i+'">'+esc(alts[i])+"</button>";}
 $("alts").innerHTML=alt;
 $("e").textContent=d.note||"";
@@ -36,7 +76,7 @@ $("e").textContent=d.note||"";
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
 function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
-document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";TelegramWidget.request(op).then(take,fail);});
 function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();
