@@ -24,6 +24,16 @@ DELETE_PAUSE_SECONDS = 0.05
 
 # Edits of the message that is already on screen. A new bubble here stays on the
 # same page; it must not wipe the screen the user is still using.
+# Widget edits rewrite the bubble already on screen. They stay off the send lists
+# below, the same way an in-place callback stays on the page: edit_state and
+# edit_caption must not open a new page. send_widget is a new bubble.
+_SAME_PAGE_METHODS = (
+    "edit_state",
+    "edit_caption",
+    "edit_message_widget_data",
+    "edit_message_caption",
+)
+
 _SAME_PAGE_PREFIXES = (
     "slot_plan:",
     "slot_undo:",
@@ -48,6 +58,7 @@ _OUTGOING = (
     "answer_document",
     "answer_voice",
     "answer_media_group",
+    "send_widget",
 )
 
 _BOT_SENDS = (
@@ -57,6 +68,7 @@ _BOT_SENDS = (
     "send_animation",
     "send_document",
     "send_voice",
+    "send_widget",
 )
 
 # user id -> [(chat id, message id)] in send order
@@ -318,6 +330,8 @@ def _bind_outgoing(
         return
     opener = _once(open_page) if open_page is not None else None
     for name in _OUTGOING:
+        if name in _SAME_PAGE_METHODS:
+            continue
         original = getattr(message, name, None)
         if not callable(original):
             continue
@@ -415,6 +429,8 @@ def bind_bot(bot: Bot) -> None:
     if getattr(bot, "_chat_page_bound", False):
         return
     for name in _BOT_SENDS:
+        if name in _SAME_PAGE_METHODS:
+            continue
         original = getattr(bot, name, None)
         if not callable(original):
             continue

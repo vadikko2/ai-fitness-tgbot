@@ -9,7 +9,10 @@ from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.technique_video import MAX_TECHNIQUE_VIDEO_BYTES
 from fitness_bot.presentation.routers.session import _show_session_card
-from fitness_bot.service.models.commands.session import SaveTechniqueVideoCommand
+from fitness_bot.service.models.commands.session import (
+    RememberTechniqueVideoFileIdCommand,
+    SaveTechniqueVideoCommand,
+)
 from fitness_bot.service.models.queries.users import GetWorkflowQuery
 
 
@@ -83,6 +86,20 @@ def create_video_router(*, jinja_env: Environment, mediator: RequestMediator) ->
             await message.answer(f"Не удалось сохранить видео: {exc}")
             return
 
+        try:
+            await mediator.send(
+                RememberTechniqueVideoFileIdCommand(
+                    telegram_user_id=telegram_user_id,
+                    slot_id=result.slot_id,
+                    telegram_file_id=file_id,
+                ),
+            )
+        except DomainError:
+            pass
+        from fitness_bot.presentation.widgets.hooks import refresh_widget
+
+        if await refresh_widget(telegram_user_id):
+            return
         await _show_session_card(
             mediator=mediator,
             message=message,

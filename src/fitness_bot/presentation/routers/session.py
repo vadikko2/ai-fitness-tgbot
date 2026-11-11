@@ -1030,6 +1030,15 @@ async def start_workout_one_tap(
         )
         return
     assert result.document is not None
+    from fitness_bot.presentation.widgets.frame import WidgetScreenId
+    from fitness_bot.presentation.widgets.hooks import open_widget
+
+    if result.outcome in {"started", "resumed"} and await open_widget(
+        telegram_user_id,
+        WidgetScreenId.CONSOLE,
+        message.chat.id,
+    ):
+        return
     in_progress = result.session_status == SessionStatus.IN_PROGRESS
     show_wellbeing = result.has_unapplied_wellbeing and in_progress
     lines = ["Продолжаем 💪" if result.outcome == "resumed" else "Поехали! 💪"]
@@ -1927,6 +1936,12 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         if callback.message:
+            from fitness_bot.presentation.widgets.frame import WidgetScreenId
+            from fitness_bot.presentation.widgets.hooks import open_widget
+
+            if await open_widget(callback.from_user.id, WidgetScreenId.SUMMARY, callback.message.chat.id):
+                await callback.answer()
+                return
             text = await _render_document_template(
                 jinja_env=jinja_env,
                 mediator=mediator,
@@ -1986,6 +2001,13 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
                 await callback.message.answer(f"Не удалось завершить: {exc}")
             await callback.answer()
             return
+        if callback.message:
+            from fitness_bot.presentation.widgets.frame import WidgetScreenId
+            from fitness_bot.presentation.widgets.hooks import open_widget
+
+            if await open_widget(callback.from_user.id, WidgetScreenId.SUMMARY, callback.message.chat.id):
+                await callback.answer()
+                return
         text = await _render_document_template(
             jinja_env=jinja_env,
             mediator=mediator,
@@ -2015,6 +2037,18 @@ async def handle_slot_weight_utterance(
         weight_kg = _parse_weight_kg(text)
     except ValueError as exc:
         await message.answer(f"{exc}. Напиши вес в кг или 0.")
+        return
+    from fitness_bot.presentation.widgets.gateway import widget_gateway
+    from fitness_bot.presentation.widgets.hooks import write_console_kg
+
+    gateway = widget_gateway()
+    if gateway is not None and await write_console_kg(gateway, message.from_user.id, weight_kg):
+        await mediator.send(
+            ExpectInputCommand(
+                telegram_user_id=message.from_user.id,
+                expected_input=ExpectedInput.NONE,
+            ),
+        )
         return
     workflow = await mediator.send(GetWorkflowQuery(telegram_user_id=message.from_user.id))
     _, card_message_id = _parse_draft_field(workflow.expected_field)

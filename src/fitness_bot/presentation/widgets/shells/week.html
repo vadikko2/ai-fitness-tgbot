@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body>
+<!-- chrome -->
+<div id="slots"></div>
+<div id="alts"></div>
+<p>
+<button data-op="day-">←</button>
+<button data-op="day+">→</button>
+<button data-op="drop">Убрать</button>
+<button data-op="swap">Замена</button>
+<button class="p" data-op="approve">Утвердить</button>
+</p>
+<p id="e"></p>
+<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
+<script>
+(function(){
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function render(d){
+$("t").textContent=d.title||"";
+$("s").textContent=((d.day||0)+1)+" / "+(d.days||1);
+var box="",i,slots=d.slots||[];
+for(i=0;i<slots.length;i++){
+var slot=slots[i];
+box+='<button data-op="slot:'+i+'"'+(i==d.sel?' class="on"':"")+">"+esc(slot.name||"")+" "+esc(slot.load||"")+"</button>";
+}
+if(d.more!=null){box+='<button data-op="slot:'+d.more+'">Дальше</button>';}
+$("slots").innerHTML=box;
+var alt="",alts=d.alts||[];
+for(i=0;i<alts.length;i++){alt+='<button data-op="swap:'+i+'">'+esc(alts[i])+"</button>";}
+$("alts").innerHTML=alt;
+}
+function ask(op){
+$("e").textContent="";
+TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
+}
+document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
+function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+boot();
+})();
+</script>
+</body></html>

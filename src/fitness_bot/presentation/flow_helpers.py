@@ -281,8 +281,18 @@ async def show_next_onboarding_step(
     selected_weekdays: set[int] | None = None,
     selected_supplements: set[str] | None = None,
 ) -> None:
+    from fitness_bot.presentation.widgets.frame import WidgetScreenId
+    from fitness_bot.presentation.widgets.hooks import intake_is_open, open_widget, refresh_widget
+
     if profile.profile_complete:
+        if await open_widget(profile.telegram_user_id, WidgetScreenId.HOME, message.chat.id):
+            return
         await show_info_offer(message=message, jinja_env=jinja_env)
+        return
+    if intake_is_open(profile.telegram_user_id):
+        await refresh_widget(profile.telegram_user_id)
+        return
+    if await open_widget(profile.telegram_user_id, WidgetScreenId.INTAKE, message.chat.id):
         return
     if profile.next_field is None and profile.goal is None:
         text = jinja_env.get_template("onboarding_prompt.j2").render(field="goal", days_per_week=profile.days_per_week)

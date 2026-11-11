@@ -277,6 +277,19 @@ async def render_proposal(
     telegram_user_id: int | None = None,
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
+    from fitness_bot.presentation.widgets.frame import WidgetScreenId
+    from fitness_bot.presentation.widgets.hooks import open_widget
+
+    if (
+        telegram_user_id is not None
+        and document is not None
+        and await open_widget(
+            telegram_user_id,
+            WidgetScreenId.WEEK,
+            message.chat.id,
+        )
+    ):
+        return
     names = await _load_exercise_names(mediator) if document is not None else {}
     missing_weekdays = False
     if document is not None:

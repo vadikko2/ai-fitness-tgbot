@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body>
+<!-- chrome -->
+<style>
+.dots i{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid #022046;margin-right:3px}
+.dots i.on{background:#F5D22D}
+svg.g{width:72px;height:72px;display:none}
+.big{font-size:28px;font-weight:700;margin:4px 0}
+#ring{width:72px;height:72px}
+@media (prefers-reduced-motion:no-preference){svg.g{animation:bob 1.8s ease-in-out infinite}@keyframes bob{50%{transform:translateY(1px)}}}
+</style>
+<div class="bar"><span id="bar"></span></div>
+<div class="dots" id="dots"></div>
+<div id="glyphs"><!-- glyphs --></div>
+<div id="work">
+<p class="big"><span id="kg"></span> кг · <span id="reps"></span></p>
+<button data-op="w-">−2.5</button><button data-op="w+">+2.5</button>
+<button data-op="r-">−</button><button data-op="r+">+</button>
+<button class="p" data-op="ok">Готово</button>
+<button data-op="skip">Пропуск</button>
+<button data-op="alt">Замена</button>
+<button data-op="how">Как делать</button>
+<button data-op="vid">Техника</button>
+<button data-op="kg">Кг</button>
+</div>
+<div id="rpe" class="hide">
+<button data-op="rpe:6">6</button><button data-op="rpe:7">7</button><button data-op="rpe:8">8</button>
+<button data-op="rpe:9">9</button><button data-op="rpe:10">10</button>
+</div>
+<div id="rest" class="hide">
+<svg id="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" stroke="#022046" fill="none" stroke-width="3"></circle><circle id="arc" cx="18" cy="18" r="15" stroke="#F5D22D" fill="none" stroke-width="3" stroke-dasharray="94.2" stroke-dashoffset="0" transform="rotate(-90 18 18)"></circle></svg>
+<b id="sec"></b>
+<button data-op="skip">Дальше</button>
+</div>
+<div id="alt" class="hide"></div>
+<div id="how" class="hide"><p id="tip"></p><button data-op="back">Назад</button></div>
+<div id="done" class="hide"><button class="p" data-op="sum">Итог</button></div>
+<p id="e"></p>
+<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
+<script>
+(function(){
+var S={},prev=0,reduce=matchMedia("(prefers-reduced-motion: reduce)").matches,timer=0;
+function $(id){return document.getElementById(id);}
+function show(id,on){$(id).className=on?"":"hide";}
+function haptic(kind,arg){try{var h=TelegramWidget.HapticFeedback;if(!h){return;}if(arg){h[kind](arg);}else{h[kind]();}}catch(err){}}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function render(d){
+S=d;
+$("t").textContent=d.name||"";
+$("s").textContent=d.plan||"";
+$("bar").style.width=Math.round(100*(d.i||0)/Math.max(1,d.n||1))+"%";
+var dots="",k;
+for(k=1;k<=(d.sets||0);k++){dots+="<i"+(k<=(d.set||0)?' class="on"':"")+"></i>";}
+$("dots").innerHTML=dots;
+$("kg").textContent=d.kg==null?"—":d.kg;
+$("reps").textContent=d.reps==null?"—":d.reps;
+var nodes=document.querySelectorAll("svg.g"),g;
+for(g=0;g<nodes.length;g++){var code=nodes[g].getAttribute("data-g");nodes[g].style.display=(code==d.glyph||code=="*")?"block":"none";}
+show("work",d.ph=="work");
+show("rpe",d.ph=="rpe");
+show("rest",d.ph=="rest");
+show("alt",d.ph=="alt");
+show("how",d.ph=="how");
+show("done",d.ph=="done");
+if(d.ph=="alt"){var box="",a;for(a=0;a<(d.alts||[]).length&&a<3;a++){box+='<button data-op="alt:'+a+'">'+esc(d.alts[a])+"</button>";}box+='<button data-op="back">Назад</button>';$("alt").innerHTML=box;}
+if(d.ph=="how"){$("tip").textContent=d.tip||"";}
+if((d.log||0)>prev){haptic("notificationOccurred","success");prev=d.log;}
+if(d.ph=="rest"){ring();}
+}
+function ring(){
+if(S.ph!="rest"){return;}
+var left=Math.max(0,(S.restUntil||0)*1000-Date.now());
+var total=Math.max(1,(S.rest||90)*1000);
+var p=Math.min(1,left/total);
+$("arc").style.strokeDashoffset=String((94.2*(1-p)).toFixed(1));
+$("sec").textContent=String(Math.ceil(left/1000));
+if(reduce||document.hidden||left<=0){return;}
+cancelAnimationFrame(timer);timer=requestAnimationFrame(ring);
+}
+function ask(op){
+if(op=="w+"||op=="w-"){haptic("selectionChanged");}
+$("e").textContent="";
+TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
+}
+document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
+function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};ask("sync");}
+boot();
+setInterval(function(){if(!document.hidden){ask("sync");}},5000);
+})();
+</script>
+</body></html>

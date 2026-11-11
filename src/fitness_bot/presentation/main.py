@@ -30,7 +30,9 @@ from fitness_bot.presentation.routers.unsupported import create_unsupported_rout
 from fitness_bot.presentation.routers.video import create_video_router
 from fitness_bot.presentation.routers.voice import create_voice_router
 from fitness_bot.presentation.routers.wellbeing import create_wellbeing_router
+from fitness_bot.presentation.routers.widget import create_widget_router, polling_allowed_updates
 from fitness_bot.presentation.scheduler import run_weight_reminder_scheduler
+from fitness_bot.presentation.widgets.gateway import build_widget_gateway, install_widget_gateway
 from fitness_bot.presentation.wiring.container import build_container, build_mediator
 
 
@@ -60,6 +62,10 @@ async def run() -> None:
     dispatcher.include_router(create_wellbeing_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_nutrition_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(create_menu_router(jinja_env=jinja_env))
+    gateway = build_widget_gateway(bot=bot, mediator=mediator, settings=settings)
+    install_widget_gateway(gateway)
+    dispatcher["widget_gateway"] = gateway
+    dispatcher.include_router(create_widget_router(gateway=gateway))
     dispatcher.include_router(create_video_router(jinja_env=jinja_env, mediator=mediator))
     dispatcher.include_router(
         create_photo_router(
@@ -79,7 +85,7 @@ async def run() -> None:
     )
     async with start_health_server(settings.health_host, settings.health_port):
         try:
-            await dispatcher.start_polling(bot)
+            await dispatcher.start_polling(bot, allowed_updates=polling_allowed_updates(dispatcher))
         finally:
             scheduler_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

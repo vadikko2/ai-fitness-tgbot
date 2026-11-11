@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body>
+<!-- chrome -->
+<svg viewBox="0 0 120 36" width="100%" height="36"><polyline id="sp" fill="none" stroke="#F5D22D" stroke-width="2" points=""></polyline></svg>
+<button class="p" data-op="home">На главную</button>
+<p id="e"></p>
+<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
+<script>
+(function(){
+function $(id){return document.getElementById(id);}
+function render(d){
+$("t").textContent="Итог";
+$("s").textContent=(d.sets||0)+" подходов · "+(d.tonnage||0)+" кг";
+var nums=d.spark||[],w=120,h=36,i,min,max,span,pts=[];
+if(!nums.length){$("sp").setAttribute("points","");return;}
+min=nums[0];max=nums[0];
+for(i=1;i<nums.length;i++){if(nums[i]<min){min=nums[i];}if(nums[i]>max){max=nums[i];}}
+span=(max-min)||1;
+for(i=0;i<nums.length;i++){
+var x=nums.length==1?0:i*(w/(nums.length-1));
+var y=h-((nums[i]-min)/span)*(h-4)-2;
+pts.push(x.toFixed(1)+","+y.toFixed(1));
+}
+$("sp").setAttribute("points",pts.join(" "));
+}
+function ask(op){
+$("e").textContent="";
+TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
+}
+document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
+function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+boot();
+})();
+</script>
+</body></html>
