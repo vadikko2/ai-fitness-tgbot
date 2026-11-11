@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from fitness_bot.domain.body.measurement import FIXED_MEASUREMENT_SITES
-from fitness_bot.domain.enums import ExpectedInput, Goal, ProfileField, Sex, WeightSource
+from fitness_bot.domain.enums import ExpectedInput, Goal, ProfileField, WeightSource
 from fitness_bot.domain.errors import DomainError
-from fitness_bot.presentation.progress_pose_images import guide_sex_folder
 from fitness_bot.presentation.widgets.frame import WidgetFrame, WidgetScreenId
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
@@ -14,9 +12,7 @@ from fitness_bot.presentation.widgets.state import PHASE_ERROR, as_number, pack_
 from fitness_bot.service.models.commands.body import RecordWeightCommand
 from fitness_bot.service.models.commands.users import ExpectInputCommand, SetGoalCommand, UpdateProfileCommand
 from fitness_bot.service.models.queries.users import GetProfileQuery, GetProfileQueryResult
-from fitness_bot.shared.paths import MEASUREMENT_GUIDES_DIR
 
-_SITE_CODES = frozenset(code for code, _ in FIXED_MEASUREMENT_SITES)
 _MULTI = frozenset({ProfileField.TRAINING_WEEKDAYS.value, ProfileField.SUPPLEMENTS.value})
 _TEXT = frozenset(
     {
@@ -45,32 +41,24 @@ _BOUNDS = {
     ProfileField.BODY_FAT.value: (3, 60),
 }
 _CAPTION = {
-    "goal": "🎯 Выбери одну цель.",
-    "sex": "👤 Укажи пол.",
-    "birth_year": "🎂 Год рождения.",
-    "height": "📐 Рост в см — одно число.",
-    "weight": "⚖️ Вес в кг — одно число.",
-    "experience": "📈 Выбери уровень опыта.",
-    "days_per_week": "🔢 Сколько дней в неделю? Число от 1 до 7.",
-    "training_weekdays": "📅 Отметь дни, затем «Готово».",
-    "equipment": "🛠️ Какое оборудование доступно? Напиши в чат.",
-    "training_place": "📍 Где обычно занимаешься?",
-    "limitations": "⚠️ Травмы или ограничения? Напиши в чат или нажми «Нет ограничений».",
-    "activity_level": "🚶 Какой уровень активности вне зала?",
-    "session_minutes": "⏱ Сколько минут обычно длится тренировка?",
-    "body_fat": "🧪 Укажи % жира или нажми «Не знаю».",
-    "supplements": "💊 Что из спортпита принимаешь? Можно несколько, затем «Готово».",
-    "diet_prefs": "🥗 Пищевые предпочтения? Напиши в чат или «Без предпочтений».",
-    "nutrition_constraints": "🚫 Болезни, аллергии или противопоказания? Напиши в чат или «Нет ограничений».",
+    "goal": "Выбери одну цель.",
+    "sex": "Укажи пол.",
+    "birth_year": "Год рождения.",
+    "height": "Рост в см — одно число.",
+    "weight": "Вес в кг — одно число.",
+    "experience": "Выбери уровень опыта.",
+    "days_per_week": "Сколько дней в неделю? Число от 1 до 7.",
+    "training_weekdays": "Отметь дни, затем «Готово».",
+    "equipment": "Какое оборудование доступно? Напиши в чат.",
+    "training_place": "Где обычно занимаешься?",
+    "limitations": "Травмы или ограничения? Напиши в чат или нажми «Нет ограничений».",
+    "activity_level": "Какой уровень активности вне зала?",
+    "session_minutes": "Сколько минут обычно длится тренировка?",
+    "body_fat": "Укажи % жира или нажми «Не знаю».",
+    "supplements": "Что из спортпита принимаешь? Можно несколько, затем «Готово».",
+    "diet_prefs": "Пищевые предпочтения? Напиши в чат или «Без предпочтений».",
+    "nutrition_constraints": "Болезни, аллергии или противопоказания? Напиши в чат или «Нет ограничений».",
 }
-
-
-def measurement_guide_png(step: str, sex: Sex | None) -> str | None:
-    """Sex folder from guide_sex_folder. Missing files stay None so tests need no PNGs."""
-    if step not in _SITE_CODES:
-        return None
-    path = MEASUREMENT_GUIDES_DIR / guide_sex_folder(sex) / f"{step}.png"
-    return str(path) if path.is_file() else None
 
 
 class IntakeScreen:
@@ -83,14 +71,6 @@ class IntakeScreen:
         profile = await self._profile(ctx)
         previous = read_state(ctx.binding.frame.chat_data if ctx.binding.frame else None)
         return self._frame(self._payload(profile, previous))
-
-    async def companion(self, ctx: ScreenContext, frame: WidgetFrame) -> ScreenResult | None:
-        data = read_state(frame.chat_data)
-        profile = await self._profile(ctx)
-        png = measurement_guide_png(str(data.get("step") or ""), getattr(profile, "sex", None))
-        if png is None:
-            return None
-        return ScreenResult(frame=frame, answer=frame.chat_data, photo_path=png)
 
     async def apply(self, ctx: ScreenContext, opcode: str) -> ScreenResult:
         parsed = parse_opcode(opcode)
@@ -216,10 +196,10 @@ class IntakeScreen:
     def _payload(self, profile: GetProfileQueryResult, previous: dict[str, object]) -> dict[str, object]:
         step = _step_name(profile)
         if step is None:
-            return {"step": "goal", "value": None, "picked": [], "title": "🏠 Анкета готова"}
+            return {"step": "goal", "value": None, "picked": [], "title": "Анкета готова"}
         title = _CAPTION.get(step, "Продолжим.")
         if step == ProfileField.TRAINING_WEEKDAYS.value and profile.days_per_week:
-            title = f"📅 Отметь ровно {profile.days_per_week} дня(ей), затем «Готово»."
+            title = f"Отметь ровно {profile.days_per_week} дня(ей), затем «Готово»."
         value = _current_value(profile, step)
         picked: list[str] = []
         if previous.get("step") == step:

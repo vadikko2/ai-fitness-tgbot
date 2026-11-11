@@ -1,24 +1,24 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
-<p id="streak"></p>
-<button class="p" data-op="go">Начать</button>
+<style>#streak:empty{display:none}</style>
+<p class="hint" id="streak"></p>
+<button type="button" class="p" data-op="go">Начать</button>
 <p id="e"></p>
-<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
 function render(d){
+if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=d.when||"";
 $("streak").textContent=d.streak==null?"":("Серия "+d.streak);
 }
-function ask(op){
-$("e").textContent="";
-TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
-}
-document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
-function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
+function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
+function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();
 </script>

@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
-<svg viewBox="0 0 120 36" width="100%" height="36"><polyline id="sp" fill="none" stroke="#F5D22D" stroke-width="2" points=""></polyline></svg>
-<button class="p" data-op="home">На главную</button>
+<svg viewBox="0 0 120 36" width="100%" height="36"><polyline id="sp" fill="none" stroke="#F5D22D" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points=""></polyline></svg>
+<button type="button" class="p" data-op="home">На главную</button>
 <p id="e"></p>
-<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
 function render(d){
+if(!d){return;}
 $("t").textContent="Итог";
 $("s").textContent=(d.sets||0)+" подходов · "+(d.tonnage||0)+" кг";
 var nums=d.spark||[],w=120,h=36,i,min,max,span,pts=[];
@@ -23,12 +23,11 @@ pts.push(x.toFixed(1)+","+y.toFixed(1));
 }
 $("sp").setAttribute("points",pts.join(" "));
 }
-function ask(op){
-$("e").textContent="";
-TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
-}
-document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
-function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
+function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
+function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();
 </script>

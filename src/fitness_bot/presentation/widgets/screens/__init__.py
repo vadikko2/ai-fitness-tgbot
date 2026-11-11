@@ -12,7 +12,7 @@ from fitness_bot.presentation.widgets.screens.week import WeekScreen
 
 def build_widget_screens() -> tuple[ConsoleScreen, IntakeScreen, WeekScreen, HomeScreen, SummaryScreen]:
     shells = load_shells()
-    console = ConsoleScreen({"male": shells["console-male"], "female": shells["console-female"]})
+    console = ConsoleScreen(shells["console"])
     return (
         console,
         IntakeScreen(shells["intake"]),

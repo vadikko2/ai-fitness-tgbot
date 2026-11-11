@@ -137,6 +137,19 @@ class WidgetGateway:
         return OpenResult(use_keyboard=False, message_id=message_id, frame=frame)
 
     async def on_query(self, query: WidgetQuery) -> None:
+        try:
+            await self._on_query(query)
+        except Exception:
+            logger.exception("widget query failed")
+            await self._answer_quietly(query.query_id)
+
+    async def _answer_quietly(self, query_id: str) -> None:
+        try:
+            await self._transport.answer(query_id, None)
+        except Exception:
+            logger.warning("answerWidgetQuery failed", exc_info=True)
+
+    async def _on_query(self, query: WidgetQuery) -> None:
         found = self._bindings.lookup(query.chat_id, query.message_id)
         if found is None or found[0] != query.user_id:
             await self.reject(query.query_id)
@@ -156,12 +169,24 @@ class WidgetGateway:
             await self._mediator.send(result.expect)
         if result.navigate is not None:
             await self._transport.answer(query.query_id, result.answer)
-            await self.open(user_id, result.navigate, chat_id=binding.chat_id)
+            try:
+                await self.open(user_id, result.navigate, chat_id=binding.chat_id)
+            except Exception:
+                logger.warning("widget navigation failed after answer", exc_info=True)
             return
-        binding = await self._sync_media(user_id, binding, result)
-        await self._transport.edit_state(binding.chat_id, binding.message_id, result.frame.chat_data)
+        try:
+            binding = await self._sync_media(user_id, binding, result)
+        except Exception:
+            logger.warning("widget media failed", exc_info=True)
+        try:
+            await self._transport.edit_state(binding.chat_id, binding.message_id, result.frame.chat_data)
+        except Exception:
+            logger.warning("widget state edit failed", exc_info=True)
         if binding.frame is None or binding.frame.caption != result.frame.caption:
-            await self._transport.edit_caption(binding.chat_id, binding.message_id, result.frame.caption)
+            try:
+                await self._transport.edit_caption(binding.chat_id, binding.message_id, result.frame.caption)
+            except Exception:
+                logger.warning("widget caption edit failed", exc_info=True)
         self._bindings.put(user_id, replace(binding, frame=result.frame))
         await self._transport.answer(query.query_id, result.answer)
 

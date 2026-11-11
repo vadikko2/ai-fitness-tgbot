@@ -334,7 +334,7 @@ async def test_gateway_edits_then_answers_and_rejects_a_bad_opcode() -> None:
     assert opened.message_id == 15
     assert bot.deleted == [3]
     assert page_message_ids(7) == [15]
-    assert ("send", 7, "<b>ok</b>", '{"ph":"work"}', "work", 520) in calls
+    assert ("send", 7, "<b>ok</b>", '{"ph":"work"}', "work", 400) in calls
 
     calls.clear()
     screen.pending.append(
@@ -382,6 +382,20 @@ async def test_gateway_edits_then_answers_and_rejects_a_bad_opcode() -> None:
     await gateway.on_query(_query("ok", message_id=99))
     assert calls == [("answer", "q1", BAD_WIDGET_ANSWER)]
     reset_chat_pages()
+
+
+async def test_query_exception_still_answers() -> None:
+    calls: list[tuple[object, ...]] = []
+    gateway, _transport, screen, _mediator = _gateway(calls)
+    await gateway.open(7, WidgetScreenId.CONSOLE, chat_id=7)
+    calls.clear()
+
+    async def boom(ctx: object, opcode: str) -> ScreenResult:
+        raise RuntimeError("db")
+
+    screen.apply = boom  # type: ignore[method-assign]
+    await gateway.on_query(_query("sync"))
+    assert calls == [("answer", "q1", None)]
 
 
 async def test_disabled_widgets_ask_the_caller_to_draw_the_keyboard() -> None:

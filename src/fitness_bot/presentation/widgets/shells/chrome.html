@@ -1,16 +1,16 @@
 <style>
-body{margin:0;background:#FFFFFF;color:#022046;font:14px/1.25 sans-serif;padding:8px 8px calc(14px + env(safe-area-inset-bottom));touch-action:pan-y}
-header b{font-size:16px}header small{display:block}
-i.rule{display:block;height:2px;background:#022046;margin:6px 0 8px;position:relative}
-i.rule:after{content:"";width:8px;height:8px;border-radius:50%;background:#F5D22D;position:absolute;left:50%;top:-3px;margin-left:-4px}
-button{border:1px solid #022046;background:#FFFFFF;color:#022046;border-radius:8px;padding:6px 8px;font-weight:700;margin:2px}
-button.p{background:#F5D22D;border-color:#F5D22D}
-button.on{background:#022046;color:#F5D22D}
-.bar{height:6px;background:#e7edf4;border-radius:3px;overflow:hidden;margin:4px 0}
-.bar span{display:block;height:100%;background:#F5D22D;width:0}
-footer{background:#022046;color:#fff;margin:8px -8px 0;padding:6px;text-align:center}
-#e{min-height:1em}
-.hide{display:none}
+body{margin:0;background:#fff;color:#022046;font:15px/1.35 -apple-system,BlinkMacSystemFont,sans-serif;padding:12px 16px calc(12px + env(safe-area-inset-bottom));touch-action:auto}
+header b{display:block;font-size:17px;font-weight:600;line-height:1.25}
+header small{display:block;margin-top:2px;font-size:13px;font-weight:400;color:rgba(2,32,70,.6)}
+button{border:0;background:transparent;color:#022046;font:inherit;font-weight:600;font-size:15px;padding:8px 4px;margin:0;touch-action:auto;position:relative;z-index:1}
+button.p{display:block;width:100%;height:44px;margin-top:12px;padding:0;background:#F5D22D;border-radius:12px;font-size:16px}
+button.back{display:block;width:100%;height:44px;margin-top:12px;padding:0;background:#fff;border:1px solid rgba(2,32,70,.22);border-radius:12px}
+.bar{height:4px;margin:10px 0 8px;background:#E6EAF0;border-radius:2px;overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:#F5D22D}
+.hint{margin:8px 0 0;color:rgba(2,32,70,.6);font-size:13px}
+#e:empty{display:none}
+#e{margin:8px 0 0;font-size:13px;color:rgba(2,32,70,.6)}
+.hide{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
-<header><b id="t"></b><small id="s"></small><i class="rule"></i></header>
+<header><b id="t"></b><small id="s"></small></header>

@@ -1,41 +1,42 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
-<div id="slots"></div>
-<div id="alts"></div>
-<p>
-<button data-op="day-">←</button>
-<button data-op="day+">→</button>
-<button data-op="drop">Убрать</button>
-<button data-op="swap">Замена</button>
-<button class="p" data-op="approve">Утвердить</button>
-</p>
+<style>
+.rows button{display:block;width:100%;margin:0 0 12px;padding:6px 2px;text-align:left;font-weight:500}
+#slots button.on{background:#F2F4F7;border-radius:10px}
+.links{margin:2px 0;text-align:center;color:rgba(2,32,70,.35)}
+.links button{font-weight:500;padding:6px 4px}
+</style>
+<div id="slots" class="rows"></div>
+<div id="alts" class="rows"></div>
+<p class="links"><button type="button" data-op="day-">Назад</button> · <button type="button" data-op="day+">Дальше</button></p>
+<p class="links"><button type="button" data-op="drop">Убрать</button> · <button type="button" data-op="swap">Замена</button></p>
+<button type="button" class="p" data-op="approve">Утвердить</button>
 <p id="e"></p>
-<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
 function render(d){
+if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=((d.day||0)+1)+" / "+(d.days||1);
 var box="",i,slots=d.slots||[];
 for(i=0;i<slots.length;i++){
 var slot=slots[i];
-box+='<button data-op="slot:'+i+'"'+(i==d.sel?' class="on"':"")+">"+esc(slot.name||"")+" "+esc(slot.load||"")+"</button>";
+box+='<button type="button" data-op="slot:'+i+'"'+(i==d.sel?' class="on"':"")+">"+esc(slot.name||"")+" "+esc(slot.load||"")+"</button>";
 }
-if(d.more!=null){box+='<button data-op="slot:'+d.more+'">Дальше</button>';}
+if(d.more!=null){box+='<button type="button" data-op="slot:'+d.more+'">Дальше</button>';}
 $("slots").innerHTML=box;
 var alt="",alts=d.alts||[];
-for(i=0;i<alts.length;i++){alt+='<button data-op="swap:'+i+'">'+esc(alts[i])+"</button>";}
+for(i=0;i<alts.length;i++){alt+='<button type="button" data-op="swap:'+i+'">'+esc(alts[i])+"</button>";}
 $("alts").innerHTML=alt;
 }
-function ask(op){
-$("e").textContent="";
-TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
-}
-document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(op){ask(op);}});
-function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
+function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
+function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();
 </script>

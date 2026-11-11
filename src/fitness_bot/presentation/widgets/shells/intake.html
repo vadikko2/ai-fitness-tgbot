@@ -1,65 +1,73 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
+<style>
+#chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#chips button{background:#F2F4F7;border-radius:10px;padding:10px 12px}
+#chips button.on{background:#022046;color:#F5D22D}
+#val{margin:8px 0;font-size:34px;font-weight:600;letter-spacing:-.03em}
+#step{display:flex;gap:8px}
+#step button{flex:1;height:36px;padding:0;background:#F2F4F7;border-radius:10px;font-size:18px}
+#write{display:block;margin:8px auto 0;font-weight:500}
+</style>
 <div class="bar"><span id="bar"></span></div>
-<p class="big" id="val" style="font-size:28px;font-weight:700;margin:4px 0"></p>
+<p id="val"></p>
 <div id="chips">
-<button data-s="goal" data-c="fat_loss" data-op="pick:fat_loss">🔥 Похудение</button>
-<button data-s="goal" data-c="muscle_gain" data-op="pick:muscle_gain">💪 Набор мышц</button>
-<button data-s="goal" data-c="strength" data-op="pick:strength">🏋️ Сила</button>
-<button data-s="goal" data-c="maintenance" data-op="pick:maintenance">⚖️ Удержание веса</button>
-<button data-s="goal" data-c="recovery" data-op="pick:recovery">🧘 Восстановление</button>
-<button data-s="goal" data-c="stay_fit" data-op="pick:stay_fit">✨ Поддержание формы</button>
-<button data-s="goal" data-c="healthy_lifestyle" data-op="pick:healthy_lifestyle">🌿 Здоровый образ жизни</button>
-<button data-s="sex" data-c="male" data-op="pick:male">👨 Мужской</button>
-<button data-s="sex" data-c="female" data-op="pick:female">👩 Женский</button>
-<button data-s="experience" data-c="beginner" data-op="pick:beginner">🌱 Новичок</button>
-<button data-s="experience" data-c="intermediate" data-op="pick:intermediate">📈 Средний</button>
-<button data-s="experience" data-c="advanced" data-op="pick:advanced">🏆 Продвинутый</button>
-<button data-s="days_per_week" data-c="1" data-op="pick:1">1</button>
-<button data-s="days_per_week" data-c="2" data-op="pick:2">2</button>
-<button data-s="days_per_week" data-c="3" data-op="pick:3">3</button>
-<button data-s="days_per_week" data-c="4" data-op="pick:4">4</button>
-<button data-s="days_per_week" data-c="5" data-op="pick:5">5</button>
-<button data-s="days_per_week" data-c="6" data-op="pick:6">6</button>
-<button data-s="days_per_week" data-c="7" data-op="pick:7">7</button>
-<button data-s="training_weekdays" data-c="1" data-op="pick:1">Пн</button>
-<button data-s="training_weekdays" data-c="2" data-op="pick:2">Вт</button>
-<button data-s="training_weekdays" data-c="3" data-op="pick:3">Ср</button>
-<button data-s="training_weekdays" data-c="4" data-op="pick:4">Чт</button>
-<button data-s="training_weekdays" data-c="5" data-op="pick:5">Пт</button>
-<button data-s="training_weekdays" data-c="6" data-op="pick:6">Сб</button>
-<button data-s="training_weekdays" data-c="7" data-op="pick:7">Вс</button>
-<button data-s="training_place" data-c="gym" data-op="pick:gym">🏋️ Зал</button>
-<button data-s="training_place" data-c="home" data-op="pick:home">🏠 Дом</button>
-<button data-s="training_place" data-c="outdoor" data-op="pick:outdoor">🌳 Улица</button>
-<button data-s="training_place" data-c="mixed" data-op="pick:mixed">🔀 Смешанно</button>
-<button data-s="activity_level" data-c="sedentary" data-op="pick:sedentary">🪑 Сидячий</button>
-<button data-s="activity_level" data-c="light" data-op="pick:light">🚶 Лёгкий</button>
-<button data-s="activity_level" data-c="moderate" data-op="pick:moderate">🚴 Умеренный</button>
-<button data-s="activity_level" data-c="high" data-op="pick:high">🏃 Высокий</button>
-<button data-s="session_minutes" data-c="30" data-op="preset:30">30 мин</button>
-<button data-s="session_minutes" data-c="45" data-op="preset:45">45 мин</button>
-<button data-s="session_minutes" data-c="60" data-op="preset:60">60 мин</button>
-<button data-s="session_minutes" data-c="90" data-op="preset:90">90 мин</button>
-<button data-s="supplements" data-c="none" data-op="pick:none">Нет</button>
-<button data-s="supplements" data-c="protein" data-op="pick:protein">Протеин</button>
-<button data-s="supplements" data-c="creatine" data-op="pick:creatine">Креатин</button>
-<button data-s="supplements" data-c="caffeine_preworkout" data-op="pick:caffeine_preworkout">Кофеин / предтрен</button>
-<button data-s="supplements" data-c="vitamins_omega" data-op="pick:vitamins_omega">Витамины / омега</button>
-<button data-s="supplements" data-c="other" data-op="pick:other">Другое</button>
-<button data-s="limitations" data-c="none" data-op="pick:none">👌 Нет ограничений</button>
-<button data-s="diet_prefs" data-c="none" data-op="pick:none">👌 Без предпочтений</button>
-<button data-s="nutrition_constraints" data-c="none" data-op="pick:none">👌 Нет ограничений</button>
-<button data-s="body_fat" data-c="unknown" data-op="pick:unknown">🤷 Не знаю</button>
+<button type="button" data-s="goal" data-c="fat_loss" data-op="pick:fat_loss">Похудение</button>
+<button type="button" data-s="goal" data-c="muscle_gain" data-op="pick:muscle_gain">Набор мышц</button>
+<button type="button" data-s="goal" data-c="strength" data-op="pick:strength">Сила</button>
+<button type="button" data-s="goal" data-c="maintenance" data-op="pick:maintenance">Удержание веса</button>
+<button type="button" data-s="goal" data-c="recovery" data-op="pick:recovery">Восстановление</button>
+<button type="button" data-s="goal" data-c="stay_fit" data-op="pick:stay_fit">Поддержание формы</button>
+<button type="button" data-s="goal" data-c="healthy_lifestyle" data-op="pick:healthy_lifestyle">Здоровый образ жизни</button>
+<button type="button" data-s="sex" data-c="male" data-op="pick:male">Мужской</button>
+<button type="button" data-s="sex" data-c="female" data-op="pick:female">Женский</button>
+<button type="button" data-s="experience" data-c="beginner" data-op="pick:beginner">Новичок</button>
+<button type="button" data-s="experience" data-c="intermediate" data-op="pick:intermediate">Средний</button>
+<button type="button" data-s="experience" data-c="advanced" data-op="pick:advanced">Продвинутый</button>
+<button type="button" data-s="days_per_week" data-c="1" data-op="pick:1">1</button>
+<button type="button" data-s="days_per_week" data-c="2" data-op="pick:2">2</button>
+<button type="button" data-s="days_per_week" data-c="3" data-op="pick:3">3</button>
+<button type="button" data-s="days_per_week" data-c="4" data-op="pick:4">4</button>
+<button type="button" data-s="days_per_week" data-c="5" data-op="pick:5">5</button>
+<button type="button" data-s="days_per_week" data-c="6" data-op="pick:6">6</button>
+<button type="button" data-s="days_per_week" data-c="7" data-op="pick:7">7</button>
+<button type="button" data-s="training_weekdays" data-c="1" data-op="pick:1">Пн</button>
+<button type="button" data-s="training_weekdays" data-c="2" data-op="pick:2">Вт</button>
+<button type="button" data-s="training_weekdays" data-c="3" data-op="pick:3">Ср</button>
+<button type="button" data-s="training_weekdays" data-c="4" data-op="pick:4">Чт</button>
+<button type="button" data-s="training_weekdays" data-c="5" data-op="pick:5">Пт</button>
+<button type="button" data-s="training_weekdays" data-c="6" data-op="pick:6">Сб</button>
+<button type="button" data-s="training_weekdays" data-c="7" data-op="pick:7">Вс</button>
+<button type="button" data-s="training_place" data-c="gym" data-op="pick:gym">Зал</button>
+<button type="button" data-s="training_place" data-c="home" data-op="pick:home">Дом</button>
+<button type="button" data-s="training_place" data-c="outdoor" data-op="pick:outdoor">Улица</button>
+<button type="button" data-s="training_place" data-c="mixed" data-op="pick:mixed">Смешанно</button>
+<button type="button" data-s="activity_level" data-c="sedentary" data-op="pick:sedentary">Сидячий</button>
+<button type="button" data-s="activity_level" data-c="light" data-op="pick:light">Лёгкий</button>
+<button type="button" data-s="activity_level" data-c="moderate" data-op="pick:moderate">Умеренный</button>
+<button type="button" data-s="activity_level" data-c="high" data-op="pick:high">Высокий</button>
+<button type="button" data-s="session_minutes" data-c="30" data-op="preset:30">30 мин</button>
+<button type="button" data-s="session_minutes" data-c="45" data-op="preset:45">45 мин</button>
+<button type="button" data-s="session_minutes" data-c="60" data-op="preset:60">60 мин</button>
+<button type="button" data-s="session_minutes" data-c="90" data-op="preset:90">90 мин</button>
+<button type="button" data-s="supplements" data-c="none" data-op="pick:none">Нет</button>
+<button type="button" data-s="supplements" data-c="protein" data-op="pick:protein">Протеин</button>
+<button type="button" data-s="supplements" data-c="creatine" data-op="pick:creatine">Креатин</button>
+<button type="button" data-s="supplements" data-c="caffeine_preworkout" data-op="pick:caffeine_preworkout">Кофеин / предтрен</button>
+<button type="button" data-s="supplements" data-c="vitamins_omega" data-op="pick:vitamins_omega">Витамины / омега</button>
+<button type="button" data-s="supplements" data-c="other" data-op="pick:other">Другое</button>
+<button type="button" data-s="limitations" data-c="none" data-op="pick:none">Нет ограничений</button>
+<button type="button" data-s="diet_prefs" data-c="none" data-op="pick:none">Без предпочтений</button>
+<button type="button" data-s="nutrition_constraints" data-c="none" data-op="pick:none">Нет ограничений</button>
+<button type="button" data-s="body_fat" data-c="unknown" data-op="pick:unknown">Не знаю</button>
 </div>
 <div id="step">
-<button data-op="dec">−</button><button data-op="inc">+</button>
+<button type="button" data-op="dec">−</button><button type="button" data-op="inc">+</button>
 </div>
-<button id="write" data-op="text">Написать</button>
-<button id="go" class="p" data-op="done">Готово</button>
+<button type="button" id="write" data-op="text">Написать</button>
+<button type="button" id="go" class="p" data-op="done">Готово</button>
 <p id="e"></p>
-<footer><svg viewBox="0 0 80 8" width="72" height="8"><line x1="0" y1="4" x2="80" y2="4" stroke="#fff"></line><circle cx="40" cy="4" r="2" fill="#F5D22D"></circle></svg></footer>
 <script>
 (function(){
 var S={};
@@ -69,6 +77,7 @@ var MULTI={"training_weekdays":1,"supplements":1};
 var TEXT={"equipment":1,"limitations":1,"diet_prefs":1,"nutrition_constraints":1};
 function $(id){return document.getElementById(id);}
 function render(d){
+if(!d){return;}
 S=d;
 var step=d.step||"goal";
 $("t").textContent=d.title||"";
@@ -85,17 +94,15 @@ node.className=(on&&code&&picked.indexOf(code)>=0)?"on":"";
 }
 var numeric=!!NUM[step];
 $("val").textContent=numeric&&d.value!=null?String(d.value):"";
-$("step").style.display=numeric?"block":"none";
-$("write").style.display=TEXT[step]?"inline-block":"none";
-$("go").style.display=(numeric||MULTI[step])?"inline-block":"none";
+$("step").style.display=numeric?"flex":"none";
+$("write").style.display=TEXT[step]?"block":"none";
+$("go").style.display=(numeric||MULTI[step])?"block":"none";
 }
-function ask(op){
-if((op=="inc"||op=="dec")&&NUM[S.step]){var dir=op=="inc"?1:-1;S.value=Math.round(((Number(S.value)||0)+dir*NUM[S.step])*10)/10;$("val").textContent=String(S.value);}
-$("e").textContent="";
-TelegramWidget.request(op).then(function(raw){if(!raw){return;}var d=JSON.parse(raw);if(d.err){$("e").textContent="Не вышло";}else{render(d);}}).catch(function(){$("e").textContent="Нет связи";});
-}
-document.body.addEventListener("click",function(ev){var op=ev.target.getAttribute&&ev.target.getAttribute("data-op");if(!op){return;}if(op.indexOf("pick:")==0){ev.target.className="on";}ask(op);});
-function boot(){render(JSON.parse(TelegramWidget.chatData));TelegramWidget.chatDataChanged=function(raw){render(JSON.parse(raw));};}
+function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
+function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}
+function fail(err){var code=err&&err.code;if(code=="TIMEOUT"||code=="FAILED"){$("e").textContent="Нет связи";}}
+document.body.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target.closest("[data-op]"):null;var op=node&&node.getAttribute("data-op");if(!op){return;}if(op.indexOf("pick:")==0){node.className="on";}if((op=="inc"||op=="dec")&&NUM[S.step]){var dir=op=="inc"?1:-1;S.value=Math.round(((Number(S.value)||0)+dir*NUM[S.step])*10)/10;$("val").textContent=String(S.value);}$("e").textContent="";var pending=TelegramWidget.request(op);pending.then(take,fail);});
+function boot(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}if(TelegramWidget.onEvent){TelegramWidget.onEvent("chatDataChanged",function(){try{render(JSON.parse(TelegramWidget.chatData));}catch(err){}});}}
 boot();
 })();
 </script>

@@ -13,9 +13,9 @@ from fitness_bot.service.models.commands.session import StartTodayWorkoutCommand
 from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery
 
 _BLOCKED = {
-    "rest": "🏖 Выходной",
-    "no_program": "📋 Нет активной программы",
-    "already_done": "✅ Сегодня тренировка уже сделана",
+    "rest": "Выходной",
+    "no_program": "Нет активной программы",
+    "already_done": "Сегодня тренировка уже сделана",
 }
 
 

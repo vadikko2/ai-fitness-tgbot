@@ -1,4 +1,4 @@
-"""Widget screens without Telegram: commands, phases, glyphs, zlib."""
+"""Widget screens without Telegram: commands, phases, zlib."""
 
 from __future__ import annotations
 
@@ -9,11 +9,13 @@ from uuid import uuid4
 
 from fitness_bot.domain.enums import ProfileField, ProgramType, Sex
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDay, WorkoutDocument
-from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetFrame, WidgetScreenId
-from fitness_bot.presentation.widgets.glyphs import exercise_glyph_path
+from fitness_bot.presentation.chat_pages import reset_chat_pages
+from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetBindings, WidgetFrame, WidgetScreenId
+from fitness_bot.presentation.widgets.gateway import WidgetGateway, WidgetQuery
 from fitness_bot.presentation.widgets.screen import ScreenContext
 from fitness_bot.presentation.widgets.screens.console import ConsoleScreen
-from fitness_bot.presentation.widgets.screens.intake import IntakeScreen, measurement_guide_png
+from fitness_bot.presentation.widgets.screens.home import HomeScreen
+from fitness_bot.presentation.widgets.screens.intake import IntakeScreen
 from fitness_bot.presentation.widgets.screens.load import load_shells
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 from fitness_bot.presentation.widgets.state import pack_state
@@ -21,6 +23,7 @@ from fitness_bot.service.models.commands.program import ApproveProposalCommand
 from fitness_bot.service.models.commands.session import (
     ConfirmExerciseAsPlannedCommand,
     RecordSlotActualCommand,
+    StartTodayWorkoutCommand,
 )
 from fitness_bot.service.models.commands.users import UpdateProfileCommand
 from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery
@@ -107,7 +110,7 @@ def _workout() -> WorkoutDocument:
 def _console() -> tuple[ConsoleScreen, _Mediator, ScreenContext]:
     today = SimpleNamespace(document=_workout(), screen="session", technique_video_positions=[], weekday=1)
     mediator = _Mediator({GetTodayWorkoutQuery: today})
-    screen = ConsoleScreen({"male": _Shell("male-shell"), "female": _Shell("female-shell")})
+    screen = ConsoleScreen(_Shell())
     return screen, mediator, _ctx(mediator, screen=WidgetScreenId.CONSOLE)
 
 
@@ -115,6 +118,85 @@ def _writes(mediator: _Mediator) -> list[object]:
     return [
         item for item in mediator.sent if isinstance(item, RecordSlotActualCommand | ConfirmExerciseAsPlannedCommand)
     ]
+
+
+async def test_console_open_and_sync_answer_without_a_companion() -> None:
+    reset_chat_pages()
+    calls: list[tuple[object, ...]] = []
+
+    class _Transport:
+        async def send(self, chat_id: int, *, html: str, chat_data: str, caption: str, height: int) -> int:
+            calls.append(("send", chat_id))
+            return 15
+
+        async def edit_state(self, chat_id: int, message_id: int, chat_data: str) -> None:
+            calls.append(("edit_state", chat_data))
+
+        async def edit_caption(self, chat_id: int, message_id: int, caption: str) -> None:
+            calls.append(("edit_caption", caption))
+
+        async def answer(self, query_id: str, data: str | None) -> None:
+            calls.append(("answer", query_id, data))
+
+    class _Media:
+        async def upsert(self, *args: object, **kwargs: object) -> int:
+            calls.append(("media",))
+            return 50
+
+    class _Flags:
+        widgets_enabled = True
+
+    screen, mediator, _ctx_unused = _console()
+    gateway = WidgetGateway(
+        transport=_Transport(),  # type: ignore[arg-type]
+        media=_Media(),  # type: ignore[arg-type]
+        bindings=WidgetBindings(),
+        mediator=mediator,  # type: ignore[arg-type]
+        settings=_Flags(),
+        screens={WidgetScreenId.CONSOLE: screen},
+    )
+    opened = await gateway.open(7, WidgetScreenId.CONSOLE, chat_id=7)
+    assert opened.use_keyboard is False
+    assert opened.message_id == 15
+    assert not any(item[0] == "media" for item in calls)
+    calls.clear()
+    await gateway.on_query(WidgetQuery(query_id="q1", user_id=7, chat_id=7, message_id=15, data="sync"))
+    assert calls[-1][0] == "answer"
+    assert calls[-1][1] == "q1"
+    assert isinstance(calls[-1][2], str) and len(calls[-1][2].encode()) <= 1024
+    assert not any(item[0] == "media" for item in calls)
+    calls.clear()
+    await gateway.on_query(WidgetQuery(query_id="q2", user_id=7, chat_id=7, message_id=15, data="ok"))
+    assert calls[-1][:2] == ("answer", "q2")
+    assert not any(item[0] == "media" for item in calls)
+    reset_chat_pages()
+
+
+async def test_console_technique_stays_inside_the_widget() -> None:
+    screen, _mediator, ctx = _console()
+    frame = await screen.open(ctx)
+    assert "mu" not in json.loads(frame.chat_data)
+    result = await screen.apply(_rebind(ctx, frame), "vid")
+    assert result.video_file_id is None
+    assert result.photo_path is None
+    assert json.loads(result.frame.chat_data)["ph"] == "how"
+
+
+async def test_home_go_already_done_answers_without_leaving_the_widget() -> None:
+    mediator = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="already_done")})
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.HOME,
+        chat_data=pack_state({"title": "Низ — квадрицепс", "when": "Ср", "streak": 3}),
+        caption="Низ — квадрицепс",
+        shell_id="home",
+    )
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.HOME), frame), "go")
+    assert result.navigate is None
+    assert result.video_file_id is None
+    assert result.photo_path is None
+    body = json.loads(result.answer or "")
+    assert "уже сделана" in str(body["title"])
 
 
 async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing() -> None:
@@ -145,7 +227,6 @@ async def test_console_sync_after_rest_until_advances_the_phase() -> None:
         "plan": "3×8 · 90 с",
         "kg": None,
         "reps": 8,
-        "glyph": "q",
         "log": 1,
         "rest": 90,
     }
@@ -160,48 +241,6 @@ async def test_console_sync_after_rest_until_advances_the_phase() -> None:
     assert body["ph"] == "work"
     assert body["set"] == 2
     assert _writes(mediator) == []
-
-
-async def test_console_shell_follows_profile_sex() -> None:
-    screen = ConsoleScreen({"male": _Shell("male-shell"), "female": _Shell("female-shell")})
-    female = SimpleNamespace(sex=Sex.FEMALE)
-    unknown = SimpleNamespace(sex=None)
-    mediator = _Mediator()
-    mediator.profiles = [female, unknown]
-    ctx = _ctx(mediator, screen=WidgetScreenId.CONSOLE)
-    assert await screen.html_for(ctx) == "female-shell"
-    assert await screen.html_for(ctx) == "male-shell"
-
-
-def test_glyph_path_uses_the_sex_folder(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("fitness_bot.presentation.widgets.glyphs.EXERCISE_GLYPHS_DIR", tmp_path)
-    assert exercise_glyph_path("q", sex=Sex.FEMALE) is None
-    assert exercise_glyph_path("q", sex=None) is None
-    female = tmp_path / "female"
-    female.mkdir()
-    (female / "squat.png").write_bytes(b"png")
-    (tmp_path / "squat.png").write_bytes(b"flat")
-    found = exercise_glyph_path("q", sex=Sex.FEMALE)
-    assert found is not None
-    assert found.parent.name == "female"
-    assert exercise_glyph_path("q", sex=Sex.MALE) is None
-    assert exercise_glyph_path("q", sex=None) is None
-
-
-def test_measurement_png_uses_guide_sex_folder(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "fitness_bot.presentation.widgets.screens.intake.MEASUREMENT_GUIDES_DIR",
-        tmp_path,
-    )
-    assert measurement_guide_png("waist", Sex.FEMALE) is None
-    female = tmp_path / "female"
-    female.mkdir()
-    (female / "waist.png").write_bytes(b"png")
-    found = measurement_guide_png("waist", Sex.FEMALE)
-    assert found is not None
-    assert found.endswith("/female/waist.png")
-    assert measurement_guide_png("waist", None) is None
-    assert measurement_guide_png("height", Sex.FEMALE) is None
 
 
 async def test_intake_pick_sends_update_profile() -> None:
@@ -262,3 +301,24 @@ def test_shell_zlib_stays_within_4096() -> None:
     sizes = {key: len(zlib.compress(shell.html().encode("utf-8"), 9)) for key, shell in shells.items()}
     assert sizes
     assert all(size <= 4096 for size in sizes.values()), sizes
+    console = shells["console"].html()
+    assert "data-g=" not in console
+    assert "height:140px" not in console
+    assert "<footer" not in console
+    assert "Готово" in console
+    for shell in shells.values():
+        html = shell.html()
+        assert "<footer" not in html
+        assert "data-g=" not in html
+
+
+def test_shells_request_only_from_a_tap() -> None:
+    shells = load_shells()
+    for key, shell in shells.items():
+        html = shell.html()
+        assert "setInterval" not in html, key
+        assert html.count("TelegramWidget.request") == 1, key
+        assert "answer.result" in html, key
+        assert 'code=="TIMEOUT"||code=="FAILED"' in html, key
+        listener = html.split('addEventListener("click"', 1)[1]
+        assert listener.index("TelegramWidget.request") < listener.index(".then"), key

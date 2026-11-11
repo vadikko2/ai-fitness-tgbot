@@ -7,12 +7,10 @@ from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID
 
-from fitness_bot.domain.enums import ExpectedInput, Sex
+from fitness_bot.domain.enums import ExpectedInput
 from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.workout.document import ExerciseSlot, WorkoutDocument
-from fitness_bot.presentation.progress_pose_images import guide_sex_folder
 from fitness_bot.presentation.widgets.frame import WidgetBinding, WidgetFrame, WidgetScreenId
-from fitness_bot.presentation.widgets.glyphs import exercise_glyph_path, glyph_code_for, glyph_cover_file_id
 from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opcode
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
@@ -25,13 +23,7 @@ from fitness_bot.service.models.commands.session import (
 )
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
-from fitness_bot.service.models.queries.session import (
-    GetSimilarExercisesQuery,
-    GetTodayWorkoutQuery,
-    PrepareTechniqueVideoDeliveryQuery,
-)
-from fitness_bot.service.models.queries.users import GetProfileQuery
-
+from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery, GetTodayWorkoutQuery
 _KG_STEP = Decimal("2.5")
 _KEEP = frozenset({"rest", "rpe", "alt", "how", "done"})
 
@@ -102,35 +94,27 @@ def _matches(data: dict[str, object], slot: ExerciseSlot) -> bool:
 class ConsoleScreen:
     screen_id = WidgetScreenId.CONSOLE
 
-    def __init__(self, shells: dict[str, WidgetShell]) -> None:
-        self._shells = shells
-        self.shell = shells["male"]
-
-    async def html_for(self, ctx: ScreenContext) -> str:
-        folder = guide_sex_folder(await self._sex(ctx))
-        return self._shells[folder].html()
+    def __init__(self, shell: WidgetShell) -> None:
+        self.shell = shell
 
     async def open(self, ctx: ScreenContext) -> WidgetFrame:
         previous = _read(ctx.binding)
         if previous.get("ph") in _KEEP and ctx.binding.frame is not None:
             return ctx.binding.frame
         today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
-        names, muscles = await self._catalog(ctx)
+        names = await self._catalog(ctx)
         slots = _slots(getattr(today, "document", None))
         if previous.get("ph") == "work" and previous.get("pos") is not None:
             slot = _find(slots, int(previous["pos"]))
             if slot is not None:
-                data = self._from_slot(slot, slots, names, muscles, previous)
+                data = self._from_slot(slot, slots, names, previous)
                 data["kg"] = previous.get("kg", data["kg"])
                 data["reps"] = previous.get("reps", data["reps"])
                 data["set"] = previous.get("set", 1)
                 data["log"] = previous.get("log", 0)
                 data["ph"] = "work"
                 return self._frame(data)
-        return self._frame(self._fresh(slots, names, muscles))
-
-    async def companion(self, ctx: ScreenContext, frame: WidgetFrame) -> ScreenResult:
-        return await self._media(ctx, frame, ask=False)
+        return self._frame(self._fresh(slots, names))
 
     async def apply(self, ctx: ScreenContext, opcode: str) -> ScreenResult:
         parsed = parse_opcode(opcode)
@@ -162,7 +146,7 @@ class ConsoleScreen:
         if parsed.name == "how":
             return await self._how(ctx, data, phase)
         if parsed.name == "vid":
-            return await self._vid(ctx, data, phase)
+            return await self._how(ctx, data, phase)
         if parsed.name == "kg":
             return self._kg(ctx, data, phase)
         if parsed.name == "sum":
@@ -272,12 +256,12 @@ class ConsoleScreen:
 
     async def _refresh_work(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
         today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
-        names, muscles = await self._catalog(ctx)
+        names = await self._catalog(ctx)
         slots = _slots(getattr(today, "document", None))
         slot = _find(slots, int(data["pos"])) if data.get("pos") is not None else None
         if slot is None:
             return self._result(data)
-        rebuilt = self._from_slot(slot, slots, names, muscles, data)
+        rebuilt = self._from_slot(slot, slots, names, data)
         rebuilt["set"] = data.get("set", 1)
         rebuilt["log"] = data.get("log", 0)
         rebuilt["ph"] = "work"
@@ -307,11 +291,6 @@ class ConsoleScreen:
         data["ph"] = "how"
         data["tip"] = tip[:180]
         return self._result(data)
-
-    async def _vid(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
-        if phase not in {"work", "how"}:
-            return _error(self._frame(data))
-        return await self._media(ctx, self._frame(data), ask=True)
 
     def _kg(self, ctx: ScreenContext, data: dict[str, object], phase: str) -> ScreenResult:
         if phase != "work":
@@ -348,78 +327,22 @@ class ConsoleScreen:
 
     async def _next_exercise(self, ctx: ScreenContext, data: dict[str, object]) -> ScreenResult:
         today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
-        names, muscles = await self._catalog(ctx)
+        names = await self._catalog(ctx)
         slots = _slots(getattr(today, "document", None))
         index = int(data.get("i") or 1)
         if index >= len(slots):
             data["ph"] = "done"
             data.pop("restUntil", None)
             return self._result(data)
-        built = self._from_slot(slots[index], slots, names, muscles, data)
+        built = self._from_slot(slots[index], slots, names, data)
         built["ph"] = "work"
         built["set"] = 1
         built["log"] = data.get("log", 0)
         return self._result(built)
 
-    async def _media(self, ctx: ScreenContext, frame: WidgetFrame, *, ask: bool) -> ScreenResult:
-        data = read_state(frame.chat_data)
-        sex = await self._sex(ctx)
-        code = str(data.get("glyph") or "q")
-        png = exercise_glyph_path(code, sex=sex, kind="png")
-        cover = glyph_cover_file_id(str(png) if png is not None else None)
-        file_id = None
-        if data.get("pos") is not None:
-            file_id = await self._video_file_id(ctx, int(data["pos"]))
-        expect = None
-        caption = frame.caption
-        if ask and not file_id:
-            caption = "Пришли видео упражнения (до 20 МБ)."
-            expect = ExpectInputCommand(
-                telegram_user_id=ctx.user_id,
-                expected_input=ExpectedInput.TECHNIQUE_VIDEO,
-                focus_slot=int(data["pos"]) if data.get("pos") is not None else None,
-            )
-        updated = replace(frame, caption=caption)
-        return ScreenResult(
-            frame=updated,
-            answer=updated.chat_data,
-            video_file_id=file_id,
-            photo_path=None if file_id or png is None else str(png),
-            cover_file_id=cover,
-            expect=expect,
-        )
-
-    async def _video_file_id(self, ctx: ScreenContext, position: int) -> str | None:
-        today = await ctx.mediator.send(GetTodayWorkoutQuery(telegram_user_id=ctx.user_id))
-        positions = list(getattr(today, "technique_video_positions", []) or [])
-        if position not in positions:
-            return None
-        slot = _find(_slots(getattr(today, "document", None)), position)
-        if slot is None or slot.id is None:
-            return None
-        delivery = await ctx.mediator.send(
-            PrepareTechniqueVideoDeliveryQuery(telegram_user_id=ctx.user_id, slot_id=slot.id),
-        )
-        file_id = getattr(delivery, "telegram_file_id", None)
-        if isinstance(file_id, str) and file_id:
-            return file_id
-        return None
-
-    async def _sex(self, ctx: ScreenContext) -> Sex | None:
-        profile = await ctx.mediator.send(GetProfileQuery(telegram_user_id=ctx.user_id))
-        sex = getattr(profile, "sex", None)
-        if isinstance(sex, Sex) or sex is None:
-            return sex
-        try:
-            return Sex(str(sex))
-        except ValueError:
-            return None
-
-    async def _catalog(self, ctx: ScreenContext) -> tuple[dict[str, str], dict[str, list[str]]]:
+    async def _catalog(self, ctx: ScreenContext) -> dict[str, str]:
         found = await ctx.mediator.send(GetExerciseNamesQuery())
-        names = dict(getattr(found, "names", {}) or {})
-        muscles = dict(getattr(found, "primary_muscles", {}) or {})
-        return names, muscles
+        return dict(getattr(found, "names", {}) or {})
 
     async def _slot(self, ctx: ScreenContext, data: dict[str, object]) -> ExerciseSlot | None:
         if data.get("pos") is None:
@@ -447,12 +370,7 @@ class ConsoleScreen:
             note=note,
         )
 
-    def _fresh(
-        self,
-        slots: list[ExerciseSlot],
-        names: dict[str, str],
-        muscles: dict[str, list[str]],
-    ) -> dict[str, object]:
+    def _fresh(self, slots: list[ExerciseSlot], names: dict[str, str]) -> dict[str, object]:
         if not slots:
             return {
                 "ph": "done",
@@ -464,17 +382,16 @@ class ConsoleScreen:
                 "plan": "",
                 "kg": None,
                 "reps": None,
-                "glyph": "q",
                 "log": 0,
             }
-        for index, slot in enumerate(slots):
+        for slot in slots:
             if slot.actual is None:
-                data = self._from_slot(slot, slots, names, muscles, {})
+                data = self._from_slot(slot, slots, names, {})
                 data["ph"] = "work"
                 data["set"] = 1
                 data["log"] = 0
                 return data
-        data = self._from_slot(slots[-1], slots, names, muscles, {})
+        data = self._from_slot(slots[-1], slots, names, {})
         data["ph"] = "done"
         return data
 
@@ -483,12 +400,10 @@ class ConsoleScreen:
         slot: ExerciseSlot,
         slots: list[ExerciseSlot],
         names: dict[str, str],
-        muscles: dict[str, list[str]],
         previous: dict[str, object],
     ) -> dict[str, object]:
         index = next((i for i, item in enumerate(slots) if item.position == slot.position), 0)
         name = _label(slot, names)
-        muscle = list(muscles.get(str(slot.exercise_id), [])) if slot.exercise_id is not None else []
         timed = slot.duration_seconds is not None
         return {
             "ph": previous.get("ph") or "work",
@@ -500,7 +415,6 @@ class ConsoleScreen:
             "plan": _plan(slot),
             "kg": as_number(slot.weight_kg),
             "reps": slot.duration_seconds if timed else slot.reps,
-            "glyph": glyph_code_for(name, muscle),
             "pos": slot.position,
             "timed": 1 if timed else 0,
             "rest": slot.rest_seconds,
