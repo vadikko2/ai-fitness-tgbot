@@ -73,12 +73,16 @@ async def _profile(bot: object, mediator: RequestMediator, user_id: int, chat_id
 
 async def _coach_mine(bot: object, mediator: RequestMediator, user_id: int, chat_id: int) -> None:
     result = await mediator.send(GetMyCoachQuery(telegram_user_id=user_id))
-    text = create_jinja_env().get_template("coach_mine.j2").render(
-        linked=result.linked,
-        display_name=result.display_name,
-        bio=result.bio,
-        rating_avg=result.rating_avg,
-        rating_count=result.rating_count,
+    text = (
+        create_jinja_env()
+        .get_template("coach_mine.j2")
+        .render(
+            linked=result.linked,
+            display_name=result.display_name,
+            bio=result.bio,
+            rating_avg=result.rating_avg,
+            rating_count=result.rating_count,
+        )
     )
     markup = (
         coach_mine_keyboard()

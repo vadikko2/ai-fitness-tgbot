@@ -19,6 +19,8 @@ _HANDOFF = {
     "apply": "coach_apply",
     "mod": "mod",
 }
+
+
 class MenuScreen:
     screen_id = WidgetScreenId.MENU
 

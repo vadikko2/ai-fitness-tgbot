@@ -11,14 +11,16 @@ from fitness_bot.presentation.widgets.screens.summary import SummaryScreen
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 
 
-def build_widget_screens() -> tuple[
-    ConsoleScreen,
-    IntakeScreen,
-    WeekScreen,
-    HomeScreen,
-    SummaryScreen,
-    MenuScreen,
-]:
+def build_widget_screens() -> (
+    tuple[
+        ConsoleScreen,
+        IntakeScreen,
+        WeekScreen,
+        HomeScreen,
+        SummaryScreen,
+        MenuScreen,
+    ]
+):
     shells = load_shells()
     console = ConsoleScreen(shells["console"])
     return (
