@@ -2,28 +2,30 @@
 <html><head><meta charset="utf-8"></head><body>
 <!-- chrome -->
 <style>
-.lead{margin:0 0 10px;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.35}
-.day{display:flex;gap:8px;align-items:center;margin:0 0 12px}
-.day button{flex:1;min-height:40px;padding:8px;background:#F2F4F7;border-radius:12px;font-weight:600;font-size:13px}
+.lead{margin:0 0 8px;font-size:13px;font-weight:500;color:rgba(2,32,70,.55);line-height:1.3}
+.day{display:flex;gap:8px;align-items:center;margin:0 0 10px}
+.day button{flex:1;min-height:36px;padding:6px;background:#F2F4F7;border-radius:12px;font-weight:600;font-size:13px}
 .day b{flex:0 0 auto;font-size:13px;font-weight:700;color:rgba(2,32,70,.5)}
-.lab{margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(2,32,70,.42)}
-.rows button{display:block;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 12px;min-height:44px;text-align:left;font-weight:500;background:#fff;border:1px solid rgba(2,32,70,.08);border-radius:12px;white-space:normal;line-height:1.25}
+.lab{margin:10px 0 6px;font-size:12px;font-weight:600;color:rgba(2,32,70,.5)}
+.rows button{display:block;width:100%;box-sizing:border-box;margin:0 0 6px;padding:8px 10px;min-height:40px;text-align:left;font-weight:500;background:#fff;border:1px solid rgba(2,32,70,.08);border-radius:12px;white-space:normal;line-height:1.25}
 #slots button.on{background:#EEF2F7;border-color:transparent}
-.sel{margin:2px 0 12px;padding:10px 12px;border-radius:14px;background:#F7F8FA}
-.sel .lab{margin:0 0 8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:rgba(2,32,70,.72);line-height:1.3}
-.sel .row{display:flex;gap:8px}
-.sel .row button{flex:1;min-height:40px;padding:8px;background:#fff;border:1px solid rgba(2,32,70,.14);border-radius:12px;font-weight:600;font-size:13px}
+.sel{margin:2px 0 0;padding:8px 10px;border-radius:14px;background:#F7F8FA}
+.sel .lab{margin:0 0 6px;font-size:12px;font-weight:600;color:rgba(2,32,70,.72);line-height:1.3}
+.sel .row{display:flex;gap:8px;margin:0 0 6px}
+.sel .row button{flex:1;min-height:36px;padding:6px;background:#fff;border:1px solid rgba(2,32,70,.14);border-radius:12px;font-weight:600;font-size:13px}
+#alts button{margin:0 0 6px;background:#fff;border:1px solid rgba(2,32,70,.12)}
 #alts:empty,.sel.hide,#moreBox:empty{display:none}
-#moreBox{margin:0 0 8px}
-button.p{margin-top:0}
+#moreBox{margin:0 0 6px}
+button.p{margin:0 0 2px}
 .dim{opacity:.35}
 </style>
-<p class="lead" id="lead">Это черновик новой недели. Листай дни, при необходимости поправь упражнения — потом утверди план.</p>
+<p class="lead" id="lead">Черновик новой недели. Поправь дни при необходимости — затем утверди.</p>
 <div class="day">
 <button type="button" id="prev" data-op="day-">← День</button>
 <b id="mark">1 / 1</b>
 <button type="button" id="next" data-op="day+">День →</button>
 </div>
+<button type="button" class="p" data-op="approve">Утвердить неделю</button>
 <p class="lab">Упражнения · нажми, чтобы выбрать</p>
 <div id="slots" class="rows"></div>
 <div id="moreBox" class="rows"></div>
@@ -33,9 +35,8 @@ button.p{margin-top:0}
 <button type="button" data-op="drop">Убрать</button>
 <button type="button" id="swapBtn" data-op="swap">Заменить</button>
 </div>
-</div>
 <div id="alts" class="rows"></div>
-<button type="button" class="p" data-op="approve">Утвердить неделю</button>
+</div>
 <p id="e"></p>
 <script>
 (function(){
@@ -61,7 +62,7 @@ $("sel").classList.toggle("hide",!has);
 if(has){
 var name=String((sel&&sel.name)||"упражнение");
 if(alts.length){
-$("selLab").textContent="Замена для «"+name+"» — выбери вариант ниже";
+$("selLab").textContent="Замена для «"+name+"» — выбери ниже";
 $("swapBtn").textContent="Скрыть";
 }else{
 $("selLab").textContent="Выбрано: "+name;

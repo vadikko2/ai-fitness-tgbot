@@ -19,7 +19,7 @@ class WidgetScreenId(StrEnum):
 WIDGET_HEIGHT: dict[WidgetScreenId, int] = {
     WidgetScreenId.CONSOLE: 480,
     WidgetScreenId.INTAKE: 420,
-    WidgetScreenId.WEEK: 380,
+    WidgetScreenId.WEEK: 480,
     WidgetScreenId.HOME: 220,
     WidgetScreenId.SUMMARY: 300,
     WidgetScreenId.MENU: 360,
@@ -89,19 +89,21 @@ def home_height(data: dict[str, object]) -> int:
 
 
 def week_height(data: dict[str, object]) -> int:
-    """Fit the week-draft bubble to day nav, slots, and approve."""
-    total = 118  # chrome header + lead + day bar + section label
+    """Fit the week-draft bubble; keep approve above the fold."""
+    # chrome header + body pad + lead + day bar + approve + section label
+    total = 210
     slots = list(data.get("slots") or [])
-    total += max(1, len(slots)) * 52
+    total += max(1, len(slots)) * 48
     if data.get("more") is not None:
-        total += 44
+        total += 42
     if slots:
-        total += 96  # selected-exercise actions
-    total += len(list(data.get("alts") or [])) * 48
-    total += 56  # approve
+        total += 88  # selected-exercise actions
+    alts = list(data.get("alts") or [])
+    if alts:
+        total += 12 + len(alts) * 48
     if data.get("note"):
         total += 28
-    return min(520, max(300, total))
+    return min(700, max(320, total))
 
 
 @dataclass(frozen=True, slots=True)

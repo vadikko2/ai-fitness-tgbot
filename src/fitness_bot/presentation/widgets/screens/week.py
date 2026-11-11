@@ -121,17 +121,79 @@ class WeekScreen:
         if data.get("alts"):
             data["alts"] = []
             data["ids"] = []
+            data.pop("note", None)
             return self._result(data)
         slots = list(data.get("slots") or [])
         sel = int(data.get("sel") or 0)
         if not slots or sel >= len(slots):
             return ScreenResult(frame=self._frame(data), answer=PHASE_ERROR)
         name = str(slots[sel].get("name") or "")
-        found = await ctx.mediator.send(MatchExercisesQuery(query=name, limit=3))
-        items = list(getattr(found, "items", []) or [])[:3]
-        data["alts"] = [str(item.name)[:40] for item in items]
-        data["ids"] = [str(item.exercise_id) for item in items]
+        position = int(slots[sel].get("i") or 0)
+        current_id, used = await self._swap_exclusions(ctx, data, position=position)
+        picks = await self._swap_candidates(ctx, name=name, current_id=current_id, used=used)
+        if not picks:
+            data["alts"] = []
+            data["ids"] = []
+            data["note"] = "Не нашёл замену — попробуй другое упражнение"
+            return self._result(data)
+        data.pop("note", None)
+        data["alts"] = [str(item.name)[:36] for item in picks]
+        data["ids"] = [str(item.exercise_id) for item in picks]
         return self._result(data)
+
+    async def _swap_exclusions(
+        self,
+        ctx: ScreenContext,
+        data: dict[str, object],
+        *,
+        position: int,
+    ) -> tuple[UUID | None, set[UUID]]:
+        pending = await ctx.mediator.send(GetPendingProposalQuery(telegram_user_id=ctx.user_id))
+        document = getattr(pending, "document", None)
+        days = list(getattr(document, "days", None) or [])
+        day_index = int(data.get("day") or 0)
+        if day_index < 0 or day_index >= len(days):
+            return None, set()
+        current = days[day_index]
+        used = {slot.exercise_id for slot in current.slots if slot.exercise_id is not None}
+        selected = next((slot for slot in current.slots if slot.position == position), None)
+        current_id = selected.exercise_id if selected is not None else None
+        return current_id, used
+
+    async def _swap_candidates(
+        self,
+        ctx: ScreenContext,
+        *,
+        name: str,
+        current_id: UUID | None,
+        used: set[UUID],
+    ) -> list[object]:
+        found = await ctx.mediator.send(MatchExercisesQuery(query=name, limit=10))
+        picks = [
+            item
+            for item in list(getattr(found, "items", []) or [])
+            if getattr(item, "exercise_id", None) not in used
+        ]
+        if len(picks) >= 3:
+            return picks[:3]
+        muscle = None
+        if current_id is not None:
+            catalog = await ctx.mediator.send(GetExerciseNamesQuery())
+            muscles = dict(getattr(catalog, "primary_muscles", {}) or {})
+            listed = list(muscles.get(str(current_id), []) or [])
+            muscle = str(listed[0]) if listed else None
+        if muscle:
+            related = await ctx.mediator.send(MatchExercisesQuery(query=muscle, muscle=muscle, limit=10))
+            seen = {getattr(item, "exercise_id", None) for item in picks}
+            for item in list(getattr(related, "items", []) or []):
+                exercise_id = getattr(item, "exercise_id", None)
+                if exercise_id is None or exercise_id in used or exercise_id in seen:
+                    continue
+                picks.append(item)
+                seen.add(exercise_id)
+                if len(picks) >= 3:
+                    break
+        return picks[:3]
 
     async def _swap(self, ctx: ScreenContext, data: dict[str, object], index: int) -> ScreenResult:
         ids = list(data.get("ids") or [])
@@ -280,14 +342,25 @@ def _load(slot: ExerciseSlot) -> str:
 
 def _fit(data: dict[str, object]) -> str:
     slots = [dict(item) for item in data.get("slots") or []]
+    alts = [str(item) for item in list(data.get("alts") or [])]
+    ids = [str(item) for item in list(data.get("ids") or [])]
     limit = 24
-    body = dict(data)
     while True:
+        body = dict(data)
         body["slots"] = [{**slot, "name": str(slot.get("name") or "")[:limit]} for slot in slots]
+        body["alts"] = [item[: max(8, limit)] for item in alts]
+        body["ids"] = list(ids)
         text = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
-        if len(text.encode("utf-8")) <= _STATE_LIMIT or limit <= 4:
-            if len(text.encode("utf-8")) > _STATE_LIMIT:
-                body["alts"] = []
-                body["ids"] = []
+        size = len(text.encode("utf-8"))
+        if size <= _STATE_LIMIT:
             return pack_state(body)
-        limit -= 4
+        if limit > 8:
+            limit -= 4
+            continue
+        if alts:
+            alts = alts[:-1]
+            ids = ids[:-1]
+            continue
+        body["alts"] = []
+        body["ids"] = []
+        return pack_state(body)

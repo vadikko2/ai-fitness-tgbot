@@ -28,7 +28,11 @@ from fitness_bot.presentation.widgets.screens.menu import MenuScreen
 from fitness_bot.presentation.widgets.screens.summary import SummaryScreen
 from fitness_bot.presentation.widgets.screens.week import WeekScreen
 from fitness_bot.presentation.widgets.state import pack_state
-from fitness_bot.service.models.commands.program import ApproveProposalCommand, GenerateNextWeekCommand
+from fitness_bot.service.models.commands.program import (
+    ApproveProposalCommand,
+    GenerateNextWeekCommand,
+    SelectExerciseForProposalCommand,
+)
 from fitness_bot.service.models.commands.session import (
     ConfirmExerciseAsPlannedCommand,
     FinalizeSessionCommand,
@@ -37,7 +41,12 @@ from fitness_bot.service.models.commands.session import (
     StartTodayWorkoutCommand,
 )
 from fitness_bot.service.models.commands.users import UpdateProfileCommand
-from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
+from fitness_bot.service.models.queries.match_exercises import (
+    GetExerciseGuideQuery,
+    GetExerciseNamesQuery,
+    MatchExercisesQuery,
+)
+from fitness_bot.service.models.queries.program import GetPendingProposalQuery
 from fitness_bot.service.models.queries.session import (
     GetSessionDetailQuery,
     GetSessionHistoryQuery,
@@ -986,6 +995,67 @@ async def test_week_approve_sends_approve_proposal() -> None:
     assert result.navigate is WidgetScreenId.HOME
 
 
+async def test_week_swap_lists_alternatives_then_applies_choice() -> None:
+    current_id = uuid4()
+    alt_id = uuid4()
+    other_id = uuid4()
+    document = WorkoutDocument(
+        program_type=ProgramType.FULL_BODY,
+        days=[
+            WorkoutDay(
+                weekday=3,
+                title="Силовая",
+                position=1,
+                slots=[
+                    ExerciseSlot(position=1, exercise_id=current_id, sets=5, reps=5, rest_seconds=90, rpe=7),
+                    ExerciseSlot(position=2, exercise_id=other_id, sets=5, reps=5, rest_seconds=90, rpe=7),
+                ],
+            ),
+        ],
+    )
+    matches = SimpleNamespace(
+        items=[
+            SimpleNamespace(exercise_id=current_id, name="Гакк-приседания", score=9),
+            SimpleNamespace(exercise_id=alt_id, name="Жим ногами", score=6),
+            SimpleNamespace(exercise_id=uuid4(), name="Разгибания ног", score=4),
+        ],
+    )
+    mediator = _Mediator(
+        {
+            GetPendingProposalQuery: SimpleNamespace(document=document),
+            MatchExercisesQuery: matches,
+            GetExerciseNamesQuery: SimpleNamespace(
+                names={str(current_id): "Гакк-приседания", str(alt_id): "Жим ногами"},
+                primary_muscles={str(current_id): ["quads"]},
+            ),
+        },
+    )
+    screen = WeekScreen(_Shell(shell_id="week"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.WEEK,
+        chat_data=pack_state(
+            {
+                "day": 0,
+                "days": 1,
+                "title": "Ср — Силовая",
+                "sel": 0,
+                "slots": [{"i": 1, "name": "Гакк-приседания", "load": "55кг 5п"}],
+                "dp": 1,
+            },
+        ),
+        caption="",
+        shell_id="week",
+    )
+    opened = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.WEEK), frame), "swap")
+    body = json.loads(opened.frame.chat_data)
+    assert "Жим ногами" in body["alts"]
+    assert str(current_id) not in body["ids"]
+    assert body["alts"]
+    picked = await screen.apply(_rebind(_ctx(mediator, opened.frame, screen=WidgetScreenId.WEEK), opened.frame), "swap:0")
+    assert any(isinstance(item, SelectExerciseForProposalCommand) for item in mediator.sent)
+    assert json.loads(picked.frame.chat_data).get("alts") in ([], None)
+
+
 def test_week_height_grows_with_slots_and_alts() -> None:
     compact = week_height({"slots": [{"name": "Жим", "load": "10п"}], "alts": []})
     taller = week_height(
@@ -996,7 +1066,7 @@ def test_week_height_grows_with_slots_and_alts() -> None:
             "note": "Пока нельзя",
         },
     )
-    assert 300 <= compact < taller <= 520
+    assert 320 <= compact < taller <= 700
 
 
 def test_shell_zlib_stays_within_4096() -> None:
