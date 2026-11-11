@@ -24,6 +24,7 @@ from fitness_bot.service.models.commands.session import (
 from fitness_bot.service.models.commands.users import ExpectInputCommand
 from fitness_bot.service.models.queries.match_exercises import GetExerciseGuideQuery, GetExerciseNamesQuery
 from fitness_bot.service.models.queries.session import GetSimilarExercisesQuery, GetTodayWorkoutQuery
+
 _KG_STEP = Decimal("2.5")
 _KEEP = frozenset({"rest", "rpe", "alt", "how", "done"})
 
