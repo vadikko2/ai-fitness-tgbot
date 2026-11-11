@@ -19,7 +19,7 @@ WIDGET_HEIGHT: dict[WidgetScreenId, int] = {
     WidgetScreenId.CONSOLE: 400,
     WidgetScreenId.INTAKE: 480,
     WidgetScreenId.WEEK: 480,
-    WidgetScreenId.HOME: 200,
+    WidgetScreenId.HOME: 280,
     WidgetScreenId.SUMMARY: 220,
 }
 

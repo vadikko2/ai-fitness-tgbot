@@ -1,4 +1,4 @@
-"""Short home bubble: today's workout, the week streak, and start."""
+"""Short home bubble: today's workout, repeat, another day, and start."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from fitness_bot.presentation.widgets.opcodes import OpcodeRejection, parse_opco
 from fitness_bot.presentation.widgets.screen import ScreenContext, ScreenResult
 from fitness_bot.presentation.widgets.shell import WidgetShell
 from fitness_bot.presentation.widgets.state import PHASE_ERROR, pack_state, read_state
-from fitness_bot.service.models.commands.session import StartTodayWorkoutCommand
+from fitness_bot.service.models.commands.session import StartSessionFromTemplateCommand, StartTodayWorkoutCommand
 from fitness_bot.service.models.queries.session import GetTodayWorkoutQuery
 
 _BLOCKED = {
@@ -17,6 +17,7 @@ _BLOCKED = {
     "no_program": "Нет активной программы",
     "already_done": "Сегодня тренировка уже сделана",
 }
+_MODES = frozenset({"go", "live", "again", "rest", "none"})
 
 
 class HomeScreen:
@@ -34,10 +35,19 @@ class HomeScreen:
         frame = ctx.binding.frame or await self.open(ctx)
         if isinstance(parsed, OpcodeRejection) or parsed.screen is not WidgetScreenId.HOME:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
-        if parsed.name != "go":
-            return ScreenResult(frame=frame, answer=PHASE_ERROR)
+        if parsed.name == "go":
+            return await self._start(ctx, frame, weekday=None)
+        if parsed.name == "again":
+            return await self._repeat(ctx, frame)
+        if parsed.name == "day" and parsed.arg is not None:
+            return await self._start(ctx, frame, weekday=int(parsed.arg))
+        return ScreenResult(frame=frame, answer=PHASE_ERROR)
+
+    async def _start(self, ctx: ScreenContext, frame: WidgetFrame, *, weekday: int | None) -> ScreenResult:
         try:
-            result = await ctx.mediator.send(StartTodayWorkoutCommand(telegram_user_id=ctx.user_id))
+            result = await ctx.mediator.send(
+                StartTodayWorkoutCommand(telegram_user_id=ctx.user_id, weekday=weekday),
+            )
         except DomainError:
             return ScreenResult(frame=frame, answer=PHASE_ERROR)
         outcome = str(getattr(result, "outcome", "") or "")
@@ -45,22 +55,42 @@ class HomeScreen:
             return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.CONSOLE)
         data = read_state(frame.chat_data)
         data["title"] = _BLOCKED.get(outcome, data.get("title") or "Сегодня")
+        if outcome == "already_done":
+            data["mode"] = "again"
+        elif outcome == "rest":
+            data["mode"] = "rest"
+        elif outcome == "no_program":
+            data["mode"] = "none"
+        day = getattr(result, "weekday", None)
+        if isinstance(day, int):
+            data["day"] = day
+        _put_alternative(data, result)
         updated = self._frame(data)
         return ScreenResult(frame=updated, answer=updated.chat_data)
 
+    async def _repeat(self, ctx: ScreenContext, frame: WidgetFrame) -> ScreenResult:
+        data = read_state(frame.chat_data)
+        raw_day = data.get("day")
+        weekday = raw_day if isinstance(raw_day, int) and 1 <= raw_day <= 7 else None
+        try:
+            result = await ctx.mediator.send(
+                StartSessionFromTemplateCommand(
+                    telegram_user_id=ctx.user_id,
+                    overwrite_completed=True,
+                    weekday=weekday,
+                ),
+            )
+        except DomainError:
+            return ScreenResult(frame=frame, answer=PHASE_ERROR)
+        if getattr(result, "document", None) is None:
+            return ScreenResult(frame=frame, answer=PHASE_ERROR)
+        return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.CONSOLE)
+
     def _frame(self, data: dict[str, object]) -> WidgetFrame:
-        title = str(data.get("title") or "Сегодня")
-        when = str(data.get("when") or "")
-        streak = data.get("streak")
-        caption = f"▶️ {title}."
-        if when:
-            caption = f"{caption} {when}."
-        if streak:
-            caption = f"{caption} Серия {streak}."
         return WidgetFrame(
             screen=WidgetScreenId.HOME,
             chat_data=pack_state(data),
-            caption=caption,
+            caption="",
             shell_id="home",
         )
 
@@ -78,4 +108,40 @@ def _payload(today: object) -> dict[str, object]:
     weekday = getattr(today, "weekday", None)
     when = WEEKDAY_LABELS.get(weekday, "") if isinstance(weekday, int) else ""
     completed = list(getattr(today, "completed_weekdays", []) or [])
-    return {"title": title[:48], "when": when, "streak": len(completed)}
+    mode = "go"
+    if screen == "session":
+        mode = "live"
+    elif screen == "no_program":
+        mode = "none"
+    elif screen == "rest":
+        mode = "rest"
+        title = "Выходной"
+    elif getattr(today, "completed_today", False):
+        mode = "again"
+        title = _BLOCKED["already_done"]
+    if mode not in _MODES:
+        mode = "go"
+    data: dict[str, object] = {
+        "title": title[:48],
+        "when": when,
+        "streak": len(completed),
+        "mode": mode,
+    }
+    if isinstance(weekday, int):
+        data["day"] = weekday
+    _put_alternative(data, today)
+    return data
+
+
+def _put_alternative(data: dict[str, object], source: object) -> None:
+    mode = str(data.get("mode") or "")
+    weekday = getattr(source, "alternative_weekday", None)
+    title = getattr(source, "alternative_title", None)
+    if mode not in {"again", "rest"} or not isinstance(weekday, int) or not title:
+        data.pop("alt", None)
+        data.pop("altDay", None)
+        return
+    label = WEEKDAY_LABELS.get(weekday, str(weekday))
+    prefix = "Ещё одну: " if mode == "again" else ""
+    data["alt"] = f"{prefix}{label} · {title}"[:42]
+    data["altDay"] = weekday

@@ -11,8 +11,10 @@ from fitness_bot.domain.errors import DomainError
 from fitness_bot.domain.users.user import User, local_calendar_date
 from fitness_bot.domain.workout.document import WorkoutDocument
 from fitness_bot.domain.workout.program import Program
+from fitness_bot.domain.workout.session import Session
 from fitness_bot.domain.workout.week_progress import (
     TrainingWeekProgress,
+    completed_sessions_for_day,
     nearest_open_training_day,
     training_week_progress,
 )
@@ -43,14 +45,15 @@ async def _week_progress_for_program(
     *,
     user: User,
     program: Program,
-) -> TrainingWeekProgress:
+) -> tuple[TrainingWeekProgress, list[Session]]:
     history = await repos.sessions.list_completed_for_user(user.id, limit=50)
-    return training_week_progress(
+    progress = training_week_progress(
         program,
         history,
         timezone_offset=user.timezone_offset,
         now=datetime.now(UTC),
     )
+    return progress, list(history)
 
 
 class GetTodayWorkoutQueryHandler(
@@ -101,7 +104,8 @@ class GetTodayWorkoutQueryHandler(
             if program is None:
                 return queries.GetTodayWorkoutQueryResult(screen="no_program", weekday=weekday)
 
-            progress = await _week_progress_for_program(repos, user=user, program=program)
+            progress, history = await _week_progress_for_program(repos, user=user, program=program)
+            today = local_calendar_date(now=datetime.now(UTC), timezone_offset=user.timezone_offset)
             template = next((day for day in program.days if day.weekday == weekday), None)
             if template is None:
                 alternative = nearest_open_training_day(
@@ -120,6 +124,23 @@ class GetTodayWorkoutQueryHandler(
                     **_progress_fields(progress),
                 )
 
+            done_today = bool(
+                completed_sessions_for_day(
+                    history,
+                    local_day=today,
+                    timezone_offset=user.timezone_offset,
+                    weekday=weekday,
+                    activated_at=program.activated_at,
+                ),
+            )
+            alternative = None
+            if done_today:
+                alternative = nearest_open_training_day(
+                    program,
+                    progress.completed_weekdays,
+                    today_weekday=weekday,
+                    exclude_weekdays=[weekday],
+                )
             document = WorkoutDocument(program_type=program.program_type, days=[template])
             return queries.GetTodayWorkoutQueryResult(
                 screen="template",
@@ -128,6 +149,9 @@ class GetTodayWorkoutQueryHandler(
                 document=document,
                 weekday=weekday,
                 has_unapplied_wellbeing=has_unapplied,
+                completed_today=done_today,
+                alternative_weekday=alternative.weekday if alternative else None,
+                alternative_title=alternative.title if alternative else None,
                 **_progress_fields(progress),
             )
 

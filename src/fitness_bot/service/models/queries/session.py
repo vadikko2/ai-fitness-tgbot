@@ -27,6 +27,7 @@ class GetTodayWorkoutQueryResult(QueryResult):
     week_finished: bool = False
     technique_video_positions: list[int] = []
     has_unapplied_wellbeing: bool = False
+    completed_today: bool = False
     alternative_weekday: int | None = None
     alternative_title: str | None = None
 

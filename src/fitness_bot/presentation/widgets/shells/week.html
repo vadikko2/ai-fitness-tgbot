@@ -31,6 +31,7 @@ $("slots").innerHTML=box;
 var alt="",alts=d.alts||[];
 for(i=0;i<alts.length;i++){alt+='<button type="button" data-op="swap:'+i+'">'+esc(alts[i])+"</button>";}
 $("alts").innerHTML=alt;
+$("e").textContent=d.note||"";
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}

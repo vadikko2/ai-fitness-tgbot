@@ -23,6 +23,7 @@ from fitness_bot.service.models.commands.program import ApproveProposalCommand
 from fitness_bot.service.models.commands.session import (
     ConfirmExerciseAsPlannedCommand,
     RecordSlotActualCommand,
+    StartSessionFromTemplateCommand,
     StartTodayWorkoutCommand,
 )
 from fitness_bot.service.models.commands.users import UpdateProfileCommand
@@ -182,6 +183,22 @@ async def test_console_technique_stays_inside_the_widget() -> None:
     assert json.loads(result.frame.chat_data)["ph"] == "how"
 
 
+async def test_workout_widgets_send_no_caption_under_the_interface() -> None:
+    console, _, ctx = _console()
+    opened = await console.open(ctx)
+    assert opened.caption == ""
+    today = SimpleNamespace(
+        screen="template",
+        document=SimpleNamespace(days=[SimpleNamespace(title="Грудь")]),
+        weekday=3,
+        completed_weekdays=[],
+    )
+    home = await HomeScreen(_Shell(shell_id="home")).open(
+        _ctx(_Mediator({GetTodayWorkoutQuery: today}), screen=WidgetScreenId.HOME),
+    )
+    assert home.caption == ""
+
+
 async def test_home_go_already_done_answers_without_leaving_the_widget() -> None:
     mediator = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="already_done")})
     screen = HomeScreen(_Shell(shell_id="home"))
@@ -197,6 +214,59 @@ async def test_home_go_already_done_answers_without_leaving_the_widget() -> None
     assert result.photo_path is None
     body = json.loads(result.answer or "")
     assert "уже сделана" in str(body["title"])
+    assert body["mode"] == "again"
+
+
+async def test_home_open_completed_today_offers_repeat_and_another_day() -> None:
+    today = SimpleNamespace(
+        screen="template",
+        document=SimpleNamespace(days=[SimpleNamespace(title="Грудь")]),
+        weekday=3,
+        completed_weekdays=[3],
+        completed_today=True,
+        alternative_weekday=5,
+        alternative_title="Спина",
+    )
+    mediator = _Mediator({GetTodayWorkoutQuery: today})
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = await screen.open(_ctx(mediator, screen=WidgetScreenId.HOME))
+    body = json.loads(frame.chat_data)
+    assert body["mode"] == "again"
+    assert "уже сделана" in body["title"]
+    assert body["day"] == 3
+    assert body["altDay"] == 5
+    assert "Спина" in body["alt"]
+
+
+async def test_home_again_overwrites_today_and_opens_the_console() -> None:
+    mediator = _Mediator({StartSessionFromTemplateCommand: SimpleNamespace(document=object())})
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.HOME,
+        chat_data=pack_state({"title": "уже", "mode": "again", "day": 3}),
+        caption="уже",
+        shell_id="home",
+    )
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.HOME), frame), "again")
+    assert result.navigate is WidgetScreenId.CONSOLE
+    command = next(item for item in mediator.sent if isinstance(item, StartSessionFromTemplateCommand))
+    assert command.overwrite_completed is True
+    assert command.weekday == 3
+
+
+async def test_home_other_day_starts_that_weekday_in_the_console() -> None:
+    mediator = _Mediator({StartTodayWorkoutCommand: SimpleNamespace(outcome="started")})
+    screen = HomeScreen(_Shell(shell_id="home"))
+    frame = WidgetFrame(
+        screen=WidgetScreenId.HOME,
+        chat_data=pack_state({"title": "Выходной", "mode": "rest", "altDay": 5}),
+        caption="Выходной",
+        shell_id="home",
+    )
+    result = await screen.apply(_rebind(_ctx(mediator, frame, screen=WidgetScreenId.HOME), frame), "day:5")
+    assert result.navigate is WidgetScreenId.CONSOLE
+    command = next(item for item in mediator.sent if isinstance(item, StartTodayWorkoutCommand))
+    assert command.weekday == 5
 
 
 async def test_console_ok_records_a_set_and_a_second_ok_in_rest_writes_nothing() -> None:

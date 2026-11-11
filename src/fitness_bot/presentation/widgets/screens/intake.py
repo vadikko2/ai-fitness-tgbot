@@ -209,11 +209,10 @@ class IntakeScreen:
         return {"step": step, "value": value, "picked": picked, "title": title}
 
     def _frame(self, data: dict[str, object]) -> WidgetFrame:
-        title = str(data.get("title") or "Продолжим.")
         return WidgetFrame(
             screen=WidgetScreenId.INTAKE,
             chat_data=pack_state(data),
-            caption=title,
+            caption="",
             shell_id="intake",
         )
 

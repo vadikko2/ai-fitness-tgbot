@@ -157,15 +157,12 @@ class WeekScreen:
         blocked = any(
             getattr(result, flag, False) for flag in ("blocked_empty", "blocked_unresolved", "blocked_schedule")
         )
-        frame = self._frame(data)
         if blocked:
-            blocked_frame = WidgetFrame(
-                screen=frame.screen,
-                chat_data=frame.chat_data,
-                caption="Черновик пока нельзя сделать активным.",
-                shell_id=frame.shell_id,
-            )
-            return ScreenResult(frame=blocked_frame, answer=frame.chat_data)
+            noted = dict(data)
+            noted["note"] = "Пока нельзя утвердить"
+            blocked_frame = self._frame(noted)
+            return ScreenResult(frame=blocked_frame, answer=blocked_frame.chat_data)
+        frame = self._frame(data)
         return ScreenResult(frame=frame, answer=frame.chat_data, navigate=WidgetScreenId.HOME)
 
     async def _rebuild(
@@ -246,11 +243,10 @@ class WeekScreen:
         }
 
     def _frame(self, data: dict[str, object]) -> WidgetFrame:
-        title = str(data.get("title") or "Черновик")
         return WidgetFrame(
             screen=WidgetScreenId.WEEK,
             chat_data=_fit(data),
-            caption=f"📝 Черновик программы. {title}",
+            caption="",
             shell_id="week",
         )
 

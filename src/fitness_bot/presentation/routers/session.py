@@ -970,6 +970,17 @@ async def propose_wellbeing_workout_edit(
     )
 
 
+async def _open_workout_widget(user_id: int, message: Message | None, screen: str) -> bool:
+    """Draw the workout on the widget. False keeps the text keyboard."""
+    if message is None or getattr(message, "chat", None) is None:
+        return False
+    from fitness_bot.presentation.widgets.frame import WidgetScreenId
+    from fitness_bot.presentation.widgets.hooks import open_widget
+
+    target = WidgetScreenId.CONSOLE if screen == "console" else WidgetScreenId.HOME
+    return await open_widget(user_id, target, message.chat.id)
+
+
 def _alternative(weekday: int | None, title: str | None) -> tuple[int, str] | None:
     if weekday is None or not title:
         return None
@@ -1007,6 +1018,12 @@ async def start_workout_one_tap(
         "week_finished": result.week_finished,
     }
     alternative = _alternative(result.alternative_weekday, result.alternative_title)
+    if result.outcome in {"no_program", "rest", "already_done"} and await _open_workout_widget(
+        telegram_user_id,
+        message,
+        "home",
+    ):
+        return
     if result.outcome == "no_program":
         text = jinja_env.get_template("session_no_program.j2").render()
         await message.answer(text, reply_markup=session_no_program_keyboard())
@@ -1030,13 +1047,10 @@ async def start_workout_one_tap(
         )
         return
     assert result.document is not None
-    from fitness_bot.presentation.widgets.frame import WidgetScreenId
-    from fitness_bot.presentation.widgets.hooks import open_widget
-
-    if result.outcome in {"started", "resumed"} and await open_widget(
+    if result.outcome in {"started", "resumed"} and await _open_workout_widget(
         telegram_user_id,
-        WidgetScreenId.CONSOLE,
-        message.chat.id,
+        message,
+        "console",
     ):
         return
     in_progress = result.session_status == SessionStatus.IN_PROGRESS
@@ -1092,12 +1106,17 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             return
         if today.screen == "session" and today.document is not None:
             chat = _chat_message(callback.message)
+            if chat is not None and await _open_workout_widget(callback.from_user.id, chat, "console"):
+                await callback.answer()
+                return
             if chat is not None:
                 await _show_session_card(
                     mediator=mediator,
                     message=chat,
                     document=today.document,
                 )
+            await callback.answer()
+        elif await _open_workout_widget(callback.from_user.id, _chat_message(callback.message), "home"):
             await callback.answer()
         elif today.screen == "template" and today.document is not None:
             week = _week_status_context(today)
@@ -1147,6 +1166,8 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         if callback.message is None:
             return
         if result.needs_repeat_confirmation:
+            if await _open_workout_widget(callback.from_user.id, callback.message, "home"):
+                return
             text = jinja_env.get_template("session_repeat_confirm.j2").render()
             await callback.message.answer(text, reply_markup=session_repeat_confirm_keyboard())
             return
@@ -1154,6 +1175,8 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.message.answer("Не удалось начать тренировку.")
             return
         assert isinstance(callback.message, Message)
+        if await _open_workout_widget(callback.from_user.id, callback.message, "console"):
+            return
         await _show_session_card(
             mediator=mediator,
             message=callback.message,
@@ -1224,6 +1247,9 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
         if chat is None or result.document is None:
             await callback.answer()
             return
+        if await _open_workout_widget(callback.from_user.id, chat, "console"):
+            await callback.answer()
+            return
         await _show_session_card(
             mediator=mediator,
             message=chat,
@@ -1255,6 +1281,9 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             await callback.answer()
             return
         if result.needs_repeat_confirmation:
+            if await _open_workout_widget(callback.from_user.id, _chat_message(callback.message), "home"):
+                await callback.answer()
+                return
             text = jinja_env.get_template("session_repeat_confirm.j2").render()
             if callback.message:
                 await callback.message.answer(
@@ -1917,6 +1946,9 @@ def create_session_router(*, jinja_env: Environment, mediator: RequestMediator) 
             return
         chat = _chat_message(callback.message)
         if chat is None:
+            await callback.answer()
+            return
+        if await _open_workout_widget(callback.from_user.id, chat, "console"):
             await callback.answer()
             return
         await _show_session_card(

@@ -23,11 +23,10 @@ class SummaryScreen:
     async def open(self, ctx: ScreenContext) -> WidgetFrame:
         sets, tonnage, spark = await self._stats(ctx)
         data = {"sets": sets, "tonnage": tonnage, "spark": spark}
-        caption = f"🏁 Тренировка завершена. {sets} подходов, {tonnage} кг."
         return WidgetFrame(
             screen=WidgetScreenId.SUMMARY,
             chat_data=pack_state(data),
-            caption=caption,
+            caption="",
             shell_id="summary",
         )
 

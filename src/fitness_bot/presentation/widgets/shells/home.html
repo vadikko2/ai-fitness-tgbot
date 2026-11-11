@@ -3,16 +3,30 @@
 <!-- chrome -->
 <style>#streak:empty{display:none}</style>
 <p class="hint" id="streak"></p>
-<button type="button" class="p" data-op="go">Начать</button>
+<button type="button" class="p" id="go" data-op="go">Начать</button>
+<button type="button" class="back hide" id="alt" data-op="go">Ещё одну</button>
 <p id="e"></p>
 <script>
 (function(){
 function $(id){return document.getElementById(id);}
+function show(node,on){node.classList.toggle("hide",!on);}
 function render(d){
 if(!d){return;}
 $("t").textContent=d.title||"";
 $("s").textContent=d.when||"";
 $("streak").textContent=d.streak==null?"":("Серия "+d.streak);
+var go=$("go"),alt=$("alt"),mode=d.mode||"go";
+if(mode=="again"){go.textContent="Повторить";go.setAttribute("data-op","again");}
+else if(mode=="live"){go.textContent="Продолжить";go.setAttribute("data-op","go");}
+else{go.textContent="Начать";go.setAttribute("data-op","go");}
+show(go,mode!="none"&&mode!="rest");
+if(d.alt&&d.altDay){
+alt.textContent=d.alt;
+alt.setAttribute("data-op","day:"+d.altDay);
+show(alt,true);
+alt.classList.toggle("p",mode=="rest");
+alt.classList.toggle("back",mode!="rest");
+}else{show(alt,false);}
 }
 function rawOf(answer){if(!answer){return "";}if(typeof answer=="string"){return answer;}return typeof answer.result=="string"?answer.result:"";}
 function take(answer){$("e").textContent="";var raw=rawOf(answer);if(!raw){return;}var d;try{d=JSON.parse(raw);}catch(err){return;}if(d.err){$("e").textContent="Не вышло";return;}render(d);}

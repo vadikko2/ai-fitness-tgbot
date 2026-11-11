@@ -39,6 +39,7 @@ _EXACT: dict[str, WidgetScreenId] = {
     "swap": WidgetScreenId.WEEK,
     "approve": WidgetScreenId.WEEK,
     "go": WidgetScreenId.HOME,
+    "again": WidgetScreenId.HOME,
     "home": WidgetScreenId.SUMMARY,
 }
 
@@ -104,4 +105,9 @@ def _parameter(raw: str) -> Opcode | None:
         if _INDEX.fullmatch(arg) is None:
             return None
         return Opcode(raw=raw, screen=WidgetScreenId.WEEK, name="swap", arg=arg)
+    if raw.startswith("day:"):
+        arg = raw[4:]
+        if arg not in {"1", "2", "3", "4", "5", "6", "7"}:
+            return None
+        return Opcode(raw=raw, screen=WidgetScreenId.HOME, name="day", arg=arg)
     return None

@@ -65,25 +65,6 @@ def _label(slot: ExerciseSlot, names: dict[str, str]) -> str:
     return "Упражнение"
 
 
-def _caption(data: dict[str, object]) -> str:
-    phase = data.get("ph")
-    name = str(data.get("name") or "Упражнение")
-    plan = str(data.get("plan") or "")
-    if phase == "rest":
-        return f"⏸ Отдых {data.get('rest') or ''} с. {name}"
-    if phase == "rpe":
-        return f"Оцени тяжесть подхода {name}, от 6 до 10."
-    if phase == "alt":
-        return f"🔁 Замена: {name}"
-    if phase == "how":
-        return f"📖 Как делать: {name}"
-    if phase == "done":
-        return "🏁 Тренировка завершена"
-    if not data.get("n"):
-        return "📋 Нет активной программы"
-    return f"▶️ {name} — {plan}"
-
-
 def _matches(data: dict[str, object], slot: ExerciseSlot) -> bool:
     if slot.duration_seconds is not None:
         load_ok = int(data.get("reps") or 0) == slot.duration_seconds
@@ -435,7 +416,7 @@ class ConsoleScreen:
         return WidgetFrame(
             screen=WidgetScreenId.CONSOLE,
             chat_data=pack_state(data),
-            caption=_caption(data),
+            caption="",
             shell_id="console",
         )
 

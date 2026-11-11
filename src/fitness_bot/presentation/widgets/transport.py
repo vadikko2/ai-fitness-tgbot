@@ -32,7 +32,7 @@ class WidgetTransport(Protocol):
         """editMessageWidgetData. An empty diff is not an error."""
 
     async def edit_caption(self, chat_id: int, message_id: int, caption: str) -> None:
-        """editMessageCaption. Caption is the text for the chat list and old clients."""
+        """editMessageCaption. An empty caption removes the text under the widget."""
 
     async def answer(self, query_id: str, data: str | None) -> None:
         """answerWidgetQuery. data is up to 1024 bytes, or None."""
@@ -123,7 +123,7 @@ class AiogramWidgetTransport:
                 "chat_id": chat_id,
                 "html": html,
                 "chat_data": chat_data,
-                "caption": caption,
+                "caption": caption or None,
                 "height": height,
                 "width": 0,
                 "allow_queries": True,
@@ -222,15 +222,16 @@ class AiogramCompanionMedia:
         caption: str,
         path: str | None,
     ) -> int:
+        shown = caption or None
         if kind == "photo":
-            sent = await self._bot.send_photo(chat_id, source, caption=caption, parse_mode=None)
+            sent = await self._bot.send_photo(chat_id, source, caption=shown, parse_mode=None)
             _remember_photo_cover(path, sent)
             return sent.message_id
         if kind == "video":
             sent = await self._bot.send_video(
                 chat_id,
                 source,
-                caption=caption,
+                caption=shown,
                 parse_mode=None,
                 cover=cover_file_id,
                 supports_streaming=True,
@@ -249,12 +250,13 @@ class AiogramCompanionMedia:
         caption: str,
         path: str | None,
     ) -> int:
+        shown = caption or None
         if kind == "photo":
-            media = InputMediaPhoto(media=source, caption=caption, parse_mode=None)
+            media = InputMediaPhoto(media=source, caption=shown, parse_mode=None)
         elif kind == "video":
             media = InputMediaVideo(
                 media=source,
-                caption=caption,
+                caption=shown,
                 parse_mode=None,
                 cover=cover_file_id,
                 supports_streaming=True,

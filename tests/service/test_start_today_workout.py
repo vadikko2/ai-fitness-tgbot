@@ -140,6 +140,10 @@ async def test_one_tap_already_done_offers_next_open_day() -> None:
     assert result.weekday == today
     assert result.alternative_weekday == other
     assert result.completed_count == 1
+    view = await GetTodayWorkoutQueryHandler(uow).handle(GetTodayWorkoutQuery(telegram_user_id=TG))
+    assert view.completed_today is True
+    assert view.alternative_weekday == other
+    assert view.screen == "template"
 
 
 async def test_one_tap_on_rest_day_offers_and_starts_nearest_open_day() -> None:

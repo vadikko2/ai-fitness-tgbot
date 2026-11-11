@@ -234,7 +234,10 @@ async def test_transport_rejects_limits_and_sends_widget_flags() -> None:
     assert payload["allow_queries"] is True
     assert payload["is_shared"] is False
     assert payload["height"] == 520
+    assert payload["caption"] == "step"
     assert transport.calls[2] == ("answerWidgetQuery", {"widget_query_id": "q"})
+    await transport.send(1, html="<b>ok</b>", chat_data="{}", caption="", height=200)
+    assert transport.calls[-1][1]["caption"] is None
 
 
 async def test_unchanged_widget_edit_is_success() -> None:
@@ -279,6 +282,8 @@ def test_opcode_grammar() -> None:
         "swap:1": WidgetScreenId.WEEK,
         "approve": WidgetScreenId.WEEK,
         "go": WidgetScreenId.HOME,
+        "again": WidgetScreenId.HOME,
+        "day:3": WidgetScreenId.HOME,
         "home": WidgetScreenId.SUMMARY,
     }
     for raw, screen in samples.items():
@@ -295,6 +300,8 @@ def test_opcode_grammar() -> None:
         ("rpe:5", "unknown"),
         ("rpe:11", "unknown"),
         ("alt:3", "unknown"),
+        ("day:0", "unknown"),
+        ("day:8", "unknown"),
         ("preset:20", "unknown"),
         ("pick:", "unknown"),
         ("{}", "unknown"),

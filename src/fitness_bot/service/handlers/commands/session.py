@@ -15,7 +15,11 @@ from fitness_bot.domain.workout.program import Program
 from fitness_bot.domain.workout.proposal import Proposal
 from fitness_bot.domain.workout.session import Session
 from fitness_bot.domain.workout.technique_video import MAX_TECHNIQUE_VIDEO_BYTES, TechniqueVideo
-from fitness_bot.domain.workout.week_progress import nearest_open_training_day, training_week_progress
+from fitness_bot.domain.workout.week_progress import (
+    completed_sessions_for_day,
+    nearest_open_training_day,
+    training_week_progress,
+)
 from fitness_bot.service.handlers.commands.agent_json import (
     catalog_json,
     clip_reply,
@@ -46,24 +50,6 @@ def _require_user(user: User | None) -> User:
     return user
 
 
-def _completed_on_local_day(
-    sessions: list[Session],
-    *,
-    local_day,
-    timezone_offset: str | None,
-) -> list[Session]:
-    matched: list[Session] = []
-    for session in sessions:
-        if session.status != SessionStatus.COMPLETED or session.completed_at is None:
-            continue
-        completed_at = session.completed_at
-        if completed_at.tzinfo is None:
-            completed_at = completed_at.replace(tzinfo=UTC)
-        if local_calendar_date(now=completed_at, timezone_offset=timezone_offset) == local_day:
-            matched.append(session)
-    return matched
-
-
 def _completed_today_for_day(
     history: list[Session],
     *,
@@ -73,24 +59,13 @@ def _completed_today_for_day(
     weekday: int,
 ) -> list[Session]:
     """Sessions of this program day finished today (since the program was activated)."""
-    matched = _completed_on_local_day(history, local_day=local_day, timezone_offset=user.timezone_offset)
-    matched = [session for session in matched if session.day.weekday in (None, weekday)]
-    if program.activated_at is None:
-        return matched
-    activated_at = program.activated_at
-    if activated_at.tzinfo is None:
-        activated_at = activated_at.replace(tzinfo=UTC)
-    return [
-        session
-        for session in matched
-        if session.completed_at is not None
-        and (
-            session.completed_at
-            if session.completed_at.tzinfo is not None
-            else session.completed_at.replace(tzinfo=UTC)
-        )
-        >= activated_at
-    ]
+    return completed_sessions_for_day(
+        history,
+        local_day=local_day,
+        timezone_offset=user.timezone_offset,
+        weekday=weekday,
+        activated_at=program.activated_at,
+    )
 
 
 class StartTodayWorkoutCommandHandler(

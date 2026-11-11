@@ -74,6 +74,35 @@ def training_week_progress(
     )
 
 
+def completed_sessions_for_day(
+    sessions: Sequence[Session],
+    *,
+    local_day: date,
+    timezone_offset: str | None,
+    weekday: int,
+    activated_at: datetime | None,
+) -> list[Session]:
+    """Sessions of this program day finished on the given local date, after activation."""
+    started = activated_at
+    if started is not None and started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    matched: list[Session] = []
+    for session in sessions:
+        if session.status != SessionStatus.COMPLETED or session.completed_at is None:
+            continue
+        completed_at = session.completed_at
+        if completed_at.tzinfo is None:
+            completed_at = completed_at.replace(tzinfo=UTC)
+        if local_calendar_date(now=completed_at, timezone_offset=timezone_offset) != local_day:
+            continue
+        if session.day.weekday not in (None, weekday):
+            continue
+        if started is not None and completed_at < started:
+            continue
+        matched.append(session)
+    return matched
+
+
 def nearest_open_training_day(
     program: Program,
     completed_weekdays: Sequence[int],
