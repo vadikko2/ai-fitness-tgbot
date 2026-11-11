@@ -170,9 +170,7 @@ class WeekScreen:
     ) -> list[object]:
         found = await ctx.mediator.send(MatchExercisesQuery(query=name, limit=10))
         picks = [
-            item
-            for item in list(getattr(found, "items", []) or [])
-            if getattr(item, "exercise_id", None) not in used
+            item for item in list(getattr(found, "items", []) or []) if getattr(item, "exercise_id", None) not in used
         ]
         if len(picks) >= 3:
             return picks[:3]

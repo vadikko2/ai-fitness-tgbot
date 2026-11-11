@@ -1051,7 +1051,9 @@ async def test_week_swap_lists_alternatives_then_applies_choice() -> None:
     assert "Жим ногами" in body["alts"]
     assert str(current_id) not in body["ids"]
     assert body["alts"]
-    picked = await screen.apply(_rebind(_ctx(mediator, opened.frame, screen=WidgetScreenId.WEEK), opened.frame), "swap:0")
+    picked = await screen.apply(
+        _rebind(_ctx(mediator, opened.frame, screen=WidgetScreenId.WEEK), opened.frame), "swap:0"
+    )
     assert any(isinstance(item, SelectExerciseForProposalCommand) for item in mediator.sent)
     assert json.loads(picked.frame.chat_data).get("alts") in ([], None)
 
